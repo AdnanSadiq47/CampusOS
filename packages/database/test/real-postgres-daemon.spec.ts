@@ -5,6 +5,14 @@ import { RLS_ENABLE_SQL } from '../src/rls.js';
 const { Client } = pg;
 
 const hasRealPostgres = Boolean(process.env['REAL_POSTGRES_DATABASE_URL'] || process.env['REAL_POSTGRES_ADMIN_URL']);
+const requireRealPostgres = Boolean(process.env['REQUIRE_REAL_POSTGRES'] === 'true');
+
+// If CI requires real PostgreSQL but environment variables are missing, fail immediately!
+if (requireRealPostgres && !hasRealPostgres) {
+  throw new Error(
+    'CRITICAL_SECURITY_FAILURE: REAL_POSTGRES_DATABASE_URL or REAL_POSTGRES_ADMIN_URL is required in CI mode, but was not provided. Silent skips are prohibited.'
+  );
+}
 
 /**
  * Real Standalone PostgreSQL 16 Daemon Acceptance Test Suite.
@@ -12,7 +20,7 @@ const hasRealPostgres = Boolean(process.env['REAL_POSTGRES_DATABASE_URL'] || pro
  * Invariants:
  * 1. Executes ONLY when connected to an actual PostgreSQL 16 daemon/container over TCP.
  * 2. Refuses to fall back to PGlite or WASM.
- * 3. If REAL_POSTGRES_DATABASE_URL / REAL_POSTGRES_ADMIN_URL is unset, this suite reports SKIPPED.
+ * 3. In local environments without real Postgres, skips gracefully unless REQUIRE_REAL_POSTGRES=true.
  */
 describe.skipIf(!hasRealPostgres)('Real Standalone PostgreSQL 16 Daemon Acceptance Gate', () => {
   let adminClient: pg.Client;
@@ -35,15 +43,17 @@ describe.skipIf(!hasRealPostgres)('Real Standalone PostgreSQL 16 Daemon Acceptan
     adminClient = new Client({ connectionString: adminUrl });
     await adminClient.connect();
 
-    // 1. Verify PostgreSQL exact server version
+    // 1. Verify PostgreSQL exact server version is 16+
     const versionRes = await adminClient.query<{ version: string }>('SELECT version();');
-    console.log(`[RealPostgresSuite] Connected to daemon: ${versionRes.rows[0]?.version}`);
+    const versionStr = versionRes.rows[0]?.version || '';
+    console.log(`[RealPostgresSuite] Connected to daemon: ${versionStr}`);
+    expect(versionStr.toLowerCase()).toContain('postgresql 16');
 
-    // 2. Setup Base Extensions and Schema
+    // 2. Setup Base Extensions
     await adminClient.query('CREATE EXTENSION IF NOT EXISTS "ltree";');
     await adminClient.query('CREATE EXTENSION IF NOT EXISTS "pgcrypto";');
 
-    // Clean up previous test runs
+    // Clean up previous test runs for completely empty migration baseline
     await adminClient.query(`
       DROP TABLE IF EXISTS outbox_events CASCADE;
       DROP TABLE IF EXISTS audit_logs CASCADE;
@@ -305,7 +315,6 @@ describe.skipIf(!hasRealPostgres)('Real Standalone PostgreSQL 16 Daemon Acceptan
       appClient = new Client({ connectionString: appUserUrl });
       await appClient.connect();
     } catch {
-      // If direct password login not configured, fallback to SET ROLE for app assertions
       appClient = adminClient;
     }
   });
