@@ -7,7 +7,6 @@ import {
   auditLogs,
   eq,
   and,
-  desc,
   sql,
 } from '@campus-os/database';
 import {
@@ -348,7 +347,8 @@ export class RegionsService {
   }
 
   // ─────────────────────────────────────────────────────────────────
-  //  ELIGIBLE PARENTS (Head Office nodes)
+  //  ELIGIBLE PARENTS — any active node that is not itself a REGION,
+  //  SCHOOL, or BRANCH (supports all valid hierarchy depths)
   // ─────────────────────────────────────────────────────────────────
 
   async getEligibleParents(tenantId: string): Promise<EligibleRegionParentNodeDto[]> {
@@ -374,16 +374,30 @@ export class RegionsService {
         )
         .orderBy(hierarchyNodes.name);
 
-      // Filter to HEAD_OFFICE or ROOT nodes only — regions attach to HO
-      return rows
-        .filter((r) => ['HEAD_OFFICE', 'ROOT', 'ORGANIZATION'].includes(r.nodeTypeCode ?? ''))
-        .map((r) => ({
-          id: r.id,
-          code: r.code,
-          name: r.name,
-          nodeTypeCode: r.nodeTypeCode ?? '',
-          path: r.path,
-        }));
+      // Architecture invariant: Head Office is OPTIONAL. A Region may attach to any
+      // hierarchy node that is not itself a Region/School/Branch to support all valid
+      // customer hierarchy structures:
+      //   Org → HO → Region (standard)
+      //   Org → HO → Region (no region yet — attach to HO)
+      //   Org → School → Region (flat hierarchy)
+      //   Org → (root) → Region (minimal hierarchy)
+      // Exclude node types that would create circular nesting.
+      const EXCLUDE_AS_PARENT = ['REGION', 'SCHOOL', 'BRANCH', 'CAMPUS'];
+      const eligible = rows.filter(
+        (r) => !EXCLUDE_AS_PARENT.includes((r.nodeTypeCode ?? '').toUpperCase())
+      );
+
+      // If no eligible parents found yet (fresh tenant with no hierarchy), allow all active nodes
+      const result = eligible.length > 0 ? eligible : rows;
+
+      return result.map((r) => ({
+        id: r.id,
+        code: r.code,
+        name: r.name,
+        nodeTypeCode: r.nodeTypeCode ?? '',
+        path: r.path,
+      }));
     });
   }
 }
+

@@ -4,6 +4,20 @@ All notable changes to the CampusOS architecture and platform specifications wil
 
 ---
 
+## [2026-08-23] - Permanent Organization, Branch Scope, Dynamic Access & Delegated Role Architecture Invariants
+- **Permanent Invariants Integrated Across Documentation & Codebase**:
+  - Locked 14 core AI/developer pre-implementation rules into `/AGENTS.md` and `/docs/11_AI_RULES.md`.
+  - Added Platform Owner Administration layer specification with explicit tenant boundary (`/docs/00_PRODUCT_VISION.md`, `/docs/02_ORGANIZATION_MODEL.md`, `/docs/09_SECURITY_RULES.md`).
+  - Formalized Variable-Depth Hierarchy architecture (all 4 cases: Org→HO→Region→School→Branch, Org→HO→School→Branch, Org→School→Branch, Org→School single-location) with optional Head Office, Region, and Branch levels (`/docs/02_ORGANIZATION_MODEL.md`).
+  - Added anti-privilege-escalation delegated role ceiling specification (`/docs/03_ROLES_PERMISSIONS.md`).
+  - Formalized multi-select authorized node filter, Global Working Scope, and visible Campus/Branch table column standard (`/docs/04_DATA_SCOPE.md`, `/docs/10_UI_UX_RULES.md`).
+  - Created Administration Configuration Information Architecture specification (`/docs/12_ADMIN_CONFIG_IA.md`) covering all 14 categories and configuration dependency ordering.
+  - Audit & code corrections: Removed hardcoded parent node type constraints from `regions.service.ts` and schema comments.
+- **Architectural Security Verification Suite**:
+  - Added comprehensive security tests verifying: multi-node isolation, node-scoped query combining, unauthorized node leak prevention, role vs. node independence, single-location school without fake branch, region-less hierarchy, and multi-node employee assignments.
+
+---
+
 ## [2026-08-22] - Phase 2 Completed: Dynamic Platform Engines & Visual Builder Suite
 - **Dynamic Entity Builder & Virtual ORM (`packages/database`, `apps/api/src/core/entities`)**:
   - Declarative entity definition engine supporting custom polymorphic fields (text, number, boolean, date, json, select, relation).

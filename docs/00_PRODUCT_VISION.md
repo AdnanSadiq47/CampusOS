@@ -14,26 +14,28 @@ Traditional educational management systems are rigid, hardcoded monoliths built 
 
 ---
 
-## 2. Platform Philosophy: The Dual-Engine Architecture
+## 2. Platform Architecture & Layering
 
-CampusOS operates as two interconnected layers:
+CampusOS operates across three distinct security and operational tiers:
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                                 CAMPUSOS RUNTIME                                       │
-│   Multi-Tenant Portal  •  Dynamic Form Renderer  •  Workflow FSM  •  Dashboard Grid    │
+│                        1. PLATFORM OWNER ADMINISTRATION LAYER                          │
+│   Tenant Provisioning • Global Subscriptions • Platform Catalog • Global Audit Log     │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
-│                                 CAMPUSOS BUILDERS                                      │
+│                        2. CUSTOMER TENANT RUNTIME & BUILDERS                           │
+│   Multi-Tenant Portal  •  Dynamic Form Renderer  •  Workflow FSM  •  Dashboard Grid    │
 │   Hierarchy Builder • Entity Builder • Form Builder • Workflow Builder • Report Builder│
 ├────────────────────────────────────────────────────────────────────────────────────────┤
-│                              STABLE PLATFORM CORE                                      │
+│                        3. STABLE PLATFORM CORE & DATA ACCESS                           │
 │   Multi-Tenancy • IAM & ABAC • Data Scopes • Double-Entry Ledger • Audit Trail • Events│
 └────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-1. **The Builder Suite**: A visual, drag-and-drop administrative environment where organization administrators and platform architects configure metadata definitions.
-2. **The Dynamic Runtime Engine**: A high-performance execution engine that reads published metadata definitions and renders dynamic UI forms, evaluates conditional logic, orchestrates state transitions, enforces granular data scopes, and records double-entry accounting transactions.
-3. **The Stable Platform Core**: The immutable, highly optimized system infrastructure providing tenant isolation, cryptographic identity, database-level row security, change data capture, and asynchronous job distribution.
+1. **The Platform Owner Administration Layer**: A security-separated administrative tier above customer organizations. Platform admins provision organizations, hierarchy nodes, and initial administrators via privileged service paths with dedicated audit trails. It is never an unrestricted bypass for normal tenant data queries.
+2. **The Builder Suite**: A visual, drag-and-drop administrative environment where organization administrators and platform architects configure metadata definitions.
+3. **The Dynamic Runtime Engine**: A high-performance execution engine that reads published metadata definitions and renders dynamic UI forms, evaluates conditional logic, orchestrates state transitions, enforces granular data scopes, and records double-entry accounting transactions.
+4. **The Stable Platform Core**: The immutable, highly optimized system infrastructure providing tenant isolation, cryptographic identity, database-level row security, change data capture, and asynchronous job distribution.
 
 ---
 
@@ -56,7 +58,20 @@ By keeping core primitives domain-agnostic, CampusOS can power school networks t
 
 ---
 
-## 4. Education as the First Domain Application
+## 4. Variable-Depth Hierarchy Model
+
+CampusOS natively supports organizations from single-location schools to global educational networks without requiring fake hierarchy nodes:
+
+- **Case A**: Platform → Organization → Head Office → Region → School → Branch
+- **Case B**: Platform → Organization → Head Office → School → Branch
+- **Case C**: Platform → Organization → School → Branch
+- **Case D**: Platform → Organization → School (single-location: School is the operational node)
+
+Head Office is optional. Region is optional. Branch is optional. The School itself can serve as the operational node.
+
+---
+
+## 5. Education as the First Domain Application
 
 While the platform core is universal, **Education & School/University Management is the flagship first domain implementation**.
 
@@ -69,7 +84,7 @@ The Education Domain is packaged as a suite of modular domain extensions built s
 
 ---
 
-## 5. Three Distinct Application Experiences
+## 6. Three Distinct Application Experiences
 
 CampusOS provides three tailored client experiences, sharing the same underlying APIs, permission model, and dynamic engines:
 
@@ -86,7 +101,7 @@ graph TD
 
 ---
 
-## 6. What CampusOS IS vs. What CampusOS IS NOT
+## 7. What CampusOS IS vs. What CampusOS IS NOT
 
 | What CampusOS IS | What CampusOS IS NOT |
 |---|---|
@@ -97,6 +112,6 @@ graph TD
 
 ---
 
-## 7. Strategic Non-Negotiable Directive
+## 8. Strategic Non-Negotiable Directive
 
 > **Architectural Law**: CampusOS must never gradually degrade into a collection of hardcoded school screens. Any new feature must be evaluated against platform capabilities: if a requirement can be solved by extending a builder engine or configuring metadata, it **must** be implemented via configuration, not by adding custom tables or one-off screens.

@@ -16,10 +16,10 @@ The **Dynamic Dashboard Builder** is a first-class visual tool allowing administ
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ 1. SYSTEM DEFAULT DASHBOARDS (Platform Base Templates)                      │
 │    Base templates bundled with modules (e.g. Default Academic SIS Overview).│
-├─────────────────────────────────────────────────────────────────────────────┤
+│─────────────────────────────────────────────────────────────────────────────┤
 │ 2. ORGANIZATION / ROLE DASHBOARDS (Configured by Organization Admin)       │
 │    Assigned to specific institutional roles (e.g. "Dean's Executive Portal")│
-├─────────────────────────────────────────────────────────────────────────────┤
+│─────────────────────────────────────────────────────────────────────────────┤
 │ 3. USER PERSONALIZED DASHBOARDS (Configured by Individual User)             │
 │    Personal widgets, shortcuts, and layout adjustments for daily workflows. │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -40,12 +40,23 @@ The Dashboard Builder includes a rich, extensible **Widget Registry**:
 | **Data Grid List** | `WIDGET_DATA_GRID` | Live, compact table displaying recent records, fee defaulters, or student alerts with quick-action buttons. |
 | **Pending Approvals** | `WIDGET_APPROVALS` | Unified inbox displaying pending workflow approval items awaiting the current user's action. |
 | **Activity Feed** | `WIDGET_ACTIVITY` | Real-time stream of audit events and system actions occurring within the user's data scope. |
-| **Quick Action Launcher**| `WIDGET_SHORTCUTS` | Action buttons triggering dynamic form modals (e.g., *"Admit Student"*, *"Create Fee Voucher"*). |
+| **Quick Action Launcher**| `WIDGET_SHORTCUTS` | User-configurable action shortcuts triggering dynamic form modals (*"Add School"*, *"Create Fee Voucher"*). |
 | **Report Snapshot** | `WIDGET_SAVED_REPORT`| Live view of an existing Visual Report Builder query embedded into the dashboard. |
 
 ---
 
-## 4. Layout Architecture (12-Column Responsive Grid)
+## 4. Hierarchy Scope & Aggregation Invariants
+
+1. **Automatic Node Scope Injection**:
+   * Every dashboard widget query, KPI calculation, chart aggregation, and grid list is strictly filtered by the user's **effective authorized node scope** (intersected with any active Global Working Scope filter).
+   * Example: A user authorized for Branch A + Branch B will see aggregated metrics for Branch A + Branch B only. Under no circumstances may Branch C data be aggregated into any dashboard total, metric card, or chart.
+2. **Permission Masking**: If a user lacks permission to view financial entities, financial KPI cards and widgets are completely hidden from their dashboard rendering.
+3. **No Unrestricted Organization Aggregation**: Dashboards never default to organization-wide totals unless the user explicitly possesses `ORGANIZATION_WIDE` data scope for that entity.
+4. **Missing Source Graceful Degradation**: If an underlying custom entity or report is retired, the widget displays a clean placeholder (*"Widget data source unavailable"*) rather than causing a JavaScript runtime error.
+
+---
+
+## 5. Layout Architecture (12-Column Responsive Grid)
 
 ```json
 {
@@ -75,14 +86,6 @@ The Dashboard Builder includes a rich, extensible **Widget Registry**:
   ]
 }
 ```
-
----
-
-## 5. Security & Missing Widget Protection
-
-1. **Automatic Scope Injection**: Every widget's data query is automatically filtered by the viewing user's active **Data Scope** (e.g., Campus Director only sees campus data in KPI calculations).
-2. **Permission Masking**: If a user lacks permission to view financial entities, financial KPI cards are completely hidden from their dashboard rendering.
-3. **Missing Source Graceful Degradation**: If an underlying custom entity or report is retired, the widget displays a clean placeholder (*"Widget data source unavailable"*) rather than causing a JavaScript runtime error.
 
 ---
 

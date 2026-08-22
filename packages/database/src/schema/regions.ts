@@ -26,7 +26,7 @@ export const regions = pgTable('regions', {
 
   // ── Hierarchy engine link ─────────────────────────────────────────
   hierarchyNodeId: uuid('hierarchy_node_id').notNull(),
-  parentId: uuid('parent_id').notNull(), // references hierarchy_nodes(id) of type HEAD_OFFICE
+  parentId: uuid('parent_id').notNull(), // references hierarchy_nodes(id) — any eligible parent node (HO, root, or other non-leaf)
 
   // ── Identity ──────────────────────────────────────────────────────
   code: varchar('code', { length: 64 }).notNull(),

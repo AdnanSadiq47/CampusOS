@@ -480,14 +480,18 @@ export class SchoolsService {
         )
         .orderBy(hierarchyNodes.name);
 
-      // Filter to eligible parent types (Head Office, Region, or any node that is not a School or Branch)
+      // Architecture invariant: Head Office and Region are OPTIONAL. A School may attach to
+      // any active hierarchy node that is not itself a School or Branch, supporting all valid
+      // customer hierarchy structures:
+      //   Org → HO → Region → School (full hierarchy)
+      //   Org → HO → School (no region)
+      //   Org → School (no HO, single-location or flat network)
+      //   Org → (root/org node) → School (minimal hierarchy)
+      // Exclude SCHOOL and BRANCH to prevent circular nesting.
       const eligible = nodes.filter(
         (n) =>
           !n.typeCode ||
-          n.typeCode.toUpperCase() === 'HEAD_OFFICE' ||
-          n.typeCode.toUpperCase() === 'REGION' ||
-          n.typeCode.toUpperCase() === 'ROOT' ||
-          (n.typeCode.toUpperCase() !== 'SCHOOL' && n.typeCode.toUpperCase() !== 'BRANCH')
+          (n.typeCode.toUpperCase() !== 'SCHOOL' && n.typeCode.toUpperCase() !== 'BRANCH' && n.typeCode.toUpperCase() !== 'CAMPUS')
       );
 
       // Fallback: If no specific parent types match, allow any non-school node

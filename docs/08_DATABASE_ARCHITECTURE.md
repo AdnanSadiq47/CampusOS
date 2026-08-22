@@ -22,6 +22,8 @@
 │ - roles                         (Composite FKs: org_id, id)            │
 │ - assignment_roles              (Composite FKs: org_id, assignment_id) │
 │ - role_permissions              (Composite FKs: org_id, role_id)       │
+│ - schools                       (Composite FKs: org_id, hierarchy_node)│
+│ - regions                       (Composite FKs: org_id, hierarchy_node)│
 │ - audit_logs                    (Append-Only, CDC)                     │
 │ - outbox_events                 (Transactional Outbox)                 │
 └────────────────────────────────────────────────────────────────────────┘
@@ -60,7 +62,30 @@ All tenant-owned tables have `ENABLE ROW LEVEL SECURITY` and `FORCE ROW LEVEL SE
 
 ---
 
-## 4. Verification Tiers: In-Process PGlite vs. Real Standalone PostgreSQL 16 Daemon
+## 4. Node-Scoped Business Data vs. Shared Reference Tables
+
+CampusOS strictly differentiates between node-scoped operational tables and shared reference tables:
+
+### A. Node-Scoped Operational Records
+Every business table that is organizationally scoped and requires campus/location-based authorization, filtering, aggregation, or reporting MUST retain an authoritative link to `hierarchy_nodes`:
+- `students`, `admissions`, `enrollments`
+- `invoices`, `receipts`, `financial_vouchers`
+- `attendance_records`, `grade_entries`, `exam_schedules`
+- `payroll_runs`, `employee_leaves`
+- `inventory_transactions`, `transport_logs`, `library_loans`
+
+Each row stores `hierarchy_node_id` referencing `hierarchy_nodes(id)` with composite FK `(organization_id, hierarchy_node_id)`.
+
+### B. Shared Reference Masters (No Node Ownership)
+Tables that represent global or organization-wide metadata MUST NOT have a `hierarchy_node_id` column:
+- `countries`, `provinces`, `cities`, `areas`, `postal_codes`
+- `currencies`, `languages`
+- `field_definitions`, `form_schemas`, `system_metadata`
+- `banks`, `document_types`, `relationship_types`
+
+---
+
+## 5. Verification Tiers: In-Process PGlite vs. Real Standalone PostgreSQL 16 Daemon
 
 CampusOS tests database security and multi-tenant isolation across two explicit, non-interchangeable tiers:
 

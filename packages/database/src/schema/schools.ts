@@ -12,7 +12,7 @@ export const schools = pgTable(
     hierarchyNodeId: uuid('hierarchy_node_id').notNull(),
     code: varchar('code', { length: 64 }).notNull(),
     name: varchar('name', { length: 255 }).notNull(),
-    parentId: uuid('parent_id').notNull(), // Parent Hierarchy Node (Head Office or Region)
+    parentId: uuid('parent_id').notNull(), // Parent Hierarchy Node (any eligible ancestor: Head Office, Region, Organization root, etc.)
     schoolType: varchar('school_type', { length: 64 }).default('K12'), // PRIMARY, SECONDARY, HIGHER_SECONDARY, K12, COMPREHENSIVE, OTHER
     registrationNumber: varchar('registration_number', { length: 128 }),
     educationBoard: varchar('education_board', { length: 128 }),

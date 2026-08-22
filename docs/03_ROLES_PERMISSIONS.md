@@ -63,3 +63,98 @@ When an authenticated user requests an action `(module, entity, action)` on a re
 Role permissions can declare field-level read/write rules:
 * `fieldRules: [{ fieldName: "salary", access: "HIDDEN" }, { fieldName: "ssn", access: "READ_ONLY" }]`
 * Enforced during payload serialization and Drizzle query projections.
+
+---
+
+## 4. Dynamic Role Management
+
+CampusOS role management is fully dynamic. Roles are NOT hardcoded to a fixed organization-wide list.
+
+Authorized administrators may:
+- Create roles
+- Configure roles (name, description, scope, permissions)
+- Assign permissions per action/module
+- Assign data scopes per role
+- Delegate roles to downstream nodes
+- Revoke role assignments
+- Activate / deactivate roles
+
+All within their **authorized privilege ceiling** (see §5).
+
+---
+
+## 5. Delegated Role Management & Anti-Privilege-Escalation
+
+Head Office / higher-authorized administrators may delegate selected roles to downstream organizational nodes.
+
+**Permanent invariant:** No downstream administrator may create, assign, or delegate a role or permission greater than their own authorized/delegated privilege ceiling.
+
+```
+Head Office defines:        [School Admin] [Accountant] [HR Officer] [Finance Controller]
+                                   │
+Head Office delegates to School A: [School Admin] [Accountant]
+                                   │
+School A admin can only assign:    [School Admin] [Accountant]
+School A admin CANNOT assign:      [Finance Controller] [Platform Admin] [Org-Wide Auditor]
+```
+
+---
+
+## 6. Per-Node Role Differentiation
+
+The same employee may have different roles at different nodes. Authorization must resolve the **effective permission for the current node/context** without flattening all assignments into one organization-wide role.
+
+```
+Employee: Ali Hassan
+  Head Office assignment    → Finance Viewer
+  South Region assignment   → Finance Approver
+  Karachi Campus assignment → Accountant
+  Malir Campus assignment   → Read Only
+```
+
+Ali's effective permissions when acting on Karachi Campus records = Accountant scope.
+Ali's effective permissions when acting on Malir Campus records = Read Only.
+
+---
+
+## 7. Domain-Level Authorization Depth
+
+Hierarchy scope is only one authorization layer. CampusOS must support deeper domain-specific assignments.
+
+Example — Teacher Ahmed:
+```
+Authorized Node:  Karachi Campus
+Allowed Module:   Academics
+Allowed Pages:    Attendance, Marks
+Assigned Classes: Class 8, Class 9
+Assigned Sections: 8-A, 8-B, 9-A
+```
+
+Ahmed must only see:
+- Karachi Campus (not other branches)
+- Class 8 / Class 9 (not other classes)
+- Sections 8-A, 8-B, 9-A (not other sections)
+- Students/records belonging to those assignments
+
+This concept is extensible to future domain scopes.
+
+---
+
+## 8. Role Audit Requirements
+
+All role lifecycle events must be captured in the audit log:
+
+| Event | Required Audit Fields |
+|---|---|
+| Role Creation | actor, org, role name, permissions, timestamp |
+| Role Update | actor, org, role, before/after state, diff |
+| Role Deactivation | actor, org, role, timestamp |
+| Permission Changes | actor, org, role, permission, before/after |
+| Role Delegation | actor, org, delegating node, target node, roles |
+| Role Assignment | actor, org, target user, target node, role |
+| Role Revocation | actor, org, target user, target node, role, timestamp |
+| Node Assignment | actor, org, user, node, roles, timestamp |
+| Node Removal | actor, org, user, node, timestamp |
+| Scope Changes | actor, org, role, scope before/after |
+
+Audit records must NEVER expose sensitive secrets (passwords, MFA keys).
