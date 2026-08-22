@@ -1,15 +1,3 @@
 packages:
   - 'apps/*'
   - 'packages/*'
-
-allowBuilds:
-  '@nestjs/core': set this to true or false
-  argon2: set this to true or false
-  esbuild: set this to true or false
-  unrs-resolver: set this to true or false
-
-onlyBuiltDependencies:
-  - argon2
-  - esbuild
-  - '@nestjs/core'
-  - unrs-resolver
