@@ -2,8 +2,7 @@ import { Injectable, CanActivate, ExecutionContext, UnauthorizedException } from
 import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
 import { AuthUserContext } from '@campus-os/types';
-import { TenantTransactionManager, organizationMemberships, identityUsers } from '@campus-os/database';
-import { eq, and } from 'drizzle-orm';
+import { TenantTransactionManager, organizationMemberships, identityUsers, eq, and } from '@campus-os/database';
 
 declare global {
   namespace Express {

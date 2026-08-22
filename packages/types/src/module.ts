@@ -1,23 +1,42 @@
-export interface NavigationMenuItem {
-  id: string;
-  label: string;
-  href?: string;
-  icon?: string;
-  badge?: string;
-  order: number;
-  requiredPermission?: {
-    entity: string;
-    action: string;
-  };
-  children?: NavigationMenuItem[];
-}
+/**
+ * Pluggable Module Architecture & Manifest Specification
+ */
 
-export interface ModuleManifest {
+import { CreateEntityDto, CreateEntityFieldDto } from './entity.js';
+import { CreateFormDto } from './form.js';
+import { CreateWorkflowDto } from './workflow.js';
+import { CreateNavigationItemDto } from './navigation.js';
+
+export interface ModuleDeclaration {
   code: string;
   name: string;
   version: string;
   description: string;
   category: 'ACADEMIC' | 'FINANCIAL' | 'ADMINISTRATIVE' | 'HR' | 'CUSTOM';
   dependencies?: string[];
-  navigationItems?: NavigationMenuItem[];
+  entities?: Array<{
+    definition: CreateEntityDto;
+    fields: CreateEntityFieldDto[];
+  }>;
+  defaultForms?: CreateFormDto[];
+  defaultWorkflows?: CreateWorkflowDto[];
+  navigationItems?: CreateNavigationItemDto[];
+}
+
+export interface OrganizationModule {
+  id: string;
+  organizationId: string;
+  moduleCode: string;
+  isEnabled: boolean;
+  settings: Record<string, unknown>;
+  activatedAt?: Date | null;
+  activatedBy?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ToggleModuleDto {
+  moduleCode: string;
+  isEnabled: boolean;
+  settings?: Record<string, unknown>;
 }

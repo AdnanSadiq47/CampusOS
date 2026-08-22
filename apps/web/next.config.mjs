@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  transpilePackages: ['@campus-os/ui-kit', '@campus-os/types'],
+  transpilePackages: ['@campus-os/ui-kit', '@campus-os/types', '@campus-os/rule-engine', '@campus-os/permissions'],
   headers: async () => [
     {
       source: '/:path*',

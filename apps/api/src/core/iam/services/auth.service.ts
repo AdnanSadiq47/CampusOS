@@ -9,8 +9,10 @@ import {
   rolePermissions,
   hierarchyNodes,
   organizations,
+  eq,
+  and,
+  sql,
 } from '@campus-os/database';
-import { eq, and, sql } from 'drizzle-orm';
 import { PasswordService } from './password.service.js';
 import { IdentitySecurityRepository } from '../repositories/identity-security.repository.js';
 import {

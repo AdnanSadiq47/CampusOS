@@ -24,7 +24,7 @@ describe('TenantTransactionManager Security & Isolation (Negative Tests)', () =>
     const mockClient = {
       query: vi.fn().mockImplementation((sql: string) => {
         if (sql === 'BEGIN') return Promise.resolve();
-        if (sql.startsWith('SET LOCAL app.current_tenant_id')) return Promise.resolve();
+        if (sql.includes('app.current_tenant_id')) return Promise.resolve();
         if (sql === 'COMMIT') return Promise.resolve();
         if (sql === 'ROLLBACK') return Promise.resolve();
         return Promise.resolve({ rows: [] });
@@ -46,9 +46,9 @@ describe('TenantTransactionManager Security & Isolation (Negative Tests)', () =>
     expect(result).toBe('tenant_a_secure_payload');
     expect(mockPool.connect).toHaveBeenCalledTimes(1);
 
-    // Verify BEGIN -> SET LOCAL -> COMMIT sequence
+    // Verify BEGIN -> set_config -> COMMIT sequence
     expect(mockClient.query).toHaveBeenNthCalledWith(1, 'BEGIN');
-    expect(mockClient.query).toHaveBeenNthCalledWith(2, 'SET LOCAL app.current_tenant_id = $1', [testTenantId]);
+    expect(mockClient.query).toHaveBeenNthCalledWith(2, "SELECT set_config('app.current_tenant_id', $1, true)", [testTenantId]);
     expect(mockClient.query).toHaveBeenNthCalledWith(3, 'COMMIT');
     expect(mockClient.release).toHaveBeenCalledTimes(1);
   });

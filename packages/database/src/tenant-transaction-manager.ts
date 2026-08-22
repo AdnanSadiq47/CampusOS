@@ -1,5 +1,6 @@
 import pg from 'pg';
-import { drizzle, NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { drizzle as drizzleNodePg, NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { drizzle as drizzlePgLite } from 'drizzle-orm/pglite';
 import * as schema from './schema/index.js';
 import { organizations } from './schema/organizations.js';
 import { eq, or } from 'drizzle-orm';
@@ -13,8 +14,12 @@ export type DatabaseInstance = NodePgDatabase<typeof schema>;
 export class TenantTransactionManager {
   private readonly db: DatabaseInstance;
 
-  constructor(private readonly pool: pg.Pool) {
-    this.db = drizzle(this.pool, { schema });
+  constructor(private readonly pool: pg.Pool | any) {
+    if (typeof pool?.exec === 'function' && typeof pool?.connect !== 'function') {
+      this.db = drizzlePgLite(pool, { schema }) as unknown as DatabaseInstance;
+    } else {
+      this.db = drizzleNodePg(this.pool, { schema });
+    }
   }
 
   /**
@@ -60,6 +65,17 @@ export class TenantTransactionManager {
   }
 
   /**
+   * Alias for runInTenantContext
+   */
+  async withTenant<T>(
+    tenantId: string,
+    operation: (tx: DatabaseInstance) => Promise<T>,
+    userId?: string
+  ): Promise<T> {
+    return this.runInTenantContext(tenantId, operation, userId);
+  }
+
+  /**
    * Executes a database operation within a strict, tenant-isolated PostgreSQL transaction.
    * Enforces SET LOCAL app.current_tenant_id on the exact acquired connection.
    * 
@@ -80,19 +96,37 @@ export class TenantTransactionManager {
       throw new Error('SECURITY_ERROR: Missing or invalid tenantId in runInTenantContext. Access denied.');
     }
 
+    if (typeof (this.pool as any).exec === 'function' && typeof (this.pool as any).connect !== 'function') {
+      const pglite = this.pool as any;
+      await pglite.exec('BEGIN;');
+      await pglite.query("SELECT set_config('app.current_tenant_id', $1, true)", [tenantId]);
+      if (userId) {
+        await pglite.query("SELECT set_config('app.current_user_id', $1, true)", [userId]);
+      }
+      const txDrizzle = drizzlePgLite(pglite, { schema });
+      try {
+        const result = await operation(txDrizzle as unknown as DatabaseInstance);
+        await pglite.exec('COMMIT;');
+        return result;
+      } catch (err) {
+        await pglite.exec('ROLLBACK;');
+        throw err;
+      }
+    }
+
     const client = await this.pool.connect();
 
     try {
       await client.query('BEGIN');
 
       // Set local transaction variables (strictly bound to this connection for this transaction only)
-      await client.query('SET LOCAL app.current_tenant_id = $1', [tenantId]);
+      await client.query("SELECT set_config('app.current_tenant_id', $1, true)", [tenantId]);
 
       if (userId) {
-        await client.query('SET LOCAL app.current_user_id = $1', [userId]);
+        await client.query("SELECT set_config('app.current_user_id', $1, true)", [userId]);
       }
 
-      const txDrizzle = drizzle(client, { schema });
+      const txDrizzle = drizzleNodePg(client, { schema });
       const result = await operation(txDrizzle);
 
       await client.query('COMMIT');

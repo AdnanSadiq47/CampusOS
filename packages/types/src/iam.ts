@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { MembershipNodeAssignmentDTO } from './assignment';
+import { MembershipNodeAssignmentDTO } from './assignment.js';
 
 export const ActionCodeEnum = z.enum([
   'READ',
@@ -47,6 +47,7 @@ export interface PermissionRuleDTO {
   fieldRules?: FieldRule[];
   conditions?: Record<string, unknown>;
 }
+
 
 export interface AuthUserContext {
   identityId: string;

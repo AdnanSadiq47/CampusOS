@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { TenantTransactionManager, hierarchyNodeTypes, hierarchyNodes } from '@campus-os/database';
-import { eq, asc } from 'drizzle-orm';
+import { TenantTransactionManager, hierarchyNodeTypes, hierarchyNodes, eq, asc } from '@campus-os/database';
 import { CreateHierarchyNodeTypeInput, CreateHierarchyNodeInput } from '@campus-os/types';
 
 @Injectable()

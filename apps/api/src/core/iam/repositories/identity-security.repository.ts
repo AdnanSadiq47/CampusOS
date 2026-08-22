@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { TenantTransactionManager, identityUsers } from '@campus-os/database';
-import { eq } from 'drizzle-orm';
+import { TenantTransactionManager, identityUsers, eq } from '@campus-os/database';
 
 export interface IdentitySecurityRecord {
   id: string;

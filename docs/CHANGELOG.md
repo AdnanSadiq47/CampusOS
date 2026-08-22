@@ -4,6 +4,36 @@ All notable changes to the CampusOS architecture and platform specifications wil
 
 ---
 
+## [2026-08-22] - Phase 2 Completed: Dynamic Platform Engines & Visual Builder Suite
+- **Dynamic Entity Builder & Virtual ORM (`packages/database`, `apps/api/src/core/entities`)**:
+  - Declarative entity definition engine supporting custom polymorphic fields (text, number, boolean, date, json, select, relation).
+  - Virtual ORM runtime validating required constraints, unique index constraints, and `ltree` subtree node queries with strict RLS enforcement.
+- **Form Builder Engine & Declarative AST Versioning (`packages/rule-engine`, `apps/api/src/core/forms`, `apps/web/components/DynamicFormRenderer.tsx`)**:
+  - AST-driven form layouts supporting tabs, sections, responsive grids, and conditional field evaluation.
+  - Implemented `SHOW_IF`, `HIDE_IF`, `REQUIRED_IF`, `DISABLE_IF`, and safe math expression `CALCULATE` evaluator without unsafe `eval()`.
+  - Immutable published schema snapshots with draft-to-published lifecycle.
+- **Workflow State Machine Engine & Guard Evaluation (`apps/api/src/core/workflows`)**:
+  - Finite State Machine (FSM) engine with role guards, condition AST guards, and automatic state transition handlers.
+  - Append-only immutable `workflow_history` audit trail logging state changes, actors, comments, and payload diffs.
+- **Dynamic Navigation Engine (`apps/api/src/core/navigation`)**:
+  - Database-driven navigation menu trees with real-time permission filtering based on active user roles and scopes.
+- **Pluggable Module Architecture (`apps/api/src/core/modules`)**:
+  - Declarative module registry supporting dynamic activation and strict prerequisite dependency resolution.
+- **Visual Admin Studio (`apps/web/app/(admin)/builders`)**:
+  - Built interactive visual builders:
+    - `/builders/hierarchy`: Interactive organizational node tree editor with `ltree` path maintenance.
+    - `/builders/entities`: Visual entity creator and custom field manager.
+    - `/builders/forms`: Drag-and-drop form canvas with real-time live AST preview.
+    - `/builders/workflows`: Visual state transition diagram editor.
+    - `/builders/navigation`: Menu item manager with role preview.
+    - `/modules`: Pluggable module activation center with dependency checks.
+- **Full Monorepo Verification**:
+  - Monorepo Typecheck: 100% clean (`tsc --noEmit` across all 9 packages/apps).
+  - Test Suites: 100% passing (Permissions: 4/4, Rule Engine: 6/6, Database: 12/12, API: 14/14).
+  - Production Builds: 100% clean (API NestJS build + Web Next.js 14 App Router 11 static routes build).
+
+---
+
 ## [2026-08-22] - PHASE 1 FORMALLY COMPLETED & PERMANENTLY LOCKED
 
 ### Acceptance Status

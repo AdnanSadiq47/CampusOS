@@ -55,6 +55,19 @@ describe.skipIf(!hasRealPostgres)('Real Standalone PostgreSQL 16 Daemon Acceptan
 
     // Clean up previous test runs for completely empty migration baseline
     await adminClient.query(`
+      DROP TABLE IF EXISTS organization_modules CASCADE;
+      DROP TABLE IF EXISTS navigation_items CASCADE;
+      DROP TABLE IF EXISTS navigation_menus CASCADE;
+      DROP TABLE IF EXISTS workflow_history CASCADE;
+      DROP TABLE IF EXISTS workflow_instances CASCADE;
+      DROP TABLE IF EXISTS workflow_transitions CASCADE;
+      DROP TABLE IF EXISTS workflow_states CASCADE;
+      DROP TABLE IF EXISTS workflow_definitions CASCADE;
+      DROP TABLE IF EXISTS form_versions CASCADE;
+      DROP TABLE IF EXISTS form_definitions CASCADE;
+      DROP TABLE IF EXISTS entity_records CASCADE;
+      DROP TABLE IF EXISTS entity_fields CASCADE;
+      DROP TABLE IF EXISTS entity_definitions CASCADE;
       DROP TABLE IF EXISTS outbox_events CASCADE;
       DROP TABLE IF EXISTS audit_logs CASCADE;
       DROP TABLE IF EXISTS role_permissions CASCADE;
@@ -258,6 +271,220 @@ describe.skipIf(!hasRealPostgres)('Real Standalone PostgreSQL 16 Daemon Acceptan
         status VARCHAR(32) DEFAULT 'PENDING' NOT NULL,
         created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
       );
+
+      -- Phase 2 Tables
+      CREATE TABLE entity_definitions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        code VARCHAR(64) NOT NULL,
+        name VARCHAR(128) NOT NULL,
+        description TEXT,
+        is_system BOOLEAN DEFAULT FALSE NOT NULL,
+        is_active BOOLEAN DEFAULT TRUE NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+        updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+        CONSTRAINT uq_entity_org_id UNIQUE (organization_id, id),
+        CONSTRAINT uq_entity_org_code UNIQUE (organization_id, code)
+      );
+
+      CREATE TABLE entity_fields (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        entity_id UUID NOT NULL,
+        code VARCHAR(64) NOT NULL,
+        name VARCHAR(128) NOT NULL,
+        field_type VARCHAR(32) NOT NULL,
+        is_required BOOLEAN DEFAULT FALSE NOT NULL,
+        is_unique BOOLEAN DEFAULT FALSE NOT NULL,
+        is_searchable BOOLEAN DEFAULT FALSE NOT NULL,
+        default_value JSONB,
+        validation_rules JSONB DEFAULT '{}'::jsonb NOT NULL,
+        options JSONB DEFAULT '[]'::jsonb NOT NULL,
+        reference_entity_id UUID,
+        sort_order INT DEFAULT 0 NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+        CONSTRAINT uq_entity_field_org_id UNIQUE (organization_id, id),
+        CONSTRAINT uq_entity_field_code UNIQUE (organization_id, entity_id, code),
+        CONSTRAINT fk_entity_fields_entity FOREIGN KEY (organization_id, entity_id)
+          REFERENCES entity_definitions(organization_id, id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE entity_records (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        entity_id UUID NOT NULL,
+        hierarchy_node_id UUID NOT NULL,
+        data JSONB DEFAULT '{}'::jsonb NOT NULL,
+        created_by UUID REFERENCES identity_users(id),
+        updated_by UUID REFERENCES identity_users(id),
+        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+        updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+        CONSTRAINT uq_entity_record_org_id UNIQUE (organization_id, id),
+        CONSTRAINT fk_entity_records_entity FOREIGN KEY (organization_id, entity_id)
+          REFERENCES entity_definitions(organization_id, id) ON DELETE CASCADE,
+        CONSTRAINT fk_entity_records_node FOREIGN KEY (organization_id, hierarchy_node_id)
+          REFERENCES hierarchy_nodes(organization_id, id) ON DELETE RESTRICT
+      );
+
+      CREATE TABLE form_definitions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        entity_id UUID NOT NULL,
+        code VARCHAR(64) NOT NULL,
+        name VARCHAR(128) NOT NULL,
+        description TEXT,
+        is_active BOOLEAN DEFAULT TRUE NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+        updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+        CONSTRAINT uq_form_org_id UNIQUE (organization_id, id),
+        CONSTRAINT uq_form_org_code UNIQUE (organization_id, code),
+        CONSTRAINT fk_form_entity FOREIGN KEY (organization_id, entity_id)
+          REFERENCES entity_definitions(organization_id, id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE form_versions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        form_id UUID NOT NULL,
+        version INT NOT NULL,
+        status VARCHAR(32) DEFAULT 'DRAFT' NOT NULL,
+        schema_ast JSONB NOT NULL,
+        rules JSONB DEFAULT '[]'::jsonb NOT NULL,
+        published_at TIMESTAMPTZ,
+        published_by UUID REFERENCES identity_users(id),
+        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+        CONSTRAINT uq_form_version_org_id UNIQUE (organization_id, id),
+        CONSTRAINT uq_form_version_number UNIQUE (organization_id, form_id, version),
+        CONSTRAINT fk_form_versions_form FOREIGN KEY (organization_id, form_id)
+          REFERENCES form_definitions(organization_id, id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE workflow_definitions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        entity_id UUID NOT NULL,
+        code VARCHAR(64) NOT NULL,
+        name VARCHAR(128) NOT NULL,
+        description TEXT,
+        initial_state_code VARCHAR(64) NOT NULL,
+        is_active BOOLEAN DEFAULT TRUE NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+        updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+        CONSTRAINT uq_workflow_org_id UNIQUE (organization_id, id),
+        CONSTRAINT uq_workflow_org_code UNIQUE (organization_id, code),
+        CONSTRAINT fk_workflow_entity FOREIGN KEY (organization_id, entity_id)
+          REFERENCES entity_definitions(organization_id, id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE workflow_states (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        workflow_id UUID NOT NULL,
+        code VARCHAR(64) NOT NULL,
+        name VARCHAR(128) NOT NULL,
+        state_type VARCHAR(32) DEFAULT 'INTERMEDIATE' NOT NULL,
+        color VARCHAR(32) DEFAULT 'gray' NOT NULL,
+        sort_order INT DEFAULT 0 NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+        CONSTRAINT uq_workflow_state_org_id UNIQUE (organization_id, id),
+        CONSTRAINT uq_workflow_state_code UNIQUE (organization_id, workflow_id, code),
+        CONSTRAINT fk_workflow_states_workflow FOREIGN KEY (organization_id, workflow_id)
+          REFERENCES workflow_definitions(organization_id, id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE workflow_transitions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        workflow_id UUID NOT NULL,
+        from_state_code VARCHAR(64) NOT NULL,
+        to_state_code VARCHAR(64) NOT NULL,
+        action_name VARCHAR(128) NOT NULL,
+        guard_rule JSONB DEFAULT '{}'::jsonb NOT NULL,
+        required_roles JSONB DEFAULT '[]'::jsonb NOT NULL,
+        actions JSONB DEFAULT '[]'::jsonb NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+        CONSTRAINT uq_workflow_transition_org_id UNIQUE (organization_id, id),
+        CONSTRAINT fk_workflow_transitions_workflow FOREIGN KEY (organization_id, workflow_id)
+          REFERENCES workflow_definitions(organization_id, id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE workflow_instances (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        workflow_id UUID NOT NULL,
+        record_id UUID NOT NULL,
+        current_state_code VARCHAR(64) NOT NULL,
+        assigned_node_id UUID NOT NULL,
+        started_by UUID REFERENCES identity_users(id),
+        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+        updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+        CONSTRAINT uq_workflow_instance_org_id UNIQUE (organization_id, id),
+        CONSTRAINT fk_workflow_instances_workflow FOREIGN KEY (organization_id, workflow_id)
+          REFERENCES workflow_definitions(organization_id, id) ON DELETE CASCADE,
+        CONSTRAINT fk_workflow_instances_record FOREIGN KEY (organization_id, record_id)
+          REFERENCES entity_records(organization_id, id) ON DELETE CASCADE,
+        CONSTRAINT fk_workflow_instances_node FOREIGN KEY (organization_id, assigned_node_id)
+          REFERENCES hierarchy_nodes(organization_id, id) ON DELETE RESTRICT
+      );
+
+      CREATE TABLE workflow_history (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        instance_id UUID NOT NULL,
+        from_state_code VARCHAR(64) NOT NULL,
+        to_state_code VARCHAR(64) NOT NULL,
+        action_taken VARCHAR(128) NOT NULL,
+        performed_by UUID REFERENCES identity_users(id),
+        comments TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+        CONSTRAINT uq_workflow_history_org_id UNIQUE (organization_id, id),
+        CONSTRAINT fk_workflow_history_instance FOREIGN KEY (organization_id, instance_id)
+          REFERENCES workflow_instances(organization_id, id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE navigation_menus (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        code VARCHAR(64) NOT NULL,
+        name VARCHAR(128) NOT NULL,
+        is_active BOOLEAN DEFAULT TRUE NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+        CONSTRAINT uq_nav_menu_org_id UNIQUE (organization_id, id),
+        CONSTRAINT uq_nav_menu_code UNIQUE (organization_id, code)
+      );
+
+      CREATE TABLE navigation_items (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        menu_id UUID NOT NULL,
+        parent_id UUID,
+        label VARCHAR(128) NOT NULL,
+        icon VARCHAR(64),
+        route_path VARCHAR(255) NOT NULL,
+        required_module VARCHAR(64),
+        required_permissions JSONB DEFAULT '[]'::jsonb NOT NULL,
+        sort_order INT DEFAULT 0 NOT NULL,
+        is_active BOOLEAN DEFAULT TRUE NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+        CONSTRAINT uq_nav_item_org_id UNIQUE (organization_id, id),
+        CONSTRAINT fk_nav_items_menu FOREIGN KEY (organization_id, menu_id)
+          REFERENCES navigation_menus(organization_id, id) ON DELETE CASCADE,
+        CONSTRAINT fk_nav_items_parent FOREIGN KEY (organization_id, parent_id)
+          REFERENCES navigation_items(organization_id, id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE organization_modules (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        module_code VARCHAR(64) NOT NULL,
+        is_enabled BOOLEAN DEFAULT FALSE NOT NULL,
+        settings JSONB DEFAULT '{}'::jsonb NOT NULL,
+        activated_at TIMESTAMPTZ,
+        activated_by UUID REFERENCES identity_users(id),
+        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+        updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+        CONSTRAINT uq_org_module UNIQUE (organization_id, module_code)
+      );
     `);
 
     // 4. Seed Multi-Tenant Data
@@ -291,7 +518,7 @@ describe.skipIf(!hasRealPostgres)('Real Standalone PostgreSQL 16 Daemon Acceptan
         ('11111111-aaaa-1111-1111-111111111111', '${TENANT_A_ID}', 'eeeeeeee-1111-1111-1111-111111111111', 'dddddddd-1111-1111-1111-111111111111');
     `);
 
-    // 5. Apply Hardened RLS
+    // 5. Apply Hardened RLS Across All 24 Tables
     await adminClient.query(RLS_ENABLE_SQL);
 
     // 6. Setup Runtime User
@@ -355,11 +582,15 @@ describe.skipIf(!hasRealPostgres)('Real Standalone PostgreSQL 16 Daemon Acceptan
         WHERE relname IN (
           'organizations', 'organization_memberships', 'employee_profiles',
           'membership_node_assignments', 'assignment_roles', 'hierarchy_node_types',
-          'hierarchy_nodes', 'roles', 'role_permissions', 'audit_logs', 'outbox_events'
+          'hierarchy_nodes', 'roles', 'role_permissions', 'audit_logs', 'outbox_events',
+          'entity_definitions', 'entity_fields', 'entity_records',
+          'form_definitions', 'form_versions',
+          'workflow_definitions', 'workflow_states', 'workflow_transitions', 'workflow_instances', 'workflow_history',
+          'navigation_menus', 'navigation_items', 'organization_modules'
         );
       `);
 
-      expect(res.rows.length).toBe(11);
+      expect(res.rows.length).toBe(24);
       for (const row of res.rows) {
         expect(row.relrowsecurity).toBe(true);
         expect(row.relforcerowsecurity).toBe(true);

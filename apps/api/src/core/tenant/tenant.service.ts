@@ -1,7 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { TenantTransactionManager, organizations } from '@campus-os/database';
+import { TenantTransactionManager, organizations, eq } from '@campus-os/database';
 import { TenantContext } from '@campus-os/types';
-import { eq } from 'drizzle-orm';
 
 @Injectable()
 export class TenantService {
