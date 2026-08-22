@@ -14,12 +14,13 @@
 4. **Credential Isolation**: `password_hash`, `mfa_secret_encrypted`, `mfa_secret_iv`, `security_stamp`, and session security attributes in `identity_users` are strictly inaccessible to `campus_app_user` and cannot be queried by generic forms, reports, or business code.
 5. **Tenant-Aware Transaction Scoping**: `TenantTransactionManager` with `SET LOCAL app.current_tenant_id = :tenantId` on every connection. Context must reset to empty on `COMMIT` and `ROLLBACK`.
 6. **Global Identity Decoupling**: `identity_users` is purely an authentication principal with zero implicit tenant access. All tenant access requires server-verified `organization_memberships`.
-7. **Dynamic Multi-Node Employee Assignments**:
+7. **Dynamic Multi-Node Employee Assignments (Non-Negotiable Invariant)**:
+   * **CARDINAL RULE**: Never model an employee as belonging to exactly one campus/node or exactly one role. Never add authoritative fields like `user.campus_id`, `employee.campus_id`, or `user.role_id`.
+   * Conceptual Model: `USER -> EMPLOYEE / ORG MEMBERSHIP -> ASSIGNMENT(S) -> HIERARCHY NODE -> ROLE(S) -> PERMISSIONS -> DATA SCOPE`.
    * Users/Employees are assigned to arbitrary hierarchy nodes via `membership_node_assignments` with per-node roles via `assignment_roles`.
-   * One person may be assigned to Head Office, Regional Offices, and one or multiple Campuses simultaneously.
-   * Roles and permissions may differ per employee assignment/node.
-   * NEVER assume that Accountant, HR, Academic, Registrar, or any other employee type belongs only to a Campus or only to Head Office.
-   * All organizational levels must support employees dynamically.
+   * One person may be assigned simultaneously to Head Office, Regional Offices, and multiple Campuses (*e.g., Accountant at Head Office + Campus A + Campus B*).
+   * Roles, permissions, and data scopes differ per employee assignment/node.
+   * NEVER assume that Accountant, HR, Academic, Registrar, or any employee type belongs only to a Campus or only to Head Office. All organizational tiers support employees dynamically.
 8. **Composite Foreign Keys**: All tenant-owned relationship tables must enforce composite foreign keys containing `organization_id` (`fk_employee_membership`, `fk_assignments_membership`, `fk_assignments_node`, `fk_assignment_roles_assignment`, `fk_assignment_roles_role`).
 9. **Tri-State Permission Precedence**: `Explicit DENY > Explicit ALLOW > Default DENY`.
 10. **Hierarchy-Aware Data Scoping**: `ORGANIZATION_WIDE` is an explicitly granted data scope and is NEVER inferred from node naming (e.g. "Head Office"). Subtree traversal uses PostgreSQL `ltree` (`path <@ :nodePath`).

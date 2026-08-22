@@ -34,14 +34,20 @@ export default function WorkflowBuilderPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight">Visual Workflow FSM & Approval Builder</h2>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-xs font-semibold text-slate-400">CampusOS / Platform Builders</span>
+            <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+              Interactive Builder Studio
+            </span>
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Visual Workflow FSM & Approval Builder</h1>
           <p className="text-sm text-slate-500">
             Design directed finite state transitions, role approval gates, automated triggers, and immutable audit trails.
           </p>
         </div>
-        <button className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700">
+        <button className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors">
           + Create Workflow
         </button>
       </div>

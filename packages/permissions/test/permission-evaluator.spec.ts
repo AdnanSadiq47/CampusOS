@@ -209,4 +209,253 @@ describe('PermissionEvaluator with Tri-State & Multi-Node Support', () => {
 
     expect(result.granted).toBe(false);
   });
+
+  describe('5. Real-World Multi-Node Employee Assignment Scenarios', () => {
+    const rolesMap = new Map<string, PermissionRuleDTO[]>([
+      [
+        'role-accountant-exact',
+        [
+          {
+            moduleCode: 'finance',
+            entityCode: 'voucher',
+            action: 'CREATE',
+            effect: 'ALLOW',
+            dataScope: 'EXACT_NODE',
+          },
+        ],
+      ],
+      [
+        'role-regional-approver',
+        [
+          {
+            moduleCode: 'finance',
+            entityCode: 'fee_concession',
+            action: 'APPROVE',
+            effect: 'ALLOW',
+            dataScope: 'HIERARCHY_SUBTREE',
+          },
+        ],
+      ],
+      [
+        'role-finance-director',
+        [
+          {
+            moduleCode: 'finance',
+            entityCode: 'financial_statement',
+            action: 'READ',
+            effect: 'ALLOW',
+            dataScope: 'HIERARCHY_SUBTREE',
+          },
+        ],
+      ],
+      [
+        'role-auditor-deny',
+        [
+          {
+            moduleCode: 'finance',
+            entityCode: 'fee_concession',
+            action: 'APPROVE',
+            effect: 'DENY',
+            dataScope: 'EXACT_NODE',
+          },
+        ],
+      ],
+    ]);
+
+    it('Employee A: Head Office Accountant can only access Head Office vouchers (EXACT_NODE)', () => {
+      const employeeA: AuthUserContext = {
+        identityId: 'emp-a',
+        email: 'emp.a@campus.edu',
+        firstName: 'Employee',
+        lastName: 'A',
+        organizationId: 'org-111',
+        organizationCode: 'univ_main',
+        membershipId: 'mem-a',
+        sessionId: 'sess-a',
+        assignments: [
+          {
+            id: 'asgn-ho',
+            organizationId: 'org-111',
+            membershipId: 'mem-a',
+            hierarchyNodeId: 'node-ho',
+            nodePath: 'root.head_office',
+            isPrimary: true,
+            status: 'ACTIVE',
+            roles: [{ id: 'r-1', organizationId: 'org-111', assignmentId: 'asgn-ho', roleId: 'role-accountant-exact', createdAt: new Date() }],
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        ],
+      };
+
+      // Can access Head Office
+      const hoResult = PermissionEvaluator.evaluate(
+        { user: employeeA, moduleCode: 'finance', entityCode: 'voucher', action: 'CREATE', record: { nodePath: 'root.head_office' } },
+        rolesMap
+      );
+      expect(hoResult.granted).toBe(true);
+
+      // CANNOT access Campus Karachi
+      const karachiResult = PermissionEvaluator.evaluate(
+        { user: employeeA, moduleCode: 'finance', entityCode: 'voucher', action: 'CREATE', record: { nodePath: 'root.region_south.campus_karachi' } },
+        rolesMap
+      );
+      expect(karachiResult.granted).toBe(false);
+    });
+
+    it('Employee C: Assigned simultaneously to 2 Campuses (Karachi + Lahore)', () => {
+      const employeeC: AuthUserContext = {
+        identityId: 'emp-c',
+        email: 'emp.c@campus.edu',
+        firstName: 'Employee',
+        lastName: 'C',
+        organizationId: 'org-111',
+        organizationCode: 'univ_main',
+        membershipId: 'mem-c',
+        sessionId: 'sess-c',
+        assignments: [
+          {
+            id: 'asgn-karachi',
+            organizationId: 'org-111',
+            membershipId: 'mem-c',
+            hierarchyNodeId: 'node-karachi',
+            nodePath: 'root.region_south.campus_karachi',
+            isPrimary: true,
+            status: 'ACTIVE',
+            roles: [{ id: 'r-2', organizationId: 'org-111', assignmentId: 'asgn-karachi', roleId: 'role-accountant-exact', createdAt: new Date() }],
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+          {
+            id: 'asgn-lahore',
+            organizationId: 'org-111',
+            membershipId: 'mem-c',
+            hierarchyNodeId: 'node-lahore',
+            nodePath: 'root.region_north.campus_lahore',
+            isPrimary: false,
+            status: 'ACTIVE',
+            roles: [{ id: 'r-3', organizationId: 'org-111', assignmentId: 'asgn-lahore', roleId: 'role-accountant-exact', createdAt: new Date() }],
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        ],
+      };
+
+      // Can access Karachi
+      expect(
+        PermissionEvaluator.evaluate(
+          { user: employeeC, moduleCode: 'finance', entityCode: 'voucher', action: 'CREATE', record: { nodePath: 'root.region_south.campus_karachi' } },
+          rolesMap
+        ).granted
+      ).toBe(true);
+
+      // Can access Lahore
+      expect(
+        PermissionEvaluator.evaluate(
+          { user: employeeC, moduleCode: 'finance', entityCode: 'voucher', action: 'CREATE', record: { nodePath: 'root.region_north.campus_lahore' } },
+          rolesMap
+        ).granted
+      ).toBe(true);
+
+      // CANNOT access Campus Islamabad (neither Karachi nor Lahore)
+      expect(
+        PermissionEvaluator.evaluate(
+          { user: employeeC, moduleCode: 'finance', entityCode: 'voucher', action: 'CREATE', record: { nodePath: 'root.region_north.campus_islamabad' } },
+          rolesMap
+        ).granted
+      ).toBe(false);
+    });
+
+    it('Employee D: Multi-Node complex assignment across 4 hierarchy nodes with Subtree & Explicit DENY', () => {
+      const employeeD: AuthUserContext = {
+        identityId: 'emp-d',
+        email: 'emp.d@campus.edu',
+        firstName: 'Employee',
+        lastName: 'D',
+        organizationId: 'org-111',
+        organizationCode: 'univ_main',
+        membershipId: 'mem-d',
+        sessionId: 'sess-d',
+        assignments: [
+          {
+            // Tier 1: Head Office -> Finance Director (Subtree on root.head_office)
+            id: 'asgn-ho-d',
+            organizationId: 'org-111',
+            membershipId: 'mem-d',
+            hierarchyNodeId: 'node-ho',
+            nodePath: 'root.head_office',
+            isPrimary: true,
+            status: 'ACTIVE',
+            roles: [{ id: 'r-4', organizationId: 'org-111', assignmentId: 'asgn-ho-d', roleId: 'role-finance-director', createdAt: new Date() }],
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+          {
+            // Tier 2: Regional Office South -> Regional Approver (Subtree on root.region_south)
+            id: 'asgn-reg-south',
+            organizationId: 'org-111',
+            membershipId: 'mem-d',
+            hierarchyNodeId: 'node-reg-south',
+            nodePath: 'root.region_south',
+            isPrimary: false,
+            status: 'ACTIVE',
+            roles: [{ id: 'r-5', organizationId: 'org-111', assignmentId: 'asgn-reg-south', roleId: 'role-regional-approver', createdAt: new Date() }],
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+          {
+            // Tier 3: Campus Karachi -> Lead Accountant (Exact node)
+            id: 'asgn-karachi-d',
+            organizationId: 'org-111',
+            membershipId: 'mem-d',
+            hierarchyNodeId: 'node-karachi',
+            nodePath: 'root.region_south.campus_karachi',
+            isPrimary: false,
+            status: 'ACTIVE',
+            roles: [{ id: 'r-6', organizationId: 'org-111', assignmentId: 'asgn-karachi-d', roleId: 'role-accountant-exact', createdAt: new Date() }],
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+          {
+            // Tier 4: Campus Hyderabad -> Suspended/Restricted (Explicit DENY on node)
+            id: 'asgn-hyd-d',
+            organizationId: 'org-111',
+            membershipId: 'mem-d',
+            hierarchyNodeId: 'node-hyd',
+            nodePath: 'root.region_south.campus_hyderabad',
+            isPrimary: false,
+            status: 'ACTIVE',
+            roles: [{ id: 'r-7', organizationId: 'org-111', assignmentId: 'asgn-hyd-d', roleId: 'role-auditor-deny', createdAt: new Date() }],
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        ],
+      };
+
+      // 1. Regional Approver can approve in South Region descendant (Campus Karachi)
+      expect(
+        PermissionEvaluator.evaluate(
+          { user: employeeD, moduleCode: 'finance', entityCode: 'fee_concession', action: 'APPROVE', record: { nodePath: 'root.region_south.campus_karachi' } },
+          rolesMap
+        ).granted
+      ).toBe(true);
+
+      // 2. Explicit DENY on Campus Hyderabad blocks approval despite Region South subtree ALLOW
+      const hydResult = PermissionEvaluator.evaluate(
+        { user: employeeD, moduleCode: 'finance', entityCode: 'fee_concession', action: 'APPROVE', record: { nodePath: 'root.region_south.campus_hyderabad' } },
+        rolesMap
+      );
+      expect(hydResult.granted).toBe(false);
+      expect(hydResult.reason).toBe('DENY_EXPLICIT_OVERRIDE');
+
+      // 3. CANNOT approve in Region North (Campus Peshawar) because Region South subtree does not cover Region North
+      expect(
+        PermissionEvaluator.evaluate(
+          { user: employeeD, moduleCode: 'finance', entityCode: 'fee_concession', action: 'APPROVE', record: { nodePath: 'root.region_north.campus_peshawar' } },
+          rolesMap
+        ).granted
+      ).toBe(false);
+    });
+  });
 });
+

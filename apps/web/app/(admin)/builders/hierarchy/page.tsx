@@ -75,11 +75,27 @@ export default function HierarchyBuilderPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight">Visual Hierarchy Tree Builder</h2>
-        <p className="text-sm text-slate-500">
-          Configure arbitrary multi-level organizational units (Head Office, Regions, Campuses, Departments) with PostgreSQL ltree paths.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-xs font-semibold text-slate-400">CampusOS / Platform Builders</span>
+            <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+              Interactive Builder Studio
+            </span>
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Visual Hierarchy Tree Builder</h1>
+          <p className="text-sm text-slate-500">
+            Configure arbitrary multi-level organizational structures (Head Office, Regions, Campuses, Departments) with PostgreSQL <code className="text-xs font-mono bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded">ltree</code> paths.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button className="px-3.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+            Export Schema
+          </button>
+          <button className="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition-colors">
+            + New Hierarchy Tier
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

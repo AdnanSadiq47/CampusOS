@@ -58,11 +58,19 @@ export default function ModulesPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight">Pluggable Organization Modules</h2>
-        <p className="text-sm text-slate-500">
-          Enable or disable modular enterprise extensions. Disabling a module hides menus and suspends background jobs but never deletes historical data.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-xs font-semibold text-slate-400">CampusOS / System Architecture</span>
+            <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+              Feature Flag Matrix
+            </span>
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Pluggable Organization Modules</h1>
+          <p className="text-sm text-slate-500">
+            Enable or disable modular domain extensions with automated dependency validation. Disabling a module hides navigation and guards endpoints without deleting historical audit ledgers.
+          </p>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

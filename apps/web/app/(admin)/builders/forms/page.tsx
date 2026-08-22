@@ -46,19 +46,25 @@ export default function FormBuilderPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight">Visual Form Builder & Compiler</h2>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-xs font-semibold text-slate-400">CampusOS / Platform Builders</span>
+            <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+              AST Runtime Compiler
+            </span>
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Visual Form Builder & Dynamic Compiler</h1>
           <p className="text-sm text-slate-500">
             Construct versioned, multi-tab form ASTs with dynamic evaluation rules and interactive runtime preview.
           </p>
         </div>
-        <div className="flex gap-2">
-          <button className="px-3 py-1.5 border border-slate-300 dark:border-slate-700 text-sm rounded hover:bg-slate-100 dark:hover:bg-slate-800">
-            Save Draft
+        <div className="flex items-center gap-2">
+          <button className="px-3.5 py-1.5 border border-slate-300 dark:border-slate-700 text-xs font-semibold rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+            Save Draft (AST)
           </button>
-          <button className="px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700">
-            Publish (v1)
+          <button className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors">
+            Publish (v1 Immutable)
           </button>
         </div>
       </div>

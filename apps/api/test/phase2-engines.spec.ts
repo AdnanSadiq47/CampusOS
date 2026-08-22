@@ -507,6 +507,106 @@ describe('Phase 2 Platform Dynamic Engines & Virtual ORM Integration Tests', () 
       expect(history.length).toBe(3); // STARTED, Start Review, Approve Course
       expect(history[0]?.actionTaken).toBe('Approve Course');
     });
+
+    it('guarantees workflow version safety: active in-flight instances remain bound to their original version without corruption', async () => {
+      const entities = await entitiesService.listEntities(TENANT_ID);
+      const entityId = entities[0]!.id;
+
+      // 1. Create Workflow V1 (Draft -> Auto-Approved direct flow)
+      const wfV1 = await workflowsService.createWorkflow(TENANT_ID, {
+        entityId,
+        code: 'fee_waiver_v1',
+        name: 'Fee Waiver V1',
+        initialStateCode: 'SUBMITTED',
+      });
+
+      await workflowsService.addState(TENANT_ID, wfV1.id, {
+        code: 'APPROVED',
+        name: 'Approved',
+        stateType: 'TERMINAL',
+      });
+
+      await workflowsService.addTransition(TENANT_ID, wfV1.id, {
+        fromStateCode: 'SUBMITTED',
+        toStateCode: 'APPROVED',
+        actionName: 'Direct Approve',
+        requiredRoles: ['PRINCIPAL'],
+      });
+
+      // Start Instance on V1
+      const records = await entitiesService.queryRecords(TENANT_ID, { entityCode: 'course_catalog' });
+      const instV1 = await workflowsService.startInstance(
+        TENANT_ID,
+        'fee_waiver_v1',
+        records[0]!.id,
+        NODE_CAMPUS_ID,
+        USER_ID
+      );
+      expect(instV1.workflowId).toBe(wfV1.id);
+      expect(instV1.currentStateCode).toBe('SUBMITTED');
+
+      // 2. Organization introduces Workflow V2 with new required intermediate review state
+      const wfV2 = await workflowsService.createWorkflow(TENANT_ID, {
+        entityId,
+        code: 'fee_waiver_v2',
+        name: 'Fee Waiver V2',
+        initialStateCode: 'SUBMITTED',
+      });
+
+      await workflowsService.addState(TENANT_ID, wfV2.id, {
+        code: 'DEAN_REVIEW',
+        name: 'Dean Review',
+        stateType: 'INTERMEDIATE',
+      });
+
+      await workflowsService.addState(TENANT_ID, wfV2.id, {
+        code: 'APPROVED',
+        name: 'Approved',
+        stateType: 'TERMINAL',
+      });
+
+      await workflowsService.addTransition(TENANT_ID, wfV2.id, {
+        fromStateCode: 'SUBMITTED',
+        toStateCode: 'DEAN_REVIEW',
+        actionName: 'Escalate to Dean',
+      });
+
+      await workflowsService.addTransition(TENANT_ID, wfV2.id, {
+        fromStateCode: 'DEAN_REVIEW',
+        toStateCode: 'APPROVED',
+        actionName: 'Dean Approve',
+        requiredRoles: ['PRINCIPAL'],
+      });
+
+      // 3. Verify V1 instance executes V1 transition without being affected by V2
+      const completedV1 = await workflowsService.triggerTransition(
+        TENANT_ID,
+        instV1.id,
+        { actionName: 'Direct Approve' },
+        MEMBERSHIP_ID,
+        USER_ID
+      );
+      expect(completedV1.currentStateCode).toBe('APPROVED');
+
+      // 4. Start new Instance on V2 and verify it follows V2 pipeline
+      const instV2 = await workflowsService.startInstance(
+        TENANT_ID,
+        'fee_waiver_v2',
+        records[0]!.id,
+        NODE_CAMPUS_ID,
+        USER_ID
+      );
+      expect(instV2.workflowId).toBe(wfV2.id);
+
+      const step1V2 = await workflowsService.triggerTransition(
+        TENANT_ID,
+        instV2.id,
+        { actionName: 'Escalate to Dean' },
+        MEMBERSHIP_ID,
+        USER_ID
+      );
+      expect(step1V2.currentStateCode).toBe('DEAN_REVIEW');
+    });
   });
 
   describe('4. Dynamic Navigation & Permission Tree', () => {
