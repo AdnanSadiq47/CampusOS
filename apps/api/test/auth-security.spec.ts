@@ -52,6 +52,9 @@ describe('Auth & Multi-Tenant Security (Negative Tests)', () => {
       },
       {
         secret: 'development_jwt_access_secret_64chars_long_minimum',
+        algorithm: 'HS256',
+        issuer: 'campus-os-auth',
+        audience: 'campus-os-client',
       }
     );
 
@@ -73,7 +76,44 @@ describe('Auth & Multi-Tenant Security (Negative Tests)', () => {
     await expect(guard.canActivate(mockContext)).rejects.toThrow(/Cross-tenant token tampering detected/);
   });
 
-  it('AuthGuard permits valid token matching the target tenant', async () => {
+  it('AuthGuard rejects tokens with untrusted issuer or audience', async () => {
+    const guard = new AuthGuard(jwtService);
+    const tenantAId = '11111111-1111-1111-1111-111111111111';
+
+    // Token with untrusted issuer
+    const untrustedToken = jwtService.sign(
+      {
+        sub: 'user-123',
+        email: 'user@tenanta.com',
+        orgId: tenantAId,
+        orgCode: 'tenant_a',
+      },
+      {
+        secret: 'development_jwt_access_secret_64chars_long_minimum',
+        algorithm: 'HS256',
+        issuer: 'untrusted-issuer',
+        audience: 'campus-os-client',
+      }
+    );
+
+    const mockContext = {
+      switchToHttp: () => ({
+        getRequest: () => ({
+          headers: {
+            authorization: `Bearer ${untrustedToken}`,
+          },
+          tenant: {
+            organizationId: tenantAId,
+            organizationCode: 'tenant_a',
+          },
+        }),
+      }),
+    } as unknown as ExecutionContext;
+
+    await expect(guard.canActivate(mockContext)).rejects.toThrow(/Invalid, expired, or untrusted access token/);
+  });
+
+  it('AuthGuard permits valid token matching the target tenant, issuer, and audience', async () => {
     const guard = new AuthGuard(jwtService);
     const tenantAId = '11111111-1111-1111-1111-111111111111';
 
@@ -86,6 +126,9 @@ describe('Auth & Multi-Tenant Security (Negative Tests)', () => {
       },
       {
         secret: 'development_jwt_access_secret_64chars_long_minimum',
+        algorithm: 'HS256',
+        issuer: 'campus-os-auth',
+        audience: 'campus-os-client',
       }
     );
 

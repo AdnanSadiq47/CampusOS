@@ -15,8 +15,8 @@ importers:
         specifier: ^2.0.4
         version: 2.10.11
       typescript:
-        specifier: ^5.5.2
-        version: 5.9.3
+        specifier: 5.5.2
+        version: 5.5.2
 
   apps/api:
     dependencies:
@@ -61,7 +61,7 @@ importers:
         version: 16.6.1
       drizzle-orm:
         specifier: ^0.31.2
-        version: 0.31.4(@types/pg@8.23.1)(@types/react@18.3.31)(pg@8.23.0)(react@18.3.1)
+        version: 0.31.4(@electric-sql/pglite@0.5.5)(@types/pg@8.23.1)(@types/react@18.3.31)(pg@8.23.0)(react@18.3.1)
       helmet:
         specifier: ^7.1.0
         version: 7.2.0
@@ -80,7 +80,7 @@ importers:
         version: 10.4.9(esbuild@0.27.7)(postcss@8.5.26)
       '@nestjs/schematics':
         specifier: ^10.1.1
-        version: 10.2.3(chokidar@3.6.0)(typescript@5.9.3)
+        version: 10.2.3(chokidar@3.6.0)(typescript@5.5.2)
       '@nestjs/testing':
         specifier: ^10.3.9
         version: 10.4.22(@nestjs/common@10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@10.4.22)(@nestjs/platform-express@10.4.22)
@@ -94,8 +94,8 @@ importers:
         specifier: ^7.0.0
         version: 7.2.2(supports-color@8.1.1)
       typescript:
-        specifier: ^5.5.2
-        version: 5.9.3
+        specifier: 5.5.2
+        version: 5.5.2
       vitest:
         specifier: ^1.6.0
         version: 1.6.1(@types/node@20.19.43)(supports-color@8.1.1)(terser@5.50.0)
@@ -144,7 +144,7 @@ importers:
         version: 8.57.1(supports-color@8.1.1)
       eslint-config-next:
         specifier: 14.2.4
-        version: 14.2.4(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3)
+        version: 14.2.4(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.5.2)
       postcss:
         specifier: ^8.4.38
         version: 8.5.26
@@ -152,8 +152,8 @@ importers:
         specifier: ^3.4.4
         version: 3.4.19
       typescript:
-        specifier: ^5.5.2
-        version: 5.9.3
+        specifier: 5.5.2
+        version: 5.5.2
 
   packages/database:
     dependencies:
@@ -165,11 +165,14 @@ importers:
         version: link:../types
       drizzle-orm:
         specifier: ^0.31.2
-        version: 0.31.4(@types/pg@8.23.1)(@types/react@18.3.31)(pg@8.23.0)(react@18.3.1)
+        version: 0.31.4(@electric-sql/pglite@0.5.5)(@types/pg@8.23.1)(@types/react@18.3.31)(pg@8.23.0)(react@18.3.1)
       pg:
         specifier: ^8.12.0
         version: 8.23.0
     devDependencies:
+      '@electric-sql/pglite':
+        specifier: ^0.5.5
+        version: 0.5.5
       '@types/node':
         specifier: ^20.14.9
         version: 20.19.43
@@ -181,10 +184,10 @@ importers:
         version: 0.22.8(supports-color@8.1.1)
       tsup:
         specifier: ^8.1.0
-        version: 8.5.1(jiti@1.21.7)(postcss@8.5.26)(supports-color@8.1.1)(typescript@5.9.3)
+        version: 8.5.1(jiti@1.21.7)(postcss@8.5.26)(supports-color@8.1.1)(typescript@5.5.2)
       typescript:
-        specifier: ^5.5.2
-        version: 5.9.3
+        specifier: 5.5.2
+        version: 5.5.2
       vitest:
         specifier: ^1.6.0
         version: 1.6.1(@types/node@20.19.43)(supports-color@8.1.1)(terser@5.50.0)
@@ -196,10 +199,10 @@ importers:
         version: 20.19.43
       tsup:
         specifier: ^8.1.0
-        version: 8.5.1(jiti@1.21.7)(postcss@8.5.26)(supports-color@8.1.1)(typescript@5.9.3)
+        version: 8.5.1(jiti@1.21.7)(postcss@8.5.26)(supports-color@8.1.1)(typescript@5.5.2)
       typescript:
-        specifier: ^5.5.2
-        version: 5.9.3
+        specifier: 5.5.2
+        version: 5.5.2
 
   packages/permissions:
     dependencies:
@@ -212,10 +215,10 @@ importers:
         version: 20.19.43
       tsup:
         specifier: ^8.1.0
-        version: 8.5.1(jiti@1.21.7)(postcss@8.5.26)(supports-color@8.1.1)(typescript@5.9.3)
+        version: 8.5.1(jiti@1.21.7)(postcss@8.5.26)(supports-color@8.1.1)(typescript@5.5.2)
       typescript:
-        specifier: ^5.5.2
-        version: 5.9.3
+        specifier: 5.5.2
+        version: 5.5.2
       vitest:
         specifier: ^1.6.0
         version: 1.6.1(@types/node@20.19.43)(supports-color@8.1.1)(terser@5.50.0)
@@ -227,10 +230,10 @@ importers:
         version: 20.19.43
       tsup:
         specifier: ^8.1.0
-        version: 8.5.1(jiti@1.21.7)(postcss@8.5.26)(supports-color@8.1.1)(typescript@5.9.3)
+        version: 8.5.1(jiti@1.21.7)(postcss@8.5.26)(supports-color@8.1.1)(typescript@5.5.2)
       typescript:
-        specifier: ^5.5.2
-        version: 5.9.3
+        specifier: 5.5.2
+        version: 5.5.2
       vitest:
         specifier: ^1.6.0
         version: 1.6.1(@types/node@20.19.43)(supports-color@8.1.1)(terser@5.50.0)
@@ -246,10 +249,10 @@ importers:
         version: 20.19.43
       tsup:
         specifier: ^8.1.0
-        version: 8.5.1(jiti@1.21.7)(postcss@8.5.26)(supports-color@8.1.1)(typescript@5.9.3)
+        version: 8.5.1(jiti@1.21.7)(postcss@8.5.26)(supports-color@8.1.1)(typescript@5.5.2)
       typescript:
-        specifier: ^5.5.2
-        version: 5.9.3
+        specifier: 5.5.2
+        version: 5.5.2
 
   packages/ui-kit:
     dependencies:
@@ -265,10 +268,10 @@ importers:
         version: 20.19.43
       tsup:
         specifier: ^8.1.0
-        version: 8.5.1(jiti@1.21.7)(postcss@8.5.26)(supports-color@8.1.1)(typescript@5.9.3)
+        version: 8.5.1(jiti@1.21.7)(postcss@8.5.26)(supports-color@8.1.1)(typescript@5.5.2)
       typescript:
-        specifier: ^5.5.2
-        version: 5.9.3
+        specifier: 5.5.2
+        version: 5.5.2
 
 packages:
 
@@ -308,6 +311,9 @@ packages:
   '@colors/colors@1.5.0':
     resolution: {integrity: sha512-ooWCrlZP11i8GImSjTHYHLkvFDP48nS4+204nGb1RiX/WXYHmJA2III9/e2DWVabCESdW7hBAEzHRqUn9OUVvQ==}
     engines: {node: '>=0.1.90'}
+
+  '@electric-sql/pglite@0.5.5':
+    resolution: {integrity: sha512-QeZ+oB7QaU4EJj2awrB8hwFZ5TXxLRBQ9Gfq0dQauYDdWsRtuWRCERgtri35vRfL07KQHlVlc/4Qxvn7a5AXeA==}
 
   '@emnapi/core@1.10.0':
     resolution: {integrity: sha512-yq6OkJ4p82CAfPl0u9mQebQHKPJkY7WrIuk205cTYnYe+k2Z8YBh11FrbRG/H6ihirqcacOgl2BIO8oyMQLeXw==}
@@ -4209,13 +4215,13 @@ packages:
   typedarray@0.0.6:
     resolution: {integrity: sha512-/aCDEGatGvZ2BIk+HmLf4ifCJFwvKFNb9/JeZPMulfgFracn9QFcAf5GO8B/mweUjSoblS5In0cWhqpfs/5PQA==}
 
-  typescript@5.7.2:
-    resolution: {integrity: sha512-i5t66RHxDvVN40HfDd1PsEThGNnlMCMT3jMUuoh9/0TaqWevNontacunWyN02LA9/fIbEWlcHZcgTKb9QoaLfg==}
+  typescript@5.5.2:
+    resolution: {integrity: sha512-NcRtPEOsPFFWjobJEtfihkLCZCXZt/os3zf8nTxjVH3RvTSxjrCamJpbExGvYOF+tFHc3pA65qpdwPbzjohhew==}
     engines: {node: '>=14.17'}
     hasBin: true
 
-  typescript@5.9.3:
-    resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
+  typescript@5.7.2:
+    resolution: {integrity: sha512-i5t66RHxDvVN40HfDd1PsEThGNnlMCMT3jMUuoh9/0TaqWevNontacunWyN02LA9/fIbEWlcHZcgTKb9QoaLfg==}
     engines: {node: '>=14.17'}
     hasBin: true
 
@@ -4476,6 +4482,8 @@ snapshots:
 
   '@colors/colors@1.5.0':
     optional: true
+
+  '@electric-sql/pglite@0.5.5': {}
 
   '@emnapi/core@1.10.0':
     dependencies:
@@ -4956,6 +4964,17 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@nestjs/schematics@10.2.3(chokidar@3.6.0)(typescript@5.5.2)':
+    dependencies:
+      '@angular-devkit/core': 17.3.11(chokidar@3.6.0)
+      '@angular-devkit/schematics': 17.3.11(chokidar@3.6.0)
+      comment-json: 4.2.5
+      jsonc-parser: 3.3.1
+      pluralize: 8.0.0
+      typescript: 5.5.2
+    transitivePeerDependencies:
+      - chokidar
+
   '@nestjs/schematics@10.2.3(chokidar@3.6.0)(typescript@5.7.2)':
     dependencies:
       '@angular-devkit/core': 17.3.11(chokidar@3.6.0)
@@ -4964,17 +4983,6 @@ snapshots:
       jsonc-parser: 3.3.1
       pluralize: 8.0.0
       typescript: 5.7.2
-    transitivePeerDependencies:
-      - chokidar
-
-  '@nestjs/schematics@10.2.3(chokidar@3.6.0)(typescript@5.9.3)':
-    dependencies:
-      '@angular-devkit/core': 17.3.11(chokidar@3.6.0)
-      '@angular-devkit/schematics': 17.3.11(chokidar@3.6.0)
-      comment-json: 4.2.5
-      jsonc-parser: 3.3.1
-      pluralize: 8.0.0
-      typescript: 5.9.3
     transitivePeerDependencies:
       - chokidar
 
@@ -5269,16 +5277,16 @@ snapshots:
       '@types/node': 20.19.43
       '@types/send': 0.17.6
 
-  '@typescript-eslint/parser@7.2.0(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3)':
+  '@typescript-eslint/parser@7.2.0(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.5.2)':
     dependencies:
       '@typescript-eslint/scope-manager': 7.2.0
       '@typescript-eslint/types': 7.2.0
-      '@typescript-eslint/typescript-estree': 7.2.0(supports-color@8.1.1)(typescript@5.9.3)
+      '@typescript-eslint/typescript-estree': 7.2.0(supports-color@8.1.1)(typescript@5.5.2)
       '@typescript-eslint/visitor-keys': 7.2.0
       debug: 4.4.3(supports-color@8.1.1)
       eslint: 8.57.1(supports-color@8.1.1)
     optionalDependencies:
-      typescript: 5.9.3
+      typescript: 5.5.2
     transitivePeerDependencies:
       - supports-color
 
@@ -5289,7 +5297,7 @@ snapshots:
 
   '@typescript-eslint/types@7.2.0': {}
 
-  '@typescript-eslint/typescript-estree@7.2.0(supports-color@8.1.1)(typescript@5.9.3)':
+  '@typescript-eslint/typescript-estree@7.2.0(supports-color@8.1.1)(typescript@5.5.2)':
     dependencies:
       '@typescript-eslint/types': 7.2.0
       '@typescript-eslint/visitor-keys': 7.2.0
@@ -5298,9 +5306,9 @@ snapshots:
       is-glob: 4.0.3
       minimatch: 9.0.3
       semver: 7.8.5
-      ts-api-utils: 1.4.3(typescript@5.9.3)
+      ts-api-utils: 1.4.3(typescript@5.5.2)
     optionalDependencies:
-      typescript: 5.9.3
+      typescript: 5.5.2
     transitivePeerDependencies:
       - supports-color
 
@@ -6047,8 +6055,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  drizzle-orm@0.31.4(@types/pg@8.23.1)(@types/react@18.3.31)(pg@8.23.0)(react@18.3.1):
+  drizzle-orm@0.31.4(@electric-sql/pglite@0.5.5)(@types/pg@8.23.1)(@types/react@18.3.31)(pg@8.23.0)(react@18.3.1):
     optionalDependencies:
+      '@electric-sql/pglite': 0.5.5
       '@types/pg': 8.23.1
       '@types/react': 18.3.31
       pg: 8.23.0
@@ -6319,20 +6328,20 @@ snapshots:
 
   escape-string-regexp@4.0.0: {}
 
-  eslint-config-next@14.2.4(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3):
+  eslint-config-next@14.2.4(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.5.2):
     dependencies:
       '@next/eslint-plugin-next': 14.2.4
       '@rushstack/eslint-patch': 1.16.1
-      '@typescript-eslint/parser': 7.2.0(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3)
+      '@typescript-eslint/parser': 7.2.0(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.5.2)
       eslint: 8.57.1(supports-color@8.1.1)
       eslint-import-resolver-node: 0.3.10(supports-color@8.1.1)
       eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0)(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1)
-      eslint-plugin-import: 2.32.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1)(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1)
+      eslint-plugin-import: 2.32.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.5.2))(eslint-import-resolver-typescript@3.10.1)(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1)
       eslint-plugin-jsx-a11y: 6.10.2(eslint@8.57.1(supports-color@8.1.1))
       eslint-plugin-react: 7.37.5(eslint@8.57.1(supports-color@8.1.1))
       eslint-plugin-react-hooks: 5.0.0-canary-7118f5dd7-20230705(eslint@8.57.1(supports-color@8.1.1))
     optionalDependencies:
-      typescript: 5.9.3
+      typescript: 5.5.2
     transitivePeerDependencies:
       - eslint-import-resolver-webpack
       - eslint-plugin-import-x
@@ -6357,22 +6366,22 @@ snapshots:
       tinyglobby: 0.2.17
       unrs-resolver: 1.12.2
     optionalDependencies:
-      eslint-plugin-import: 2.32.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1)(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1)
+      eslint-plugin-import: 2.32.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.5.2))(eslint-import-resolver-typescript@3.10.1)(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
 
-  eslint-module-utils@2.14.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3))(eslint-import-resolver-node@0.3.10(supports-color@8.1.1))(eslint-import-resolver-typescript@3.10.1)(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1):
+  eslint-module-utils@2.14.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.5.2))(eslint-import-resolver-node@0.3.10(supports-color@8.1.1))(eslint-import-resolver-typescript@3.10.1)(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1):
     dependencies:
       debug: 3.2.7(supports-color@8.1.1)
     optionalDependencies:
-      '@typescript-eslint/parser': 7.2.0(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3)
+      '@typescript-eslint/parser': 7.2.0(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.5.2)
       eslint: 8.57.1(supports-color@8.1.1)
       eslint-import-resolver-node: 0.3.10(supports-color@8.1.1)
       eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0)(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
 
-  eslint-plugin-import@2.32.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1)(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1):
+  eslint-plugin-import@2.32.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.5.2))(eslint-import-resolver-typescript@3.10.1)(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1):
     dependencies:
       '@rtsao/scc': 1.1.0
       array-includes: 3.1.9
@@ -6383,7 +6392,7 @@ snapshots:
       doctrine: 2.1.0
       eslint: 8.57.1(supports-color@8.1.1)
       eslint-import-resolver-node: 0.3.10(supports-color@8.1.1)
-      eslint-module-utils: 2.14.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3))(eslint-import-resolver-node@0.3.10(supports-color@8.1.1))(eslint-import-resolver-typescript@3.10.1)(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1)
+      eslint-module-utils: 2.14.0(@typescript-eslint/parser@7.2.0(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.5.2))(eslint-import-resolver-node@0.3.10(supports-color@8.1.1))(eslint-import-resolver-typescript@3.10.1)(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1)
       hasown: 2.0.4
       is-core-module: 2.16.2
       is-glob: 4.0.3
@@ -6395,7 +6404,7 @@ snapshots:
       string.prototype.trimend: 1.0.10
       tsconfig-paths: 3.15.0
     optionalDependencies:
-      '@typescript-eslint/parser': 7.2.0(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3)
+      '@typescript-eslint/parser': 7.2.0(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.5.2)
     transitivePeerDependencies:
       - eslint-import-resolver-typescript
       - eslint-import-resolver-webpack
@@ -8229,9 +8238,9 @@ snapshots:
 
   tree-kill@1.2.2: {}
 
-  ts-api-utils@1.4.3(typescript@5.9.3):
+  ts-api-utils@1.4.3(typescript@5.5.2):
     dependencies:
-      typescript: 5.9.3
+      typescript: 5.5.2
 
   ts-interface-checker@0.1.13: {}
 
@@ -8257,7 +8266,7 @@ snapshots:
 
   tslib@2.8.1: {}
 
-  tsup@8.5.1(jiti@1.21.7)(postcss@8.5.26)(supports-color@8.1.1)(typescript@5.9.3):
+  tsup@8.5.1(jiti@1.21.7)(postcss@8.5.26)(supports-color@8.1.1)(typescript@5.5.2):
     dependencies:
       bundle-require: 5.1.0(esbuild@0.27.7)
       cac: 6.7.14
@@ -8278,7 +8287,7 @@ snapshots:
       tree-kill: 1.2.2
     optionalDependencies:
       postcss: 8.5.26
-      typescript: 5.9.3
+      typescript: 5.5.2
     transitivePeerDependencies:
       - jiti
       - supports-color
@@ -8344,9 +8353,9 @@ snapshots:
 
   typedarray@0.0.6: {}
 
-  typescript@5.7.2: {}
+  typescript@5.5.2: {}
 
-  typescript@5.9.3: {}
+  typescript@5.7.2: {}
 
   ufo@1.6.4: {}
 

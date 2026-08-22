@@ -55,25 +55,33 @@ export class AuthService {
         organizationCode: credentials.organizationCode,
         assignments: assignments.map((a) => ({
           ...a,
-          nodePath: '', // Will be hydrated
+          nodePath: '', // Hydrated on demand
         })),
       };
 
-      // Generate JWT Access & Refresh Tokens
+      // Generate JWT Access & Refresh Tokens with explicit security claims
       const payload = {
         sub: user.id,
         email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
         orgId: tenantId,
         orgCode: credentials.organizationCode,
       };
 
       const accessToken = this.jwtService.sign(payload, {
         secret: process.env['JWT_ACCESS_SECRET'] || 'development_jwt_access_secret_64chars_long_minimum',
+        algorithm: 'HS256',
+        issuer: 'campus-os-auth',
+        audience: 'campus-os-client',
         expiresIn: '15m',
       });
 
       const refreshToken = this.jwtService.sign(payload, {
         secret: process.env['JWT_REFRESH_SECRET'] || 'development_jwt_refresh_secret_64chars_long_minimum',
+        algorithm: 'HS256',
+        issuer: 'campus-os-auth',
+        audience: 'campus-os-client',
         expiresIn: '7d',
       });
 

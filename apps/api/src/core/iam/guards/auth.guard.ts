@@ -29,12 +29,15 @@ export class AuthGuard implements CanActivate {
     try {
       payload = await this.jwtService.verifyAsync(token, {
         secret: process.env['JWT_ACCESS_SECRET'] || 'development_jwt_access_secret_64chars_long_minimum',
+        algorithms: ['HS256'],
+        issuer: 'campus-os-auth',
+        audience: 'campus-os-client',
       });
     } catch {
-      throw new UnauthorizedException('SECURITY_ERROR: Invalid or expired access token');
+      throw new UnauthorizedException('SECURITY_ERROR: Invalid, expired, or untrusted access token');
     }
 
-    // Strict multi-tenant verification: token tenant must match request tenant
+    // Strict multi-tenant verification: token tenant MUST match request tenant context
     if (request.tenant && payload.orgId !== request.tenant.organizationId) {
       throw new UnauthorizedException('SECURITY_ERROR: Cross-tenant token tampering detected');
     }

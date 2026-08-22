@@ -15,24 +15,42 @@ export class TenantTransactionManager {
   }
 
   /**
-   * Returns standard unscoped Drizzle instance (for system-level bootstrap/auth lookups)
+   * @internal
+   * WARNING: System Bootstrap Database Instance.
+   * STRICTLY RESTRICTED to unauthenticated domain/subdomain lookup during initial request handshake (TenantService.resolveTenant).
+   * All protected business and domain queries MUST execute via runInTenantContext().
+   */
+  getSystemBootstrapDb(): DatabaseInstance {
+    return this.db;
+  }
+
+  /**
+   * Backward-compatible alias with explicit security warning
+   * @deprecated Use getSystemBootstrapDb() only for initial unauthenticated handshake
    */
   getUnscopedDb(): DatabaseInstance {
-    return this.db;
+    return this.getSystemBootstrapDb();
   }
 
   /**
    * Executes a database operation within a strict, tenant-isolated PostgreSQL transaction.
    * Enforces SET LOCAL app.current_tenant_id on the exact acquired connection.
-   * SET LOCAL is automatically discarded on COMMIT or ROLLBACK, preventing connection pool leakage.
+   * 
+   * Invariants:
+   * 1. Acquires client from pool.
+   * 2. Issues BEGIN on the acquired client.
+   * 3. Sets SET LOCAL app.current_tenant_id = :tenantId on that connection.
+   * 4. Executes callback with Drizzle transaction instance on the exact connection.
+   * 5. Issues COMMIT or ROLLBACK.
+   * 6. Releases client back to pool (PostgreSQL automatically clears all SET LOCAL transaction variables).
    */
   async runInTenantContext<T>(
     tenantId: string,
     operation: (tx: DatabaseInstance) => Promise<T>,
     userId?: string
   ): Promise<T> {
-    if (!tenantId || typeof tenantId !== 'string') {
-      throw new Error('SECURITY_ERROR: Missing or invalid tenantId in runInTenantContext');
+    if (!tenantId || typeof tenantId !== 'string' || tenantId.trim() === '') {
+      throw new Error('SECURITY_ERROR: Missing or invalid tenantId in runInTenantContext. Access denied.');
     }
 
     const client = await this.pool.connect();
@@ -40,7 +58,7 @@ export class TenantTransactionManager {
     try {
       await client.query('BEGIN');
 
-      // Set local transaction variables (isolated to this connection for this transaction only)
+      // Set local transaction variables (strictly bound to this connection for this transaction only)
       await client.query('SET LOCAL app.current_tenant_id = $1', [tenantId]);
 
       if (userId) {
