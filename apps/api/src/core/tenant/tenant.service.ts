@@ -1,32 +1,20 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { TenantTransactionManager, organizations } from '@campus-os/database';
-import { eq } from 'drizzle-orm';
 import { TenantContext } from '@campus-os/types';
+import { eq } from 'drizzle-orm';
 
 @Injectable()
 export class TenantService {
   constructor(private readonly tenantManager: TenantTransactionManager) {}
 
   async resolveTenant(identifier: string): Promise<TenantContext> {
-    const db = this.tenantManager.getUnscopedDb();
+    const tenant = await this.tenantManager.findTenantForResolution(identifier);
 
-    // Look up by subdomain/code or custom domain
-    const org = await db.query.organizations.findFirst({
-      where: (table, { or }) => or(eq(table.code, identifier), eq(table.domain, identifier), eq(table.id, identifier)),
-    });
-
-    if (!org || !org.isActive) {
-      throw new NotFoundException(`Organization '${identifier}' not found or inactive`);
+    if (!tenant) {
+      throw new NotFoundException(`Tenant not found or inactive: ${identifier}`);
     }
 
-    return {
-      organizationId: org.id,
-      organizationCode: org.code,
-      organizationName: org.name,
-      primaryCurrency: org.primaryCurrency,
-      domain: org.domain || undefined,
-      settings: (org.settings as Record<string, unknown>) || {},
-    };
+    return tenant;
   }
 
   async getOrganizationDetails(tenantId: string) {
@@ -34,7 +22,11 @@ export class TenantService {
       const org = await tx.query.organizations.findFirst({
         where: eq(organizations.id, tenantId),
       });
-      if (!org) throw new NotFoundException('Organization not found');
+
+      if (!org) {
+        throw new NotFoundException(`Organization details not found: ${tenantId}`);
+      }
+
       return org;
     });
   }

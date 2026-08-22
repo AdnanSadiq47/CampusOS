@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { PGlite } from '@electric-sql/pglite';
 import { RLS_ENABLE_SQL } from '../src/rls.js';
 
-describe('Real PostgreSQL 16 Row-Level Security (RLS) Database Verification', () => {
+describe('PostgreSQL-Compatible Row-Level Security (RLS) Database Verification', () => {
   let pg: PGlite;
 
   const TENANT_A_ID = '11111111-1111-1111-1111-111111111111';
@@ -127,157 +127,188 @@ describe('Real PostgreSQL 16 Row-Level Security (RLS) Database Verification', ()
     `);
   });
 
-  it('1. Tenant A can read Tenant A records within tenant transaction context', async () => {
-    await pg.exec('BEGIN;');
-    await pg.exec('SET LOCAL ROLE campus_app_user;');
-    await pg.exec(`SET LOCAL app.current_tenant_id = '${TENANT_A_ID}';`);
+  describe('Database Role & Table Security Attributes', () => {
+    it('verifies campus_app_user is NOSUPERUSER and NOBYPASSRLS', async () => {
+      const roleCheck = await pg.query<{ rolname: string; rolsuper: boolean; rolbypassrls: boolean }>(`
+        SELECT rolname, rolsuper, rolbypassrls 
+        FROM pg_roles 
+        WHERE rolname = 'campus_app_user';
+      `);
 
-    const result = await pg.query<{ email: string }>('SELECT email FROM users;');
-    await pg.exec('COMMIT;');
+      expect(roleCheck.rows.length).toBe(1);
+      expect(roleCheck.rows[0]?.rolsuper).toBe(false);
+      expect(roleCheck.rows[0]?.rolbypassrls).toBe(false);
+    });
 
-    expect(result.rows.length).toBe(1);
-    expect(result.rows[0]?.email).toBe('alice@tenanta.com');
+    it('verifies FORCE ROW LEVEL SECURITY is active on protected tables', async () => {
+      const rlsCheck = await pg.query<{ relname: string; relrowsecurity: boolean; relforcerowsecurity: boolean }>(`
+        SELECT relname, relrowsecurity, relforcerowsecurity
+        FROM pg_class
+        WHERE relname IN ('users', 'hierarchy_nodes', 'roles', 'audit_logs')
+        AND relkind = 'r';
+      `);
+
+      expect(rlsCheck.rows.length).toBeGreaterThanOrEqual(4);
+      for (const row of rlsCheck.rows) {
+        expect(row.relrowsecurity).toBe(true);
+        expect(row.relforcerowsecurity).toBe(true);
+      }
+    });
   });
 
-  it('2. Tenant A cannot read Tenant B records (RLS filters out other tenant rows)', async () => {
-    await pg.exec('BEGIN;');
-    await pg.exec('SET LOCAL ROLE campus_app_user;');
-    await pg.exec(`SET LOCAL app.current_tenant_id = '${TENANT_A_ID}';`);
+  describe('Multi-Tenant Data Isolation Invariants', () => {
+    it('1. Tenant A can read Tenant A records within tenant transaction context', async () => {
+      await pg.exec('BEGIN;');
+      await pg.exec('SET LOCAL ROLE campus_app_user;');
+      await pg.exec(`SET LOCAL app.current_tenant_id = '${TENANT_A_ID}';`);
 
-    const result = await pg.query<{ email: string }>(
-      `SELECT email FROM users WHERE organization_id = '${TENANT_B_ID}';`
-    );
-    await pg.exec('COMMIT;');
+      const result = await pg.query<{ email: string }>('SELECT email FROM users;');
+      await pg.exec('COMMIT;');
 
-    expect(result.rows.length).toBe(0);
-  });
+      expect(result.rows.length).toBe(1);
+      expect(result.rows[0]?.email).toBe('alice@tenanta.com');
+    });
 
-  it('3. Tenant A cannot UPDATE Tenant B records (RLS USING clause blocks modification)', async () => {
-    await pg.exec('BEGIN;');
-    await pg.exec('SET LOCAL ROLE campus_app_user;');
-    await pg.exec(`SET LOCAL app.current_tenant_id = '${TENANT_A_ID}';`);
+    it('2. Tenant A cannot read Tenant B records (RLS filters out other tenant rows)', async () => {
+      await pg.exec('BEGIN;');
+      await pg.exec('SET LOCAL ROLE campus_app_user;');
+      await pg.exec(`SET LOCAL app.current_tenant_id = '${TENANT_A_ID}';`);
 
-    const updateRes = await pg.query(
-      `UPDATE users SET first_name = 'Hacked' WHERE email = 'bob@tenantb.com';`
-    );
-    await pg.exec('COMMIT;');
+      const result = await pg.query<{ email: string }>(
+        `SELECT email FROM users WHERE organization_id = '${TENANT_B_ID}';`
+      );
+      await pg.exec('COMMIT;');
 
-    expect(updateRes.affectedRows).toBe(0);
+      expect(result.rows.length).toBe(0);
+    });
 
-    // Verify Bob was not modified
-    await pg.exec('BEGIN;');
-    await pg.exec('SET LOCAL ROLE campus_app_user;');
-    await pg.exec(`SET LOCAL app.current_tenant_id = '${TENANT_B_ID}';`);
-    const bobCheck = await pg.query<{ first_name: string }>(`SELECT first_name FROM users WHERE email = 'bob@tenantb.com';`);
-    await pg.exec('COMMIT;');
+    it('3. Tenant A cannot UPDATE Tenant B records (RLS USING clause blocks modification)', async () => {
+      await pg.exec('BEGIN;');
+      await pg.exec('SET LOCAL ROLE campus_app_user;');
+      await pg.exec(`SET LOCAL app.current_tenant_id = '${TENANT_A_ID}';`);
 
-    expect(bobCheck.rows[0]?.first_name).toBe('Bob');
-  });
+      const updateRes = await pg.query(
+        `UPDATE users SET first_name = 'Hacked' WHERE email = 'bob@tenantb.com';`
+      );
+      await pg.exec('COMMIT;');
 
-  it('4. Tenant A cannot DELETE Tenant B records (RLS USING clause blocks deletion)', async () => {
-    await pg.exec('BEGIN;');
-    await pg.exec('SET LOCAL ROLE campus_app_user;');
-    await pg.exec(`SET LOCAL app.current_tenant_id = '${TENANT_A_ID}';`);
+      expect(updateRes.affectedRows).toBe(0);
 
-    const deleteRes = await pg.query(
-      `DELETE FROM users WHERE email = 'bob@tenantb.com';`
-    );
-    await pg.exec('COMMIT;');
+      // Verify Bob was not modified
+      await pg.exec('BEGIN;');
+      await pg.exec('SET LOCAL ROLE campus_app_user;');
+      await pg.exec(`SET LOCAL app.current_tenant_id = '${TENANT_B_ID}';`);
+      const bobCheck = await pg.query<{ first_name: string }>(`SELECT first_name FROM users WHERE email = 'bob@tenantb.com';`);
+      await pg.exec('COMMIT;');
 
-    expect(deleteRes.affectedRows).toBe(0);
+      expect(bobCheck.rows[0]?.first_name).toBe('Bob');
+    });
 
-    // Verify Bob still exists
-    await pg.exec('BEGIN;');
-    await pg.exec('SET LOCAL ROLE campus_app_user;');
-    await pg.exec(`SET LOCAL app.current_tenant_id = '${TENANT_B_ID}';`);
-    const bobCheck = await pg.query<{ email: string }>(`SELECT email FROM users WHERE email = 'bob@tenantb.com';`);
-    await pg.exec('COMMIT;');
+    it('4. Tenant A cannot DELETE Tenant B records (RLS USING clause blocks deletion)', async () => {
+      await pg.exec('BEGIN;');
+      await pg.exec('SET LOCAL ROLE campus_app_user;');
+      await pg.exec(`SET LOCAL app.current_tenant_id = '${TENANT_A_ID}';`);
 
-    expect(bobCheck.rows.length).toBe(1);
-  });
+      const deleteRes = await pg.query(
+        `DELETE FROM users WHERE email = 'bob@tenantb.com';`
+      );
+      await pg.exec('COMMIT;');
 
-  it('5. Tenant A cannot INSERT a row pretending to belong to Tenant B (WITH CHECK violation)', async () => {
-    await pg.exec('BEGIN;');
-    await pg.exec('SET LOCAL ROLE campus_app_user;');
-    await pg.exec(`SET LOCAL app.current_tenant_id = '${TENANT_A_ID}';`);
+      expect(deleteRes.affectedRows).toBe(0);
 
-    await expect(
-      pg.query(`
-        INSERT INTO users (organization_id, email, password_hash, first_name, last_name)
-        VALUES ('${TENANT_B_ID}', 'malicious@tenantb.com', 'hash_m', 'Mallory', 'Malicious');
-      `)
-    ).rejects.toThrow(/new row violates row-level security policy/i);
+      // Verify Bob still exists
+      await pg.exec('BEGIN;');
+      await pg.exec('SET LOCAL ROLE campus_app_user;');
+      await pg.exec(`SET LOCAL app.current_tenant_id = '${TENANT_B_ID}';`);
+      const bobCheck = await pg.query<{ email: string }>(`SELECT email FROM users WHERE email = 'bob@tenantb.com';`);
+      await pg.exec('COMMIT;');
 
-    await pg.exec('ROLLBACK;');
-  });
+      expect(bobCheck.rows.length).toBe(1);
+    });
 
-  it('6. Missing tenant context returns zero protected rows (Fails Closed)', async () => {
-    await pg.exec('BEGIN;');
-    await pg.exec('SET LOCAL ROLE campus_app_user;');
-    // No SET LOCAL app.current_tenant_id executed
+    it('5. Tenant A cannot INSERT a row pretending to belong to Tenant B (WITH CHECK violation)', async () => {
+      await pg.exec('BEGIN;');
+      await pg.exec('SET LOCAL ROLE campus_app_user;');
+      await pg.exec(`SET LOCAL app.current_tenant_id = '${TENANT_A_ID}';`);
 
-    const result = await pg.query('SELECT * FROM users;');
-    await pg.exec('COMMIT;');
+      await expect(
+        pg.query(`
+          INSERT INTO users (organization_id, email, password_hash, first_name, last_name)
+          VALUES ('${TENANT_B_ID}', 'malicious@tenantb.com', 'hash_m', 'Mallory', 'Malicious');
+        `)
+      ).rejects.toThrow(/new row violates row-level security policy/i);
 
-    expect(result.rows.length).toBe(0);
-  });
+      await pg.exec('ROLLBACK;');
+    });
 
-  it('7. Invalid tenant context fails closed', async () => {
-    await pg.exec('BEGIN;');
-    await pg.exec('SET LOCAL ROLE campus_app_user;');
-    await pg.exec(`SET LOCAL app.current_tenant_id = '00000000-0000-0000-0000-000000000000';`);
+    it('6. Missing tenant context returns zero protected rows (Fails Closed)', async () => {
+      await pg.exec('BEGIN;');
+      await pg.exec('SET LOCAL ROLE campus_app_user;');
+      // No SET LOCAL app.current_tenant_id executed
 
-    const result = await pg.query('SELECT * FROM users;');
-    await pg.exec('COMMIT;');
+      const result = await pg.query('SELECT * FROM users;');
+      await pg.exec('COMMIT;');
 
-    expect(result.rows.length).toBe(0);
-  });
+      expect(result.rows.length).toBe(0);
+    });
 
-  it('8. Application query WITHOUT organization_id WHERE clause still cannot retrieve Tenant B data (RLS acts as final safety boundary)', async () => {
-    await pg.exec('BEGIN;');
-    await pg.exec('SET LOCAL ROLE campus_app_user;');
-    await pg.exec(`SET LOCAL app.current_tenant_id = '${TENANT_A_ID}';`);
+    it('7. Invalid tenant context fails closed', async () => {
+      await pg.exec('BEGIN;');
+      await pg.exec('SET LOCAL ROLE campus_app_user;');
+      await pg.exec(`SET LOCAL app.current_tenant_id = '00000000-0000-0000-0000-000000000000';`);
 
-    // Intentionally omit "WHERE organization_id = ..."
-    const result = await pg.query<{ email: string }>('SELECT email FROM users;');
-    await pg.exec('COMMIT;');
+      const result = await pg.query('SELECT * FROM users;');
+      await pg.exec('COMMIT;');
 
-    // Only Tenant A records returned
-    expect(result.rows.length).toBe(1);
-    expect(result.rows[0]?.email).toBe('alice@tenanta.com');
-  });
+      expect(result.rows.length).toBe(0);
+    });
 
-  it('9. Reusing connection after COMMIT does not retain Tenant A context (No pool leakage)', async () => {
-    // Transaction 1: Tenant A
-    await pg.exec('BEGIN;');
-    await pg.exec('SET LOCAL ROLE campus_app_user;');
-    await pg.exec(`SET LOCAL app.current_tenant_id = '${TENANT_A_ID}';`);
-    await pg.exec('COMMIT;');
+    it('8. Application query WITHOUT organization_id WHERE clause still cannot retrieve Tenant B data (RLS acts as final safety boundary)', async () => {
+      await pg.exec('BEGIN;');
+      await pg.exec('SET LOCAL ROLE campus_app_user;');
+      await pg.exec(`SET LOCAL app.current_tenant_id = '${TENANT_A_ID}';`);
 
-    // Transaction 2: Reusing connection without setting tenant context
-    await pg.exec('BEGIN;');
-    await pg.exec('SET LOCAL ROLE campus_app_user;');
-    const result = await pg.query('SELECT * FROM users;');
-    await pg.exec('COMMIT;');
+      // Intentionally omit "WHERE organization_id = ..."
+      const result = await pg.query<{ email: string }>('SELECT email FROM users;');
+      await pg.exec('COMMIT;');
 
-    // Proves SET LOCAL was discarded on COMMIT
-    expect(result.rows.length).toBe(0);
-  });
+      // Only Tenant A records returned
+      expect(result.rows.length).toBe(1);
+      expect(result.rows[0]?.email).toBe('alice@tenanta.com');
+    });
 
-  it('10. Reusing connection after ROLLBACK does not retain Tenant A context (No pool leakage)', async () => {
-    // Transaction 1: Tenant A fails and rolls back
-    await pg.exec('BEGIN;');
-    await pg.exec('SET LOCAL ROLE campus_app_user;');
-    await pg.exec(`SET LOCAL app.current_tenant_id = '${TENANT_A_ID}';`);
-    await pg.exec('ROLLBACK;');
+    it('9. Reusing connection after COMMIT does not retain Tenant A context (No pool leakage)', async () => {
+      // Transaction 1: Tenant A
+      await pg.exec('BEGIN;');
+      await pg.exec('SET LOCAL ROLE campus_app_user;');
+      await pg.exec(`SET LOCAL app.current_tenant_id = '${TENANT_A_ID}';`);
+      await pg.exec('COMMIT;');
 
-    // Transaction 2: Reusing connection without setting tenant context
-    await pg.exec('BEGIN;');
-    await pg.exec('SET LOCAL ROLE campus_app_user;');
-    const result = await pg.query('SELECT * FROM users;');
-    await pg.exec('COMMIT;');
+      // Transaction 2: Reusing connection without setting tenant context
+      await pg.exec('BEGIN;');
+      await pg.exec('SET LOCAL ROLE campus_app_user;');
+      const result = await pg.query('SELECT * FROM users;');
+      await pg.exec('COMMIT;');
 
-    // Proves SET LOCAL was discarded on ROLLBACK
-    expect(result.rows.length).toBe(0);
+      // Proves SET LOCAL was discarded on COMMIT
+      expect(result.rows.length).toBe(0);
+    });
+
+    it('10. Reusing connection after ROLLBACK does not retain Tenant A context (No pool leakage)', async () => {
+      // Transaction 1: Tenant A fails and rolls back
+      await pg.exec('BEGIN;');
+      await pg.exec('SET LOCAL ROLE campus_app_user;');
+      await pg.exec(`SET LOCAL app.current_tenant_id = '${TENANT_A_ID}';`);
+      await pg.exec('ROLLBACK;');
+
+      // Transaction 2: Reusing connection without setting tenant context
+      await pg.exec('BEGIN;');
+      await pg.exec('SET LOCAL ROLE campus_app_user;');
+      const result = await pg.query('SELECT * FROM users;');
+      await pg.exec('COMMIT;');
+
+      // Proves SET LOCAL was discarded on ROLLBACK
+      expect(result.rows.length).toBe(0);
+    });
   });
 });

@@ -1,7 +1,10 @@
 import pg from 'pg';
 import { drizzle, NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from './schema/index.js';
+import { organizations } from './schema/organizations.js';
+import { eq, or } from 'drizzle-orm';
 import { StructuredLogger } from '@campus-os/logger';
+import { TenantContext } from '@campus-os/types';
 
 const logger = new StructuredLogger('TenantTransactionManager');
 
@@ -15,21 +18,45 @@ export class TenantTransactionManager {
   }
 
   /**
-   * @internal
-   * WARNING: System Bootstrap Database Instance.
-   * STRICTLY RESTRICTED to unauthenticated domain/subdomain lookup during initial request handshake (TenantService.resolveTenant).
-   * All protected business and domain queries MUST execute via runInTenantContext().
+   * Narrow, dedicated resolution method strictly for initial unauthenticated handshake.
+   * EXCLUSIVELY queries tenant metadata from the organizations table.
+   * Prevents generic unrestricted database access or exposure of tenant-owned business data.
    */
-  getSystemBootstrapDb(): DatabaseInstance {
-    return this.db;
-  }
+  async findTenantForResolution(identifier: string): Promise<TenantContext | null> {
+    if (!identifier || typeof identifier !== 'string' || identifier.trim() === '') {
+      return null;
+    }
 
-  /**
-   * Backward-compatible alias with explicit security warning
-   * @deprecated Use getSystemBootstrapDb() only for initial unauthenticated handshake
-   */
-  getUnscopedDb(): DatabaseInstance {
-    return this.getSystemBootstrapDb();
+    const trimmed = identifier.trim();
+
+    // Query ONLY the organizations table
+    const result = await this.db
+      .select({
+        id: organizations.id,
+        code: organizations.code,
+        name: organizations.name,
+        domain: organizations.domain,
+        primaryCurrency: organizations.primaryCurrency,
+        settings: organizations.settings,
+        isActive: organizations.isActive,
+      })
+      .from(organizations)
+      .where(or(eq(organizations.code, trimmed), eq(organizations.domain, trimmed)))
+      .limit(1);
+
+    const org = result[0];
+    if (!org || !org.isActive) {
+      return null;
+    }
+
+    return {
+      organizationId: org.id,
+      organizationCode: org.code,
+      organizationName: org.name,
+      domain: org.domain || undefined,
+      primaryCurrency: org.primaryCurrency,
+      settings: (org.settings as Record<string, unknown>) || {},
+    };
   }
 
   /**
