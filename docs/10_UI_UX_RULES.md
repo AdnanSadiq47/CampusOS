@@ -235,6 +235,23 @@ Administration Configuration
    → Category: Users & Access
 ```
 
+---
+
+## 12. User-Facing Terminology Translation Rule (No Technical Hierarchy Leakage)
+
+> **Mandatory UX Invariant**: Never expose technical hierarchy terminology to school administrators or end users. Technical hierarchy constructs (`hierarchy_nodes`, `node_type_id`, `ltree`, `path`) remain authoritative internally in the database, API, and authorization layers, but all frontend interfaces MUST translate them into clean business and educational domain terminology.
+
+| Internal / Technical Architecture | User-Facing Product Terminology |
+|---|---|
+| `Hierarchy Node` | **School / Branch / Regional Office / Head Office** |
+| `Parent Node` / `Parent Hierarchy Context` | **Head Office / Regional Office / School** |
+| `Node Assignment` | **Assigned Campuses / Assigned Locations** |
+| `Node Scope` | **Campus / Branch Access** |
+| `Node Filter` | **Campus / Branch Filter** or **Office / Region Filter** |
+| `Root Node` / `Org Node` | **Organization / Network** |
+| `Branch Parent` | **School** (e.g. `[ Select School ]`, not `[ Select Parent Node ]`) |
+
+
 See full category contents in /docs/12_ADMIN_CONFIG_IA.md.
 
 ---

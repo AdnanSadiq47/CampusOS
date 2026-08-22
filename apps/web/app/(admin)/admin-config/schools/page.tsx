@@ -18,6 +18,8 @@ export default function SchoolsPage() {
   const [isViewModalOpen, setIsViewModalOpen] = useState<boolean>(false);
   const [editingSchool, setEditingSchool] = useState<SchoolListItemDto | null>(null);
   const [viewingSchool, setViewingSchool] = useState<SchoolListItemDto | null>(null);
+  const [selectedHeadOffice, setSelectedHeadOffice] = useState<string>('');
+  const [selectedRegion, setSelectedRegion] = useState<string>('');
   const [formTab, setFormTab] = useState<'basic' | 'contact' | 'location' | 'affiliation'>('basic');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
@@ -195,13 +197,34 @@ export default function SchoolsPage() {
     });
   }, [schools, searchQuery, statusFilter, parentFilter]);
 
+  // Categorized Offices for Business-Friendly Hierarchy Selection
+  const headOffices = useMemo(
+    () => parents.filter((p) => p.type === 'Head Office' || p.type === 'HEAD_OFFICE'),
+    [parents]
+  );
+
+  const regionalOffices = useMemo(
+    () => parents.filter((p) => p.type === 'Region' || p.type === 'REGION'),
+    [parents]
+  );
+
+  const availableRegions = useMemo(() => {
+    if (!selectedHeadOffice) return regionalOffices;
+    const selectedHO = headOffices.find((h) => h.id === selectedHeadOffice);
+    if (!selectedHO) return regionalOffices;
+    return regionalOffices.filter((r) => r.path.includes(selectedHO.code.toLowerCase()));
+  }, [selectedHeadOffice, headOffices, regionalOffices]);
+
   // Handle Form Open
   const handleOpenAddModal = () => {
     setEditingSchool(null);
+    setSelectedHeadOffice('');
+    setSelectedRegion('');
+    const defaultRootId = parents.find((p) => p.type === 'Organization Root')?.id || parents[0]?.id || '';
     setFormData({
       name: '',
       code: '',
-      parentId: parents[0]?.id ?? '',
+      parentId: defaultRootId,
       status: true,
       schoolType: 'K12',
       registrationNumber: '',
@@ -229,6 +252,19 @@ export default function SchoolsPage() {
 
   const handleOpenEditModal = (school: SchoolListItemDto) => {
     setEditingSchool(school);
+    const parent = parents.find((p) => p.id === school.parentId);
+    if (parent?.type === 'Region') {
+      setSelectedRegion(parent.id);
+      const ho = headOffices.find((h) => parent.path.includes(h.code.toLowerCase()));
+      setSelectedHeadOffice(ho?.id || '');
+    } else if (parent?.type === 'Head Office') {
+      setSelectedHeadOffice(parent.id);
+      setSelectedRegion('');
+    } else {
+      setSelectedHeadOffice('');
+      setSelectedRegion('');
+    }
+
     setFormData({
       name: school.name,
       code: school.code,
@@ -263,7 +299,6 @@ export default function SchoolsPage() {
     const errors: Record<string, string> = {};
     if (!formData.name.trim()) errors.name = 'School Name is required';
     if (!formData.code.trim()) errors.code = 'School Code is required';
-    if (!formData.parentId) errors.parentId = 'Parent Context is required';
 
     // Duplicate code check
     const duplicate = schools.find(
@@ -272,6 +307,15 @@ export default function SchoolsPage() {
     if (duplicate) {
       errors.code = `School Code '${formData.code.trim().toUpperCase()}' is already taken in this organization`;
     }
+
+    // Resolve parent ID according to selection (Region > Head Office > Root/Default)
+    const effectiveParentId =
+      selectedRegion ||
+      selectedHeadOffice ||
+      parents.find((p) => p.type === 'Organization Root')?.id ||
+      parents[0]?.id ||
+      '';
+    formData.parentId = effectiveParentId;
 
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
@@ -462,15 +506,15 @@ export default function SchoolsPage() {
             </select>
           </div>
 
-          {/* Region / Parent Filter */}
+          {/* Office / Region Filter */}
           <div className="flex items-center gap-1.5 text-xs">
-            <span className="text-slate-400 font-medium">Parent:</span>
+            <span className="text-slate-400 font-medium">Office / Region:</span>
             <select
               value={parentFilter}
               onChange={(e) => setParentFilter(e.target.value)}
               className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-xs font-semibold focus:outline-none cursor-pointer max-w-[180px] truncate"
             >
-              <option value="ALL">All Parents / Regions</option>
+              <option value="ALL">All Offices & Regions</option>
               {parents.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name} ({p.type})
@@ -496,7 +540,7 @@ export default function SchoolsPage() {
               <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1">
                 {searchQuery || statusFilter !== 'ALL' || parentFilter !== 'ALL'
                   ? 'No school records match the selected filters. Try clearing your search filters.'
-                  : 'Get started by creating your first school node in the organization.'}
+                  : 'Get started by creating your first school in the organization.'}
               </p>
             </div>
             {(searchQuery || statusFilter !== 'ALL' || parentFilter !== 'ALL') ? (
@@ -526,7 +570,7 @@ export default function SchoolsPage() {
                 <tr>
                   <th className="py-3 px-4">School Code</th>
                   <th className="py-3 px-4">School Name & Type</th>
-                  <th className="py-3 px-4">Parent Context (Region/HO)</th>
+                  <th className="py-3 px-4">Head Office / Regional Office</th>
                   <th className="py-3 px-4">Branches</th>
                   <th className="py-3 px-4">Primary Contact</th>
                   <th className="py-3 px-4">Status</th>
@@ -739,48 +783,90 @@ export default function SchoolsPage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        Parent Hierarchy Context <span className="text-rose-500">*</span>
-                      </label>
-                      <select
-                        value={formData.parentId}
-                        onChange={(e) => setFormData({ ...formData, parentId: e.target.value })}
-                        className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 font-medium focus:outline-none cursor-pointer"
-                      >
-                        {parents.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name} ({p.type})
-                          </option>
-                        ))}
-                      </select>
-                      <p className="text-[10px] text-slate-400 mt-1">
-                        Select Region or Head Office directly (if no region is used).
-                      </p>
+                  {/* SECTION: HEAD OFFICE & REGIONAL OFFICE */}
+                  <div className="bg-slate-50/70 dark:bg-slate-900/60 p-4 rounded-xl border border-slate-200 dark:border-slate-800 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="font-semibold text-slate-800 dark:text-slate-200 text-xs">
+                        Head Office / Regional Office
+                      </div>
+                      <span className="text-[10px] text-slate-400 font-medium">Optional administrative reporting</span>
                     </div>
 
-                    <div>
-                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        School Level / Type (Configured Master)
-                      </label>
-                      <select
-                        value={formData.schoolType}
-                        onChange={(e) => setFormData({ ...formData, schoolType: e.target.value })}
-                        className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 font-medium focus:outline-none cursor-pointer"
-                      >
-                        {schoolTypes
-                          .filter((st) => st.isActive || st.code === formData.schoolType || st.name === formData.schoolType)
-                          .map((st) => (
-                            <option key={st.id} value={st.code}>
-                              {st.name} ({st.code}) {!st.isActive ? '— [Inactive]' : ''}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          Head Office
+                        </label>
+                        <select
+                          value={selectedHeadOffice}
+                          onChange={(e) => {
+                            const newHO = e.target.value;
+                            setSelectedHeadOffice(newHO);
+                            if (newHO && selectedRegion) {
+                              const hoObj = headOffices.find((h) => h.id === newHO);
+                              const regObj = regionalOffices.find((r) => r.id === selectedRegion);
+                              if (hoObj && regObj && !regObj.path.includes(hoObj.code.toLowerCase())) {
+                                setSelectedRegion('');
+                              }
+                            }
+                          }}
+                          className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 font-medium focus:outline-none cursor-pointer"
+                        >
+                          <option value="">[ None / Direct School ]</option>
+                          {headOffices.map((ho) => (
+                            <option key={ho.id} value={ho.id}>
+                              {ho.name} ({ho.code})
                             </option>
                           ))}
-                      </select>
-                      <p className="text-[10px] text-slate-400 mt-1">
-                        Loaded from Administration Configuration → School Types master.
-                      </p>
+                        </select>
+                        <p className="text-[10px] text-slate-400 mt-1">
+                          Select if this school operates under a central Head Office.
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          Regional Office
+                        </label>
+                        <select
+                          value={selectedRegion}
+                          onChange={(e) => setSelectedRegion(e.target.value)}
+                          className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 font-medium focus:outline-none cursor-pointer"
+                        >
+                          <option value="">[ None / Direct School ]</option>
+                          {availableRegions.map((reg) => (
+                            <option key={reg.id} value={reg.id}>
+                              {reg.name} ({reg.code})
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-[10px] text-slate-400 mt-1">
+                          Select if this school reports to a Regional Office.
+                        </p>
+                      </div>
                     </div>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      School Level / Type (Configured Master)
+                    </label>
+                    <select
+                      value={formData.schoolType}
+                      onChange={(e) => setFormData({ ...formData, schoolType: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 font-medium focus:outline-none cursor-pointer"
+                    >
+                      {schoolTypes
+                        .filter((st) => st.isActive || st.code === formData.schoolType || st.name === formData.schoolType)
+                        .map((st) => (
+                          <option key={st.id} value={st.code}>
+                            {st.name} ({st.code}) {!st.isActive ? '— [Inactive]' : ''}
+                          </option>
+                        ))}
+                    </select>
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      Loaded from Administration Configuration → School Types master.
+                    </p>
                   </div>
 
                   <div className="flex items-center gap-3 pt-2">
@@ -1081,7 +1167,7 @@ export default function SchoolsPage() {
 
             <div className="space-y-2.5 text-xs text-slate-600 dark:text-slate-300">
               <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/60">
-                <span className="text-slate-400 font-medium">Parent Hierarchy Node:</span>
+                <span className="text-slate-400 font-medium">Head Office / Regional Office:</span>
                 <span className="font-semibold text-slate-800 dark:text-slate-200">
                   {viewingSchool.parentName} ({viewingSchool.parentType})
                 </span>

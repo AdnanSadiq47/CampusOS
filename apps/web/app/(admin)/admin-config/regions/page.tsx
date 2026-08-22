@@ -516,13 +516,13 @@ export default function RegionsPage() {
             <option value="INACTIVE">Inactive Only</option>
           </select>
 
-          {/* Parent / Head Office Filter */}
+          {/* Head Office Filter */}
           <select
             value={parentFilter}
             onChange={(e) => setParentFilter(e.target.value)}
             className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors"
           >
-            <option value="ALL">All Parents</option>
+            <option value="ALL">All Head Offices</option>
             {parents.map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
@@ -791,7 +791,7 @@ export default function RegionsPage() {
 
                     <div className="sm:col-span-2">
                       <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                        Parent Node <span className="text-rose-500">*</span>
+                        Head Office
                       </label>
                       <select
                         value={formData.parentId}
@@ -802,7 +802,7 @@ export default function RegionsPage() {
                             : 'border-slate-200 dark:border-slate-700'
                         }`}
                       >
-                        <option value="">Select parent...</option>
+                        <option value="">[ None / Direct Region ]</option>
                         {parents.map((p) => (
                           <option key={p.id} value={p.id}>{p.name} ({p.code})</option>
                         ))}
@@ -811,7 +811,7 @@ export default function RegionsPage() {
                         <p className="mt-1 text-xs text-rose-500">{formErrors.parentId}</p>
                       )}
                       <p className="mt-1 text-xs text-slate-400">
-                        Regions are attached to Head Office nodes in your hierarchy.
+                        Select Head Office if this region operates under a central directorate. (Optional where organization structure does not use a Head Office).
                       </p>
                     </div>
 
@@ -1028,7 +1028,7 @@ export default function RegionsPage() {
                     {viewTab === 'overview' && (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {[
-                          { label: 'Parent Node', value: viewingRegion.parentName },
+                          { label: 'Head Office', value: viewingRegion.parentName || '—' },
                           { label: 'Director', value: viewingRegion.directorName },
                           { label: 'Email', value: viewingRegion.email },
                           { label: 'Phone', value: viewingRegion.phone },
