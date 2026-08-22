@@ -1,4 +1,7 @@
+export * from './identity';
 export * from './tenant';
+export * from './membership';
+export * from './assignment';
 export * from './hierarchy';
 export * from './iam';
 export * from './audit';

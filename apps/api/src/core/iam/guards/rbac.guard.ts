@@ -30,7 +30,7 @@ export class RbacGuard implements CanActivate {
       throw new ForbiddenException('SECURITY_ERROR: Deny by default. Missing user or tenant context');
     }
 
-    const roleIds = user.assignments.map((a) => a.roleId);
+    const roleIds = user.assignments.flatMap((a) => (a.roles || []).map((r) => r.roleId));
     const rolePermissionsMap = await this.authService.getRolePermissionsMap(
       roleIds,
       request.tenant.organizationId

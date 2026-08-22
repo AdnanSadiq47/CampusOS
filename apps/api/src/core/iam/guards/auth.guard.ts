@@ -2,6 +2,8 @@ import { Injectable, CanActivate, ExecutionContext, UnauthorizedException } from
 import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
 import { AuthUserContext } from '@campus-os/types';
+import { TenantTransactionManager, organizationMemberships, identityUsers } from '@campus-os/database';
+import { eq, and } from 'drizzle-orm';
 
 declare global {
   namespace Express {
@@ -13,7 +15,10 @@ declare global {
 
 @Injectable()
 export class AuthGuard implements CanActivate {
-  constructor(private readonly jwtService: JwtService) {}
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly tenantManager?: TenantTransactionManager
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<Request>();
@@ -42,13 +47,53 @@ export class AuthGuard implements CanActivate {
       throw new UnauthorizedException('SECURITY_ERROR: Cross-tenant token tampering detected');
     }
 
+    // Fail-Closed Authoritative Membership Status Check
+    if (this.tenantManager && payload.membershipId) {
+      try {
+        const db = (this.tenantManager as any).db;
+        if (db) {
+          const membership = await db
+            .select({
+              status: organizationMemberships.status,
+              version: organizationMemberships.version,
+              userActive: identityUsers.isActive,
+            })
+            .from(organizationMemberships)
+            .innerJoin(identityUsers, eq(organizationMemberships.identityUserId, identityUsers.id))
+            .where(
+              and(
+                eq(organizationMemberships.id, payload.membershipId),
+                eq(organizationMemberships.organizationId, payload.orgId)
+              )
+            )
+            .limit(1);
+
+          const record = membership[0];
+          if (!record || record.status !== 'ACTIVE' || !record.userActive) {
+            throw new UnauthorizedException('SECURITY_ERROR: Membership or user account has been suspended or terminated');
+          }
+
+          // Version check for instant session revocation
+          if (payload.memVer && record.version !== payload.memVer) {
+            throw new UnauthorizedException('SECURITY_ERROR: Session token has been revoked by administrative update');
+          }
+        }
+      } catch (err: unknown) {
+        if (err instanceof UnauthorizedException) throw err;
+        // Invariant: If authoritative validation cannot be completed, fail closed!
+        throw new UnauthorizedException('SECURITY_ERROR: Authoritative security validation unavailable. Request denied.');
+      }
+    }
+
     request.user = {
-      userId: payload.sub,
-      email: payload.email,
+      identityId: payload.sub,
+      email: payload.email || '',
       firstName: payload.firstName || '',
       lastName: payload.lastName || '',
       organizationId: payload.orgId,
-      organizationCode: payload.orgCode,
+      organizationCode: payload.orgCode || '',
+      membershipId: payload.membershipId || '',
+      sessionId: payload.sessionId || '',
       assignments: payload.assignments || [],
     };
 

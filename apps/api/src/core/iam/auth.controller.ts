@@ -1,9 +1,8 @@
-import { Controller, Post, Body, Req, BadRequestException, Get, UseGuards } from '@nestjs/common';
-import { Request } from 'express';
+import { Controller, Post, Body, Req, UseGuards, BadRequestException } from '@nestjs/common';
 import { AuthService } from './services/auth.service.js';
 import { LoginCredentialsSchema } from '@campus-os/types';
 import { AuthGuard } from './guards/auth.guard.js';
-import { CurrentUser } from './decorators/current-user.decorator.js';
+import { Request } from 'express';
 
 @Controller('auth')
 export class AuthController {
@@ -13,20 +12,24 @@ export class AuthController {
   async login(@Body() body: unknown, @Req() req: Request) {
     const parseResult = LoginCredentialsSchema.safeParse(body);
     if (!parseResult.success) {
-      throw new BadRequestException('Validation failed: ' + parseResult.error.message);
+      throw new BadRequestException(parseResult.error.format());
     }
 
-    const tenantId = req.tenant?.organizationId;
-    if (!tenantId) {
-      throw new BadRequestException('Missing tenant context');
-    }
-
-    return this.authService.login(parseResult.data, tenantId);
+    const requestedOrgId = req.tenant?.organizationId;
+    return this.authService.login(parseResult.data, requestedOrgId);
   }
 
-  @Get('me')
+  @Post('switch-tenant')
   @UseGuards(AuthGuard)
-  async me(@CurrentUser() user: unknown) {
-    return user;
+  async switchTenant(@Body() body: { targetOrganizationId: string }, @Req() req: Request) {
+    if (!body.targetOrganizationId) {
+      throw new BadRequestException('Missing targetOrganizationId');
+    }
+
+    if (!req.user) {
+      throw new BadRequestException('Unauthenticated user context');
+    }
+
+    return this.authService.switchTenant(req.user.identityId, body.targetOrganizationId);
   }
 }

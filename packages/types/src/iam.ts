@@ -1,82 +1,64 @@
 import { z } from 'zod';
+import { MembershipNodeAssignmentDTO } from './assignment';
 
-export type ActionCode =
-  | 'READ'
-  | 'CREATE'
-  | 'UPDATE'
-  | 'DELETE'
-  | 'SUBMIT'
-  | 'APPROVE'
-  | 'REJECT'
-  | 'PRINT'
-  | 'EXPORT'
-  | 'IMPORT'
-  | 'CONFIGURE'
-  | 'AUDIT_VIEW'
-  | '*';
+export const ActionCodeEnum = z.enum([
+  'READ',
+  'CREATE',
+  'UPDATE',
+  'DELETE',
+  'SUBMIT',
+  'APPROVE',
+  'REJECT',
+  'CANCEL',
+  'POST_FINANCIAL',
+  'CLOSE',
+  'REOPEN',
+  'EXPORT',
+  'IMPORT',
+]);
 
-export type DataScopeType =
-  | 'GLOBAL_ORGANIZATION'
-  | 'HIERARCHY_SUBTREE'
-  | 'EXACT_NODE'
-  | 'OWN_RECORDS'
-  | 'ASSIGNED_RECORDS'
-  | 'CUSTOM_SCOPE';
+export type ActionCode = z.infer<typeof ActionCodeEnum>;
 
-export interface FieldRestriction {
+export const DataScopeEnum = z.enum([
+  'EXACT_NODE',
+  'HIERARCHY_SUBTREE',
+  'ORGANIZATION_WIDE',
+  'OWN_RECORDS',
+  'ASSIGNED_RECORDS',
+  'CUSTOM_SCOPE',
+]);
+
+export type DataScope = z.infer<typeof DataScopeEnum>;
+
+export const PermissionEffectEnum = z.enum(['ALLOW', 'DENY']);
+export type PermissionEffect = z.infer<typeof PermissionEffectEnum>;
+
+export interface FieldRule {
   fieldName: string;
-  access: 'DEFAULT' | 'READ_ONLY' | 'HIDDEN' | 'MASKED';
+  access: 'VISIBLE' | 'READ_ONLY' | 'HIDDEN' | 'MASKED';
 }
 
 export interface PermissionRuleDTO {
   moduleCode: string;
   entityCode: string;
   action: ActionCode;
-  dataScope: DataScopeType;
-  fieldRules?: FieldRestriction[];
-}
-
-export interface RoleDTO {
-  id: string;
-  organizationId: string;
-  code: string;
-  name: string;
-  description?: string | null;
-  isSystemTemplate: boolean;
-  isActive: boolean;
-  permissions?: PermissionRuleDTO[];
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export interface UserRoleAssignmentDTO {
-  id: string;
-  userId: string;
-  roleId: string;
-  roleCode: string;
-  nodeId: string;
-  nodePath: string;
-  createdAt: Date;
+  effect: PermissionEffect;
+  dataScope: DataScope;
+  fieldRules?: FieldRule[];
+  conditions?: Record<string, unknown>;
 }
 
 export interface AuthUserContext {
-  userId: string;
+  identityId: string;
   email: string;
   firstName: string;
   lastName: string;
   organizationId: string;
   organizationCode: string;
-  assignments: UserRoleAssignmentDTO[];
-  isSuperAdmin?: boolean;
+  membershipId: string;
+  sessionId: string;
+  assignments: MembershipNodeAssignmentDTO[];
 }
-
-export const LoginCredentialsSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
-  organizationCode: z.string().min(2),
-});
-
-export type LoginCredentials = z.infer<typeof LoginCredentialsSchema>;
 
 export interface AuthTokens {
   accessToken: string;
