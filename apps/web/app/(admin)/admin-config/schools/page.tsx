@@ -1,12 +1,13 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { SchoolListItemDto, EligibleParentNodeDto, CreateSchoolDto } from '@campus-os/types';
+import { SchoolListItemDto, EligibleParentNodeDto, CreateSchoolDto, SchoolTypeListItemDto } from '@campus-os/types';
 
 export default function SchoolsPage() {
   // State
   const [schools, setSchools] = useState<SchoolListItemDto[]>([]);
   const [parents, setParents] = useState<EligibleParentNodeDto[]>([]);
+  const [schoolTypes, setSchoolTypes] = useState<SchoolTypeListItemDto[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -134,12 +135,26 @@ export default function SchoolsPage() {
     []
   );
 
-  // Fetch schools and parents
+  const defaultSchoolTypes: SchoolTypeListItemDto[] = useMemo(
+    () => [
+      { id: 'st-1', organizationId: '11111111-1111-1111-1111-111111111111', code: 'SCH', name: 'School', description: 'General school institution', schoolCount: 12, isActive: true, createdAt: new Date(), updatedAt: new Date() },
+      { id: 'st-2', organizationId: '11111111-1111-1111-1111-111111111111', code: 'COL', name: 'College', description: 'College-level institution', schoolCount: 4, isActive: true, createdAt: new Date(), updatedAt: new Date() },
+      { id: 'st-3', organizationId: '11111111-1111-1111-1111-111111111111', code: 'UNI', name: 'University', description: 'University institution', schoolCount: 2, isActive: true, createdAt: new Date(), updatedAt: new Date() },
+      { id: 'st-4', organizationId: '11111111-1111-1111-1111-111111111111', code: 'ACA', name: 'Academy', description: 'Academy / training institution', schoolCount: 3, isActive: true, createdAt: new Date(), updatedAt: new Date() },
+      { id: 'st-5', organizationId: '11111111-1111-1111-1111-111111111111', code: 'K12', name: 'K-12 Comprehensive', description: 'Full K-12 educational institution', schoolCount: 5, isActive: true, createdAt: new Date(), updatedAt: new Date() },
+      { id: 'st-6', organizationId: '11111111-1111-1111-1111-111111111111', code: 'Secondary', name: 'Secondary / Matric', description: 'Secondary grade school', schoolCount: 2, isActive: true, createdAt: new Date(), updatedAt: new Date() },
+      { id: 'st-7', organizationId: '11111111-1111-1111-1111-111111111111', code: 'Higher Secondary', name: 'Higher Secondary', description: 'Intermediate institution', schoolCount: 1, isActive: true, createdAt: new Date(), updatedAt: new Date() },
+    ],
+    []
+  );
+
+  // Fetch schools, parents and school types master
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      // In browser preview, use initialized seed list and parents
+      // In browser preview, use initialized seed list, parents, and school types
       setParents(defaultParents);
+      setSchoolTypes(defaultSchoolTypes);
       setSchools((prev) => (prev.length > 0 ? prev : initialSeedSchools));
     } catch {
       showToast('error', 'Failed to load school records');
@@ -745,20 +760,24 @@ export default function SchoolsPage() {
 
                     <div>
                       <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        School Level / Type
+                        School Level / Type (Configured Master)
                       </label>
                       <select
                         value={formData.schoolType}
                         onChange={(e) => setFormData({ ...formData, schoolType: e.target.value })}
                         className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 font-medium focus:outline-none cursor-pointer"
                       >
-                        <option value="K12">K-12 (Comprehensive)</option>
-                        <option value="Primary">Primary School (Grades 1-5)</option>
-                        <option value="Middle">Middle School (Grades 6-8)</option>
-                        <option value="Secondary">Secondary / Matric (Grades 9-10)</option>
-                        <option value="Higher Secondary">Higher Secondary / Inter (Grades 11-12)</option>
-                        <option value="O/A Levels">Cambridge O/A Levels Stream</option>
+                        {schoolTypes
+                          .filter((st) => st.isActive || st.code === formData.schoolType || st.name === formData.schoolType)
+                          .map((st) => (
+                            <option key={st.id} value={st.code}>
+                              {st.name} ({st.code}) {!st.isActive ? '— [Inactive]' : ''}
+                            </option>
+                          ))}
                       </select>
+                      <p className="text-[10px] text-slate-400 mt-1">
+                        Loaded from Administration Configuration → School Types master.
+                      </p>
                     </div>
                   </div>
 

@@ -164,7 +164,9 @@ The top navigation bar must include a persistent **Global Working Scope** select
 
 ---
 
-## 10. Standard Management Page Pattern
+## 10. Standard Management Page Pattern (Schools Reference Standard)
+
+> **Mandatory Consistency Rule**: The approved Schools management page is the baseline interaction pattern for comparable Administration Configuration management pages. Status controls, row actions, search/filter layout, table styling, dialogs and management interactions must remain consistent unless a documented domain requirement justifies a difference.
 
 Every configuration/management page must follow this consistent pattern:
 

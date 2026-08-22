@@ -645,46 +645,50 @@ export default function RegionsPage() {
 
                     {/* Status */}
                     <td className="px-5 py-3.5 text-center">
-                      <StatusBadge isActive={region.isActive} />
+                      <button
+                        onClick={() => handleToggleStatus(region)}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition-all ${
+                          region.isActive
+                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100'
+                            : 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800 hover:bg-rose-100'
+                        }`}
+                        title="Click to toggle status"
+                      >
+                        <span className={`h-1.5 w-1.5 rounded-full ${region.isActive ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                        <span>{region.isActive ? 'Active' : 'Inactive'}</span>
+                      </button>
                     </td>
 
                     {/* Actions */}
-                    <td className="px-5 py-3.5">
-                      <div className="flex items-center justify-end gap-1">
-                        {/* View */}
+                    <td className="px-5 py-3.5 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
                         <button
-                          onClick={() => { setViewingRegion(region); setIsViewModalOpen(true); }}
-                          title="View details"
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition-colors"
+                          onClick={() => {
+                            setViewingRegion(region);
+                            setIsViewModalOpen(true);
+                          }}
+                          className="px-2.5 py-1 text-xs font-medium rounded-md border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 transition-colors"
+                          title="View full regional office metadata"
                         >
-                          👁️
+                          View
                         </button>
-                        {/* Edit */}
                         <button
                           onClick={() => openEditModal(region)}
-                          title="Edit"
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                          className="px-2.5 py-1 text-xs font-medium rounded-md bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 border border-indigo-200 dark:border-indigo-800 transition-colors"
+                          title="Edit regional office details"
                         >
-                          ✏️
+                          Edit
                         </button>
-                        {/* Toggle Status */}
                         <button
                           onClick={() => handleToggleStatus(region)}
-                          title={region.isActive ? 'Deactivate' : 'Activate'}
-                          className={`p-1.5 rounded-lg transition-colors ${
+                          className={`px-2.5 py-1 text-xs font-medium rounded-md border transition-colors ${
                             region.isActive
-                              ? 'text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/30'
-                              : 'text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30'
+                              ? 'border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40'
+                              : 'border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
                           }`}
+                          title={region.isActive ? 'Deactivate regional office' : 'Activate regional office'}
                         >
-                          {region.isActive ? '⏸️' : '▶️'}
-                        </button>
-                        {/* Manage Schools */}
-                        <button
-                          title="Manage schools"
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
-                        >
-                          🏫
+                          {region.isActive ? 'Deactivate' : 'Activate'}
                         </button>
                       </div>
                     </td>

@@ -36,7 +36,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { href: '/admin-config/regions', label: 'Regional Offices', icon: '🗺️', soon: false },
     { href: '/admin-config/schools', label: 'Schools', icon: '🏫', soon: false },
     { href: '/admin-config/branches', label: 'Branches', icon: '🌿', soon: true },
-    { href: '/admin-config/school-types', label: 'School Types', icon: '📋', soon: true },
+    { href: '/admin-config/school-types', label: 'School Types', icon: '📋', soon: false },
     { href: '/admin-config/admin-users', label: 'Admin Users', icon: '👥', soon: true },
   ];
 
