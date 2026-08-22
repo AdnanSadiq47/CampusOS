@@ -9,6 +9,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [selectedContext, setSelectedContext] = useState('Alpha Academy (Head Office + 2 Campuses)');
 
   const builderLinks = [
+    { href: '/schools', label: 'Schools', icon: '🏫' },
     { href: '/builders/hierarchy', label: 'Hierarchy Tree', icon: '🌳' },
     { href: '/builders/entities', label: 'Entity Builder', icon: '📦' },
     { href: '/builders/forms', label: 'Form Builder', icon: '📝' },
@@ -51,6 +52,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
           {/* Center: Primary Module Navigation Tabs */}
           <nav className="hidden lg:flex items-center gap-1 text-sm font-medium">
+            <Link
+              href="/schools"
+              className={`px-3 py-2 rounded-md transition-colors ${
+                pathname === '/schools'
+                  ? 'bg-slate-100 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 font-semibold'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              Schools
+            </Link>
             <Link
               href="/builders/hierarchy"
               className={`px-3 py-2 rounded-md transition-colors ${

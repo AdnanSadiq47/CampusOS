@@ -11,3 +11,5 @@ export * from './form.js';
 export * from './workflow.js';
 export * from './navigation.js';
 export * from './module.js';
+export * from './school.js';
+
