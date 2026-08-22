@@ -50,10 +50,10 @@ jobs:
           node-version: 20
 
       - name: Install pnpm
-        run: npm install -g pnpm
+        run: npm install -g pnpm@9
 
       - name: Install Dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install
 
       - name: Monorepo Typecheck
         run: pnpm -r exec tsc --noEmit
