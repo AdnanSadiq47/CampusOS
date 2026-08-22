@@ -15,6 +15,7 @@ import { DashboardEngineModule } from './core/dashboard-engine/dashboard-engine.
 import { ReportEngineModule } from './core/report-engine/report-engine.module.js';
 import { NotificationModule } from './core/notification/notification.module.js';
 import { SchoolsModule } from './modules/schools/schools.module.js';
+import { RegionsModule } from './modules/regions/regions.module.js';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { SchoolsModule } from './modules/schools/schools.module.js';
     ReportEngineModule,
     NotificationModule,
     SchoolsModule,
+    RegionsModule,
   ],
 })
 export class AppModule implements NestModule {

@@ -12,4 +12,5 @@ export * from './workflows.js';
 export * from './navigation.js';
 export * from './modules.js';
 export * from './schools.js';
+export * from './regions.js';
 
