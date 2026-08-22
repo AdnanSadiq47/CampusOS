@@ -28,11 +28,11 @@ All notable changes to the CampusOS architecture and platform specifications wil
     - `/builders/navigation`: Menu item manager with role preview.
     - `/modules`: Pluggable module activation center with dependency checks.
 - **Full Monorepo Verification & CI Evidence**:
-  - **GitHub Actions Run ID**: `32576229473` ([View CI Run](https://github.com/AdnanSadiq47/CampusOS/actions/runs/32576229473)) - **PASSED (100% Green)**
-  - **Tested Commit**: `ea24cd0b72d4339ac5953fe72a508973f5867267`
+  - **GitHub Actions Run ID**: `32576773390` ([View CI Run](https://github.com/AdnanSadiq47/CampusOS/actions/runs/32576773390)) - **PASSED (100% Green)**
+  - **Tested Commit**: `b5ef115d47750b9f46ab73b11e303a7c88d420d0`
   - **Real Standalone PostgreSQL 16 Daemon Gate**: **PASSED** (Executed against `postgres:16-alpine` service container)
   - **Monorepo Typecheck**: 100% clean (`tsc --noEmit` across all 9 workspace packages/apps).
-  - **Test Suites**: 100% passing (Permissions: 4/4, Rule Engine: 6/6, Database: 12/12, API: 14/14).
+  - **Test Suites**: 100% passing (Permissions: 7/7 including multi-node employee scenarios, Rule Engine: 6/6, Database: 12/12, API: 15/15 including workflow version immutability).
   - **Production Builds**: 100% clean (API NestJS build + Web Next.js 14 App Router 11 static routes build).
 
 ---
