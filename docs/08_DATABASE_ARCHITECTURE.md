@@ -57,3 +57,19 @@ All tenant-owned tables have `ENABLE ROW LEVEL SECURITY` and `FORCE ROW LEVEL SE
 * **Fail-Closed Condition**:
   `USING (organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid)`
 * **Multi-Action Enforcement**: Explicit `SELECT (USING)`, `INSERT (WITH CHECK)`, `UPDATE (USING + WITH CHECK)`, and `DELETE (USING)` policies on all protected tables.
+
+---
+
+## 4. Verification Tiers: In-Process PGlite vs. Real Standalone PostgreSQL 16 Daemon
+
+CampusOS tests database security and multi-tenant isolation across two explicit, non-interchangeable tiers:
+
+1. **Tier A — In-Process PostgreSQL-Compatible Integration Tests (PGlite)**:
+   * Uses `@electric-sql/pglite` (official PostgreSQL 16 C sources compiled to WASM).
+   * Runs locally for fast unit and integration feedback without requiring host Docker or external daemon installation.
+   * Explicitly documented as **in-process integration tests**, not a standalone production daemon.
+
+2. **Tier B — Standalone PostgreSQL 16 Daemon Acceptance Gate**:
+   * Uses real standalone `postgres:16-alpine` running as a live TCP server process (in GitHub Actions CI container or local Docker).
+   * Executed via `packages/database/test/real-postgres-daemon.spec.ts` requiring `REAL_POSTGRES_DATABASE_URL` / `REAL_POSTGRES_ADMIN_URL`.
+   * Refuses to silently substitute PGlite; if daemon connection URL is unset, the suite reports `SKIPPED / NOT EXECUTED`.

@@ -2,20 +2,15 @@
 
 All notable changes to the CampusOS architecture and platform specifications will be documented in this file.
 
-## [2026-08-22] - Hardened Multi-Node Identity & Cross-Tenant Security Architecture
+## [2026-08-22] - Dedicated Real PostgreSQL 16 Daemon Gate & Dual Verification Architecture
 
 ### Added
-- **Global Identity Decoupling**: Added `identity_users` with Argon2id password hashing and AES-256-GCM encrypted MFA secrets.
-- **Unified Organization Membership**: Added `organization_memberships` supporting multi-persona profile extensions (`employee_profiles`, `student_profiles`, `parent_profiles`).
-- **Domain-Neutral Multi-Node Assignments**: Added `membership_node_assignments` supporting simultaneous assignments across arbitrary hierarchy tiers (*Head Office, Region, Campus, Dept*).
-- **Per-Node Multi-Role Grants**: Added `assignment_roles` enabling different functional roles per assigned node.
-- **Composite Database Foreign Keys**: Enforced `(organization_id, foreign_id) REFERENCES target_table(organization_id, id)` across all tenant relationship tables.
-- **Tri-State Permission Precedence**: Standardized on `Explicit DENY > Explicit ALLOW > Default DENY`.
-- **Fail-Closed Session Revocation**: Invariant guaranteeing request rejection if Redis and PostgreSQL validation fail.
-- **Primary Assignment DB Invariant**: Partial unique index enforcing at most one active primary node assignment per membership.
+- **Dedicated Real PostgreSQL 16 Acceptance Suite**: Added `packages/database/test/real-postgres-daemon.spec.ts` executing against standalone PostgreSQL 16 TCP servers via `REAL_POSTGRES_DATABASE_URL` (skips gracefully when daemon URL is unset).
+- **GitHub Actions Security Gate Workflow**: Added `.github/workflows/security-gate.yml` with `postgres:16-alpine` and `redis:7-alpine` service containers for authoritative CI acceptance.
+- **Verification Tier Delineation**: Formally separated Tier A (fast in-process PGlite integration tests) from Tier B (standalone PostgreSQL 16 daemon acceptance gate).
 
 ---
 
-## [2026-08-22] - Initial Architectural Baseline
-- Established Phase 1 permanent specifications (`docs/00_PRODUCT_VISION.md` to `11_AI_RULES.md`).
-- Multi-tenancy isolation boundary, PostgreSQL RLS, and Drizzle ORM architecture.
+## [2026-08-22] - Hardened Multi-Node Identity & Cross-Tenant Security Architecture
+- Global identity decoupling (`identity_users`), organization memberships, multi-node assignments, per-node roles, composite foreign keys, and tri-state permission precedence (`Explicit DENY > Explicit ALLOW > Default DENY`).
+- AES-256-GCM encrypted MFA secrets, fail-closed session revocation, and immutable audit logs.

@@ -30,3 +30,9 @@
 * **Password Hashing**: Argon2id (memory cost: 64MB, time cost: 3, parallelism: 4).
 * **Cross-Tenant Tamper Guard**: Token claims must match request tenant context on every protected route.
 * **Dual-Layer Boundary**: Application ABAC + PostgreSQL Row-Level Security (`FORCE ROW LEVEL SECURITY`).
+
+---
+
+## 5. Verification Integrity & Security Classification Rule
+* **Truth in Security Testing**: Agents and developers must **never misrepresent** in-process or WASM integration tests (PGlite) as direct production daemon verification.
+* Production daemon verification requires live TCP execution against a `postgres:16` instance (enforced in GitHub Actions CI via `REAL_POSTGRES_DATABASE_URL`).

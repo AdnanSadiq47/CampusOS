@@ -1,0 +1,84 @@
+name: CampusOS Security & Real PostgreSQL 16 Acceptance Gate
+
+on:
+  push:
+    branches:
+      - main
+      - 'feature/**'
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  security-and-postgres16-gate:
+    name: Production-Grade PostgreSQL 16 & Multi-Tenant Security Gate
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: admin_secure_password
+          POSTGRES_DB: campus_os_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 11.22.0
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Monorepo Typecheck
+        run: pnpm -r exec tsc --noEmit
+
+      - name: Fast In-Process Unit & PGlite Integration Tests
+        run: |
+          pnpm --filter @campus-os/permissions test
+          pnpm --filter @campus-os/rule-engine test
+          pnpm --filter @campus-os/database test
+          pnpm --filter @campus-os/api test
+
+      - name: Dedicated Real PostgreSQL 16 Standalone Acceptance Gate
+        env:
+          REAL_POSTGRES_ADMIN_URL: postgresql://postgres:admin_secure_password@localhost:5432/campus_os_test
+          REAL_POSTGRES_APP_URL: postgresql://campus_app_user:campus_secure_password@localhost:5432/campus_os_test
+          NODE_ENV: test
+          JWT_ACCESS_SECRET: production_jwt_access_secret_64chars_long_minimum_required_for_gate
+          JWT_REFRESH_SECRET: production_jwt_refresh_secret_64chars_long_minimum_required_for_gate
+          MFA_ENCRYPTION_KEY_V1: production_mfa_encryption_key_32_bytes_long_minimum!
+        run: |
+          pnpm --filter @campus-os/database test
+
+      - name: Production Builds
+        run: |
+          pnpm --filter @campus-os/api build
+          pnpm --filter @campus-os/web build

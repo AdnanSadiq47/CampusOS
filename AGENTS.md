@@ -12,3 +12,4 @@
 6. **Tri-State Permission Precedence**: `Explicit DENY > Explicit ALLOW > Default DENY`.
 7. **Fail-Closed Revocation**: If session/token validation cannot be verified against Redis or DB, fail closed immediately.
 8. **Credential Security Boundary**: Never expose `password_hash` or `mfa_secret` to tenant business code, form builders, or dynamic reporting engines.
+9. **Verification Honesty**: Clearly distinguish in-process PGlite integration tests from live Standalone PostgreSQL 16 daemon acceptance gates. Never claim daemon execution without live TCP server connectivity.
