@@ -32,7 +32,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   // Administration Configuration sub-navigation
   const adminConfigLinks = [
-    { href: '/admin-config/head-office', label: 'Head Office', icon: '🏢', soon: true },
+    { href: '/admin-config/head-offices', label: 'Head Office', icon: '🏢', soon: false },
     { href: '/admin-config/regions', label: 'Regional Offices', icon: '🗺️', soon: false },
     { href: '/admin-config/schools', label: 'Schools', icon: '🏫', soon: false },
     { href: '/admin-config/branches', label: 'Branches', icon: '🌿', soon: true },

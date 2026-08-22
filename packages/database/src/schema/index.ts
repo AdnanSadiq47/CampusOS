@@ -14,4 +14,5 @@ export * from './modules.js';
 export * from './schools.js';
 export * from './regions.js';
 export * from './school-types.js';
+export * from './head-offices.js';
 

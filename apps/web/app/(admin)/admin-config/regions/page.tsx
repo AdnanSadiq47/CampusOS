@@ -122,10 +122,17 @@ export default function RegionsPage() {
     () => [
       {
         id: 'parent-ho-001',
-        code: 'HO',
-        name: 'Head Office',
+        code: 'HO_MAIN',
+        name: 'Alpha Central Directorate & Head Office',
         nodeTypeCode: 'HEAD_OFFICE',
-        path: 'alpha_academy.head_office',
+        path: 'alpha_academy.ho_main',
+      },
+      {
+        id: 'parent-ho-002',
+        code: 'HO_SOUTH',
+        name: 'Southern Zonal Executive Office',
+        nodeTypeCode: 'HEAD_OFFICE',
+        path: 'alpha_academy.ho_south',
       },
     ],
     []
@@ -561,8 +568,8 @@ export default function RegionsPage() {
               <thead>
                 <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/60">
                   <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Code</th>
-                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Name</th>
-                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Parent</th>
+                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Regional Office</th>
+                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Head Office</th>
                   <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Director / Contact</th>
                   <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Location</th>
                   <th className="text-center px-5 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Schools</th>

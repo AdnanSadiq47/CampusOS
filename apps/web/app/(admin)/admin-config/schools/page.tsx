@@ -59,9 +59,11 @@ export default function SchoolsPage() {
   // Seed default data if database is initialized locally
   const defaultParents: EligibleParentNodeDto[] = useMemo(
     () => [
-      { id: 'parent-ho-1', name: 'Head Office & Directorate', code: 'HO', type: 'Head Office', path: 'root.ho' },
-      { id: 'parent-south-1', name: 'Southern Regional Directorate', code: 'REGION_SOUTH', type: 'Region', path: 'root.ho.south' },
-      { id: 'parent-north-1', name: 'Northern Regional Directorate', code: 'REGION_NORTH', type: 'Region', path: 'root.ho.north' },
+      { id: 'parent-ho-1', name: 'Alpha Central Directorate & Head Office', code: 'HO_MAIN', type: 'Head Office', path: 'root.ho_main' },
+      { id: 'parent-ho-2', name: 'Southern Zonal Executive Office', code: 'HO_SOUTH', type: 'Head Office', path: 'root.ho_south' },
+      { id: 'parent-south-1', name: 'Southern Regional Directorate', code: 'REGION_SOUTH', type: 'Region', path: 'root.ho_main.south' },
+      { id: 'parent-north-1', name: 'Northern Regional Directorate', code: 'REGION_NORTH', type: 'Region', path: 'root.ho_main.north' },
+      { id: 'parent-root', name: 'Alpha Organization Root (Direct)', code: 'ORG_ROOT', type: 'Organization Root', path: 'root' },
     ],
     []
   );
