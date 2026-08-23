@@ -12,6 +12,7 @@ const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
 
 const ROUTES = [
   '/admin-config',
+  '/admin-config?category=academic_setup',
   '/admin-config/head-offices',
   '/admin-config/regions',
   '/admin-config/school-types',
@@ -22,6 +23,13 @@ const ROUTES = [
   '/admin-config/cities',
   '/admin-config/areas',
   '/admin-config/postal-codes',
+  '/admin-config/academic-years',
+  '/admin-config/boards',
+  '/admin-config/academic-levels',
+  '/admin-config/subjects',
+  '/admin-config/classes',
+  '/admin-config/sections',
+  '/admin-config/languages',
 ];
 
 async function verifyRoute(route) {

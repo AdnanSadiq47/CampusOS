@@ -20,6 +20,7 @@ import { SchoolTypesModule } from './modules/school-types/school-types.module.js
 import { HeadOfficesModule } from './modules/head-offices/head-offices.module.js';
 import { BranchesModule } from './modules/branches/branches.module.js';
 import { GeographyModule } from './modules/geography/geography.module.js';
+import { AcademicModule } from './modules/academic/academic.module.js';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { GeographyModule } from './modules/geography/geography.module.js';
     HeadOfficesModule,
     BranchesModule,
     GeographyModule,
+    AcademicModule,
   ],
 })
 export class AppModule implements NestModule {

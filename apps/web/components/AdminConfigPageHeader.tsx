@@ -63,6 +63,16 @@ export const ORGANIZATION_SETUP_NAV: CategoryNavItem[] = [
   { label: 'Branches / Campuses', href: '/admin-config/branches' },
 ];
 
+export const ACADEMIC_SETUP_NAV: CategoryNavItem[] = [
+  { label: 'Academic Years', href: '/admin-config/academic-years' },
+  { label: 'Boards', href: '/admin-config/boards' },
+  { label: 'Academic Levels / Stages', href: '/admin-config/academic-levels' },
+  { label: 'Subjects', href: '/admin-config/subjects' },
+  { label: 'Classes / Grades', href: '/admin-config/classes' },
+  { label: 'Sections', href: '/admin-config/sections' },
+  { label: 'Languages', href: '/admin-config/languages' },
+];
+
 export function AdminConfigPageHeader({
   section = 'Administration Configuration',
   sectionHref = '/admin-config',

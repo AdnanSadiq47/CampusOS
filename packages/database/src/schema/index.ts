@@ -17,4 +17,5 @@ export * from './school-types.js';
 export * from './head-offices.js';
 export * from './branches.js';
 export * from './geography.js';
+export * from './academic.js';
 
