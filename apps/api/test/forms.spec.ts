@@ -945,4 +945,217 @@ describe('CampusOS Dynamic Form Builder Platform Foundation & Governance (PGlite
     // Form uses only 6 fields, not all 80+ catalog fields
     expect(usedFields.length).toBeLessThanOrEqual(10);
   });
+
+  it('TEST 31 — Duplicate canonical concept detector blocks duplicate concepts', async () => {
+    const check1 = await formsService.checkDuplicateCanonicalConcept('Student DOB', 'STUDENT_BASIC');
+    expect(check1.isDuplicate).toBe(true);
+    expect(check1.matchedCanonical).toBe('STUDENT_DOB');
+    expect(check1.message).toContain('Date of Birth');
+
+    const check2 = await formsService.checkDuplicateCanonicalConcept('Father Mobile SMS', 'CONTACT_INFO');
+    expect(check2.isDuplicate).toBe(true);
+    expect(check2.matchedCanonical).toBe('FATHER_MOBILE');
+
+    const check3 = await formsService.checkDuplicateCanonicalConcept('Unique Scholarship Exam Roll', 'OTHER');
+    expect(check3.isDuplicate).toBe(false);
+  });
+
+  it('TEST 32 — Field width options (QUARTER 25%, HALF 50%, THREE_QUARTERS 75%, FULL 100%) persist in schema', async () => {
+    const form = await formsService.createFormDefinition(
+      TENANT_A,
+      { name: 'Width Test Form', formPurpose: 'PRE_REGISTRATION' },
+      ACTOR_USER
+    );
+
+    const schema: FormSchemaPayload = {
+      rules: [],
+      settings: {},
+      sections: [
+        {
+          id: 'sec_widths',
+          title: 'Width Layout Testing',
+          showSectionHeading: true,
+          sortOrder: 1,
+          fields: [
+            {
+              instanceId: 'fld_q',
+              fieldDefinitionId: 'STD_FIRST_NAME',
+              customLabel: 'Quarter Width Field',
+              width: 'QUARTER',
+              isRequired: true,
+              sortOrder: 1,
+            },
+            {
+              instanceId: 'fld_h',
+              fieldDefinitionId: 'STD_LAST_NAME',
+              customLabel: 'Half Width Field',
+              width: 'HALF',
+              isRequired: false,
+              sortOrder: 2,
+            },
+            {
+              instanceId: 'fld_tq',
+              fieldDefinitionId: 'STD_EMAIL',
+              customLabel: 'Three Quarter Width Field',
+              width: 'THREE_QUARTERS',
+              isRequired: true,
+              sortOrder: 3,
+            },
+            {
+              instanceId: 'fld_f',
+              fieldDefinitionId: 'ADDR_CURR_LINE1',
+              customLabel: 'Full Width Field',
+              width: 'FULL',
+              isRequired: false,
+              sortOrder: 4,
+            },
+          ],
+        },
+      ],
+    };
+
+    const saved = await formsService.saveFormDraft(TENANT_A, form.id, { schemaPayload: schema }, ACTOR_USER);
+    const fields = saved.schemaPayload.sections[0]!.fields;
+    expect(fields[0]!.width).toBe('QUARTER');
+    expect(fields[1]!.width).toBe('HALF');
+    expect(fields[2]!.width).toBe('THREE_QUARTERS');
+    expect(fields[3]!.width).toBe('FULL');
+  });
+
+  it('TEST 33 — Required / Optional toggle alters validation flag cleanly', async () => {
+    const form = await formsService.createFormDefinition(
+      TENANT_A,
+      { name: 'Required Toggle Form', formPurpose: 'PRE_REGISTRATION' },
+      ACTOR_USER
+    );
+
+    const initialSchema: FormSchemaPayload = {
+      rules: [],
+      settings: {},
+      sections: [
+        {
+          id: 'sec_1',
+          title: 'Section 1',
+          showSectionHeading: true,
+          sortOrder: 1,
+          fields: [
+            {
+              instanceId: 'fld_opt',
+              fieldDefinitionId: 'STD_FIRST_NAME',
+              customLabel: 'Student First Name',
+              width: 'HALF',
+              isRequired: false, // Optional
+              sortOrder: 1,
+            },
+          ],
+        },
+      ],
+    };
+
+    let draft = await formsService.saveFormDraft(TENANT_A, form.id, { schemaPayload: initialSchema }, ACTOR_USER);
+    expect(draft.schemaPayload.sections[0]!.fields[0]!.isRequired).toBe(false);
+
+    // Toggle to Required
+    initialSchema.sections[0]!.fields[0]!.isRequired = true;
+    draft = await formsService.saveFormDraft(TENANT_A, form.id, { schemaPayload: initialSchema }, ACTOR_USER);
+    expect(draft.schemaPayload.sections[0]!.fields[0]!.isRequired).toBe(true);
+  });
+
+  it('TEST 34 — Moving a field across sections preserves all properties', async () => {
+    const form = await formsService.createFormDefinition(
+      TENANT_A,
+      { name: 'Cross Section Move Form', formPurpose: 'PRE_REGISTRATION' },
+      ACTOR_USER
+    );
+
+    const schemaWithTwoSections: FormSchemaPayload = {
+      rules: [],
+      settings: {},
+      sections: [
+        {
+          id: 'sec_parent',
+          title: 'Parent Section',
+          showSectionHeading: true,
+          sortOrder: 1,
+          fields: [
+            {
+              instanceId: 'fld_city_1',
+              fieldDefinitionId: 'ADDR_CURR_CITY',
+              canonicalKey: 'CURRENT_CITY',
+              customLabel: 'Residential City',
+              placeholder: 'e.g. Karachi',
+              helpText: 'Select your permanent or current city',
+              width: 'HALF',
+              isRequired: true,
+              masterBinding: 'CITY',
+              sortOrder: 1,
+            },
+          ],
+        },
+        {
+          id: 'sec_address',
+          title: 'Address Section',
+          showSectionHeading: true,
+          sortOrder: 2,
+          fields: [],
+        },
+      ],
+    };
+
+    await formsService.saveFormDraft(TENANT_A, form.id, { schemaPayload: schemaWithTwoSections }, ACTOR_USER);
+
+    // Move fld_city_1 from sec_parent to sec_address
+    const movedField = { ...schemaWithTwoSections.sections[0]!.fields[0]! };
+    schemaWithTwoSections.sections[0]!.fields = [];
+    schemaWithTwoSections.sections[1]!.fields.push(movedField);
+
+    const updated = await formsService.saveFormDraft(TENANT_A, form.id, { schemaPayload: schemaWithTwoSections }, ACTOR_USER);
+    expect(updated.schemaPayload.sections[0]!.fields.length).toBe(0);
+    expect(updated.schemaPayload.sections[1]!.fields.length).toBe(1);
+
+    const targetField = updated.schemaPayload.sections[1]!.fields[0]!;
+    expect(targetField.instanceId).toBe('fld_city_1');
+    expect(targetField.canonicalKey).toBe('CURRENT_CITY');
+    expect(targetField.customLabel).toBe('Residential City');
+    expect(targetField.placeholder).toBe('e.g. Karachi');
+    expect(targetField.helpText).toBe('Select your permanent or current city');
+    expect(targetField.masterBinding).toBe('CITY');
+    expect(targetField.isRequired).toBe(true);
+  });
+
+  it('TEST 35 — Reordering sections updates sequence deterministically', async () => {
+    const form = await formsService.createFormDefinition(
+      TENANT_A,
+      { name: 'Section Reorder Form', formPurpose: 'PRE_REGISTRATION' },
+      ACTOR_USER
+    );
+
+    const schema: FormSchemaPayload = {
+      rules: [],
+      settings: {},
+      sections: [
+        { id: 'sec_1', title: 'Student Info', showSectionHeading: true, sortOrder: 1, fields: [] },
+        { id: 'sec_2', title: 'Parent Info', showSectionHeading: true, sortOrder: 2, fields: [] },
+        { id: 'sec_3', title: 'Documents', showSectionHeading: true, sortOrder: 3, fields: [] },
+      ],
+    };
+
+    await formsService.saveFormDraft(TENANT_A, form.id, { schemaPayload: schema }, ACTOR_USER);
+
+    // Swap sec_3 to the first position
+    const reorderedSchema: FormSchemaPayload = {
+      rules: [],
+      settings: {},
+      sections: [
+        { id: 'sec_3', title: 'Documents', showSectionHeading: true, sortOrder: 1, fields: [] },
+        { id: 'sec_1', title: 'Student Info', showSectionHeading: true, sortOrder: 2, fields: [] },
+        { id: 'sec_2', title: 'Parent Info', showSectionHeading: true, sortOrder: 3, fields: [] },
+      ],
+    };
+
+    const saved = await formsService.saveFormDraft(TENANT_A, form.id, { schemaPayload: reorderedSchema }, ACTOR_USER);
+    expect(saved.schemaPayload.sections[0]!.id).toBe('sec_3');
+    expect(saved.schemaPayload.sections[1]!.id).toBe('sec_1');
+    expect(saved.schemaPayload.sections[2]!.id).toBe('sec_2');
+  });
 });

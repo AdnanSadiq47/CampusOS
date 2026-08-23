@@ -60,7 +60,7 @@ export type FieldDataType =
   | 'FILE_UPLOAD'
   | 'IMAGE_UPLOAD';
 
-export type FormControlWidth = 'FULL' | 'HALF';
+export type FormControlWidth = 'FULL' | 'HALF' | 'QUARTER' | 'THREE_QUARTERS' | '25%' | '50%' | '75%' | '100%';
 
 export interface FormFieldValidationRules {
   required?: boolean;

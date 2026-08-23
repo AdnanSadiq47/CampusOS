@@ -273,9 +273,18 @@ export function FormRuntimeRenderer({
       const selectedCity = formData['CURRENT_CITY'] || formData['ADDR_CURR_CITY'] || 'KHI';
       options = MOCK_AREAS[selectedCity] || MOCK_AREAS['KHI'] || [];
     } else if (field.masterBinding === 'BOARD') options = MOCK_BOARDS;
-    else if (field.masterBinding === 'CLASS') options = MOCK_CLASSES;
-
-    const widthClass = field.width === 'FULL' ? 'col-span-12' : 'col-span-12 md:col-span-6';
+    let widthClass = 'col-span-12';
+    if (field.width === 'QUARTER' || (field.width as string) === '25%') {
+      widthClass = 'col-span-12 sm:col-span-6 lg:col-span-3';
+    } else if (field.width === 'HALF' || (field.width as string) === '50%') {
+      widthClass = 'col-span-12 sm:col-span-6';
+    } else if (field.width === 'THREE_QUARTERS' || (field.width as string) === '75%') {
+      widthClass = 'col-span-12 sm:col-span-6 lg:col-span-9';
+    } else if (field.width === 'FULL' || (field.width as string) === '100%') {
+      widthClass = 'col-span-12';
+    } else {
+      widthClass = 'col-span-12 sm:col-span-6';
+    }
 
     return (
       <div key={field.instanceId + (repIndex !== undefined ? `_${repIndex}` : '')} className={`${widthClass} space-y-1.5`}>
