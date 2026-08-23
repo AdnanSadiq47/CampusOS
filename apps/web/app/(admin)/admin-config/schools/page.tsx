@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { SchoolListItemDto, EligibleParentNodeDto, CreateSchoolDto, SchoolTypeListItemDto } from '@campus-os/types';
 import { AdminConfigPageHeader, ORGANIZATION_SETUP_NAV } from '../../../../components/AdminConfigPageHeader';
+import { SchoolBranchesDetailsModal } from '../../../../components/SchoolBranchesDetailsModal';
 
 export default function SchoolsPage() {
   // State
@@ -17,6 +18,7 @@ export default function SchoolsPage() {
   // Modal / Form state
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState<boolean>(false);
+  const [selectedSchoolForBranchesModal, setSelectedSchoolForBranchesModal] = useState<SchoolListItemDto | null>(null);
   const [editingSchool, setEditingSchool] = useState<SchoolListItemDto | null>(null);
   const [viewingSchool, setViewingSchool] = useState<SchoolListItemDto | null>(null);
   const [selectedHeadOffice, setSelectedHeadOffice] = useState<string>('');
@@ -596,10 +598,16 @@ export default function SchoolsPage() {
 
                     {/* Branches */}
                     <td className="py-3.5 px-4">
-                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedSchoolForBranchesModal(school)}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 hover:border-blue-300 cursor-pointer transition-all shadow-xs"
+                        title="View campuses belonging to this school"
+                      >
                         <span>🏢</span>
                         <span>{school.branchCount} {school.branchCount === 1 ? 'Branch' : 'Branches'}</span>
-                      </span>
+                        <span className="text-[10px] text-blue-400">›</span>
+                      </button>
                     </td>
 
                     {/* Primary Contact */}
@@ -1204,6 +1212,13 @@ export default function SchoolsPage() {
           </div>
         </div>
       )}
+
+      {/* School Branches / Campuses Details Popup */}
+      <SchoolBranchesDetailsModal
+        isOpen={!!selectedSchoolForBranchesModal}
+        onClose={() => setSelectedSchoolForBranchesModal(null)}
+        school={selectedSchoolForBranchesModal}
+      />
     </div>
   );
 }

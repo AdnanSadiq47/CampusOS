@@ -4,6 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { ClassListItemDto, ConfigScopeType } from '@campus-os/types';
 import { AdminConfigPageHeader, ACADEMIC_SETUP_NAV } from '../../../../components/AdminConfigPageHeader';
 import { ConfigScopeSelector } from '../../../../components/ConfigScopeSelector';
+import { AssignedToDetailsModal } from '../../../../components/AssignedToDetailsModal';
 
 const DEFAULT_SUBJECTS_CATALOG = [
   { id: 's1', name: 'Mathematics' },
@@ -162,6 +163,11 @@ export default function ClassesPage() {
   const [editingItem, setEditingItem] = useState<ClassListItemDto | null>(null);
   const [viewingItem, setViewingItem] = useState<ClassListItemDto | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [selectedItemForAssignedModal, setSelectedItemForAssignedModal] = useState<{
+    name: string;
+    isEntireOrg: boolean;
+    branchIds: string[];
+  } | null>(null);
 
   // Form State
   const [formData, setFormData] = useState<{
@@ -520,7 +526,7 @@ export default function ClassesPage() {
                 <th className="py-3 px-4">Code</th>
                 <th className="py-3 px-4">Age Range</th>
                 <th className="py-3 px-4">Mapped Subjects</th>
-                <th className="py-3 px-4">Campus Scope</th>
+                <th className="py-3 px-4">Assigned To</th>
                 <th className="py-3 px-4 text-center">Sort Order</th>
                 <th className="py-3 px-4 text-center">Status</th>
                 <th className="py-3 px-4 text-right">Actions</th>
@@ -554,15 +560,21 @@ export default function ClassesPage() {
                       </span>
                     </td>
                     <td className="py-3 px-4">
-                      {item.applyTo === 'ALL_CAMPUSES' ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                          🌐 All Campuses
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
-                          📍 {item.branchIds?.length || 0} Campuses
-                        </span>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setSelectedItemForAssignedModal({
+                            name: item.name,
+                            isEntireOrg: item.applyTo === 'ALL_CAMPUSES',
+                            branchIds: item.branchIds || [],
+                          })
+                        }
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 hover:border-indigo-300 cursor-pointer transition-all shadow-xs"
+                        title="See where this class is assigned"
+                      >
+                        <span>{item.applyTo === 'ALL_CAMPUSES' ? '🌐 All Campuses' : `📍 ${item.branchIds?.length || 0} Campuses`}</span>
+                        <span className="text-[9px] text-indigo-400">›</span>
+                      </button>
                     </td>
                     <td className="py-3 px-4 text-center font-mono text-slate-500">{item.sortOrder}</td>
                     <td className="py-3 px-4 text-center">
@@ -941,6 +953,20 @@ export default function ClassesPage() {
           </div>
         </div>
       )}
+
+      {/* Reusable Assigned To Details Modal Popup */}
+      <AssignedToDetailsModal
+        isOpen={!!selectedItemForAssignedModal}
+        onClose={() => setSelectedItemForAssignedModal(null)}
+        formName={selectedItemForAssignedModal?.name || ''}
+        scopeState={{
+          isEntireOrg: selectedItemForAssignedModal?.isEntireOrg ?? false,
+          selectedHeadOfficeIds: [],
+          selectedRegionIds: [],
+          selectedSchoolIds: [],
+          selectedCampusIds: selectedItemForAssignedModal?.branchIds || [],
+        }}
+      />
     </div>
   );
 }
