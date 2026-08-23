@@ -878,3 +878,27 @@ export function checkDuplicateConcept(name: string): { isDuplicate: boolean; mes
 
   return { isDuplicate: false };
 }
+
+export function getFormDefinitionById(id: string) {
+  const sampleForms = [
+    {
+      id: 'f_prereg_2026',
+      name: 'Pre-Registration Form 2026',
+      code: 'FORM-PREREG-2026',
+      formPurpose: 'PRE_REGISTRATION',
+      status: 'PUBLISHED',
+      versionNumber: 1,
+      applyTo: 'SELECTED_CAMPUSES',
+    },
+    {
+      id: 'f_admission_2026',
+      name: 'Standard Admission Application',
+      code: 'FORM-ADM-2026',
+      formPurpose: 'ADMISSION',
+      status: 'PUBLISHED',
+      versionNumber: 2,
+      applyTo: 'ALL_CAMPUSES',
+    },
+  ];
+  return sampleForms.find((f) => f.id === id) || sampleForms[0];
+}

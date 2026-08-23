@@ -22,6 +22,19 @@ export interface SelectedHierarchyState {
   selectedCampusIds: string[];
 }
 
+export interface EffectiveCoverageItem {
+  campusId: string;
+  campusName: string;
+  schoolId: string;
+  schoolName: string;
+  regionId?: string;
+  regionName?: string;
+  headOfficeId?: string;
+  headOfficeName?: string;
+  appliedVia: string;
+  coverageType: 'DIRECT' | 'INHERITED' | 'UNIVERSAL';
+}
+
 export const SAMPLE_AUTHORIZED_HIERARCHY: HierarchyNodeItem[] = [
   {
     id: 'ho_central',
@@ -152,54 +165,119 @@ export function getHierarchyScopeSummary(state?: SelectedHierarchyState | null):
   return parts.join(' · ');
 }
 
+// Helper to resolve all effective descendant campus details
+export function resolveEffectiveCoverageDetails(
+  state?: SelectedHierarchyState | null,
+  hierarchy: HierarchyNodeItem[] = SAMPLE_AUTHORIZED_HIERARCHY
+): EffectiveCoverageItem[] {
+  if (!state) return [];
+
+  const resultsMap = new Map<string, EffectiveCoverageItem>();
+
+  const isUniversal = state.isEntireOrg;
+
+  const traverse = (
+    node: HierarchyNodeItem,
+    context: {
+      headOfficeId?: string;
+      headOfficeName?: string;
+      regionId?: string;
+      regionName?: string;
+      schoolId?: string;
+      schoolName?: string;
+      inheritedVia?: string;
+    }
+  ) => {
+    if (!node) return;
+
+    let nextContext = { ...context };
+    let currentCoveredVia = context.inheritedVia;
+
+    if (node.type === 'HEAD_OFFICE') {
+      nextContext.headOfficeId = node.id;
+      nextContext.headOfficeName = node.name;
+      if (isUniversal) {
+        currentCoveredVia = 'Universal Scope';
+      } else if (state.selectedHeadOfficeIds?.includes(node.id)) {
+        currentCoveredVia = node.name;
+      }
+    } else if (node.type === 'REGION') {
+      nextContext.regionId = node.id;
+      nextContext.regionName = node.name;
+      if (state.selectedRegionIds?.includes(node.id) && !currentCoveredVia) {
+        currentCoveredVia = node.name;
+      }
+    } else if (node.type === 'SCHOOL') {
+      nextContext.schoolId = node.id;
+      nextContext.schoolName = node.name;
+      if (state.selectedSchoolIds?.includes(node.id) && !currentCoveredVia) {
+        currentCoveredVia = node.name;
+      }
+    } else if (node.type === 'CAMPUS') {
+      const isDirectlySelected = state.selectedCampusIds?.includes(node.id);
+      if (isUniversal) {
+        resultsMap.set(node.id, {
+          campusId: node.id,
+          campusName: node.name,
+          schoolId: nextContext.schoolId || 'unknown_sch',
+          schoolName: nextContext.schoolName || 'Unknown School',
+          regionId: nextContext.regionId,
+          regionName: nextContext.regionName,
+          headOfficeId: nextContext.headOfficeId,
+          headOfficeName: nextContext.headOfficeName,
+          appliedVia: 'Universal Scope',
+          coverageType: 'UNIVERSAL',
+        });
+      } else if (isDirectlySelected) {
+        resultsMap.set(node.id, {
+          campusId: node.id,
+          campusName: node.name,
+          schoolId: nextContext.schoolId || 'unknown_sch',
+          schoolName: nextContext.schoolName || 'Unknown School',
+          regionId: nextContext.regionId,
+          regionName: nextContext.regionName,
+          headOfficeId: nextContext.headOfficeId,
+          headOfficeName: nextContext.headOfficeName,
+          appliedVia: 'Direct Assignment',
+          coverageType: 'DIRECT',
+        });
+      } else if (currentCoveredVia) {
+        resultsMap.set(node.id, {
+          campusId: node.id,
+          campusName: node.name,
+          schoolId: nextContext.schoolId || 'unknown_sch',
+          schoolName: nextContext.schoolName || 'Unknown School',
+          regionId: nextContext.regionId,
+          regionName: nextContext.regionName,
+          headOfficeId: nextContext.headOfficeId,
+          headOfficeName: nextContext.headOfficeName,
+          appliedVia: currentCoveredVia,
+          coverageType: 'INHERITED',
+        });
+      }
+      return;
+    }
+
+    nextContext.inheritedVia = currentCoveredVia;
+
+    if (node.children && Array.isArray(node.children)) {
+      node.children.forEach((c) => traverse(c, nextContext));
+    }
+  };
+
+  (hierarchy || []).forEach((root) => traverse(root, {}));
+  return Array.from(resultsMap.values());
+}
+
 // Helper to resolve all effective descendant campus IDs from mixed selection
 export function resolveEffectiveBranchIds(
   state?: SelectedHierarchyState | null,
   hierarchy: HierarchyNodeItem[] = SAMPLE_AUTHORIZED_HIERARCHY
 ): string[] {
-  if (!state || state.isEntireOrg) return [];
-
-  const branchSet = new Set<string>();
-
-  // Add directly selected campuses
-  (state.selectedCampusIds || []).forEach((id) => branchSet.add(id));
-
-  // Traverse tree to add descendant campuses of selected parents
-  const collectCampuses = (node: HierarchyNodeItem) => {
-    if (!node) return;
-    if (node.type === 'CAMPUS') {
-      branchSet.add(node.id);
-    }
-    if (node.children && Array.isArray(node.children)) {
-      node.children.forEach(collectCampuses);
-    }
-  };
-
-  const findAndCollect = (nodeId: string, node: HierarchyNodeItem) => {
-    if (!node) return false;
-    if (node.id === nodeId) {
-      collectCampuses(node);
-      return true;
-    }
-    if (node.children && Array.isArray(node.children)) {
-      for (const child of node.children) {
-        if (findAndCollect(nodeId, child)) return true;
-      }
-    }
-    return false;
-  };
-
-  const allParentIds = [
-    ...(state.selectedHeadOfficeIds || []),
-    ...(state.selectedRegionIds || []),
-    ...(state.selectedSchoolIds || []),
-  ];
-
-  allParentIds.forEach((pId) => {
-    (hierarchy || []).forEach((root) => findAndCollect(pId, root));
-  });
-
-  return Array.from(branchSet);
+  if (!state) return [];
+  if (state.isEntireOrg) return [];
+  const coverage = resolveEffectiveCoverageDetails(state, hierarchy);
+  return coverage.map((c) => c.campusId);
 }
 
 // Recursive helper to count total descendant campuses under a node
@@ -234,6 +312,8 @@ export function HierarchyScopePickerModal({
   const [viewFilter, setViewFilter] = useState<'ALL' | 'SELECTED_ONLY'>('ALL');
   const [showSelectedDrawer, setShowSelectedDrawer] = useState(false);
   const [selectedDrawerSearch, setSelectedDrawerSearch] = useState('');
+  const [selectedDrawerTypeFilter, setSelectedDrawerTypeFilter] = useState<string>('ALL');
+  const [confirmClearAll, setConfirmClearAll] = useState(false);
 
   // Default expansion: Top level collapsed / only first HO open for scalability
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({
@@ -247,6 +327,9 @@ export function HierarchyScopePickerModal({
       setSearchTerm('');
       setViewFilter('ALL');
       setShowSelectedDrawer(false);
+      setSelectedDrawerSearch('');
+      setSelectedDrawerTypeFilter('ALL');
+      setConfirmClearAll(false);
     }
   }, [isOpen, initialState]);
 
@@ -255,10 +338,10 @@ export function HierarchyScopePickerModal({
   }, [authorizedHierarchy]);
 
   // Flattened lookup map with parent & descendant relations for O(1) checks
-  const { flatLookup, descendantCampusMap, breadcrumbMap } = useMemo(() => {
+  const { flatLookup, descendantCampusMap, ancestorPathMap } = useMemo(() => {
     const flat = new Map<string, HierarchyNodeItem>();
     const descMap = new Map<string, string[]>();
-    const bcrumb = new Map<string, string>();
+    const ancestorPath = new Map<string, string>();
 
     const getCampuses = (n: HierarchyNodeItem): string[] => {
       if (n.type === 'CAMPUS') return [n.id];
@@ -269,17 +352,17 @@ export function HierarchyScopePickerModal({
     const traverse = (node: HierarchyNodeItem, path: string[] = []) => {
       if (!node) return;
       flat.set(node.id, node);
-      const currentPath = [...path, node.name];
-      bcrumb.set(node.id, currentPath.join(' › '));
+      ancestorPath.set(node.id, path.length > 0 ? path.join(' › ') : '');
       descMap.set(node.id, getCampuses(node));
 
+      const nextPath = [...path, node.name];
       if (node.children && Array.isArray(node.children)) {
-        node.children.forEach((c) => traverse(c, currentPath));
+        node.children.forEach((c) => traverse(c, nextPath));
       }
     };
 
     safeHierarchy.forEach((root) => traverse(root, []));
-    return { flatLookup: flat, descendantCampusMap: descMap, breadcrumbMap: bcrumb };
+    return { flatLookup: flat, descendantCampusMap: descMap, ancestorPathMap: ancestorPath };
   }, [safeHierarchy]);
 
   // Check if a node is covered by an ancestor
@@ -307,13 +390,20 @@ export function HierarchyScopePickerModal({
 
   // Tri-state selection check: 'NONE' | 'PARTIAL' | 'FULL'
   const getNodeSelectionState = useCallback(
-    (node: HierarchyNodeItem): 'NONE' | 'PARTIAL' | 'FULL' => {
-      if (scopeState.isEntireOrg) return 'FULL';
+    (node: HierarchyNodeItem): { state: 'NONE' | 'PARTIAL' | 'FULL'; selectedCount: number; totalCount: number } => {
+      const totalCount = descendantCampusMap.get(node.id)?.length || (node.type === 'CAMPUS' ? 1 : 0);
+
+      if (scopeState.isEntireOrg) {
+        return { state: 'FULL', selectedCount: totalCount, totalCount };
+      }
       const coveredBy = getCoveringAncestor(node.id);
-      if (coveredBy) return 'FULL';
+      if (coveredBy) {
+        return { state: 'FULL', selectedCount: totalCount, totalCount };
+      }
 
       if (node.type === 'CAMPUS') {
-        return scopeState.selectedCampusIds.includes(node.id) ? 'FULL' : 'NONE';
+        const isSel = scopeState.selectedCampusIds.includes(node.id);
+        return { state: isSel ? 'FULL' : 'NONE', selectedCount: isSel ? 1 : 0, totalCount: 1 };
       }
 
       const isDirectlySelected =
@@ -321,21 +411,25 @@ export function HierarchyScopePickerModal({
         (node.type === 'REGION' && scopeState.selectedRegionIds.includes(node.id)) ||
         (node.type === 'SCHOOL' && scopeState.selectedSchoolIds.includes(node.id));
 
-      if (isDirectlySelected) return 'FULL';
+      if (isDirectlySelected) {
+        return { state: 'FULL', selectedCount: totalCount, totalCount };
+      }
 
-      // Check descendant campuses for partial selection
+      // Check descendant campuses
       const descendantCampusIds = descendantCampusMap.get(node.id) || [];
-      if (descendantCampusIds.length === 0) return 'NONE';
+      if (descendantCampusIds.length === 0) {
+        return { state: 'NONE', selectedCount: 0, totalCount: 0 };
+      }
 
       const selectedDescendantCount = descendantCampusIds.filter((cId) =>
         scopeState.selectedCampusIds.includes(cId)
       ).length;
 
       if (selectedDescendantCount === descendantCampusIds.length && descendantCampusIds.length > 0) {
-        return 'FULL';
+        return { state: 'FULL', selectedCount: totalCount, totalCount };
       }
       if (selectedDescendantCount > 0) {
-        return 'PARTIAL';
+        return { state: 'PARTIAL', selectedCount: selectedDescendantCount, totalCount };
       }
 
       // Check if any intermediate child region/school is selected
@@ -348,9 +442,11 @@ export function HierarchyScopePickerModal({
         });
       };
 
-      if (hasAnySelectedChild(node)) return 'PARTIAL';
+      if (hasAnySelectedChild(node)) {
+        return { state: 'PARTIAL', selectedCount: selectedDescendantCount, totalCount };
+      }
 
-      return 'NONE';
+      return { state: 'NONE', selectedCount: 0, totalCount };
     },
     [scopeState, getCoveringAncestor, descendantCampusMap]
   );
@@ -376,8 +472,8 @@ export function HierarchyScopePickerModal({
   const matchesSelectedOnly = useCallback(
     (node: HierarchyNodeItem): boolean => {
       if (viewFilter === 'ALL') return true;
-      const selState = getNodeSelectionState(node);
-      if (selState !== 'NONE') return true;
+      const sel = getNodeSelectionState(node);
+      if (sel.state !== 'NONE') return true;
       if (node.children && Array.isArray(node.children)) {
         return node.children.some(matchesSelectedOnly);
       }
@@ -403,6 +499,7 @@ export function HierarchyScopePickerModal({
     }
   };
 
+  // Toggle selection on a node
   const handleToggleNode = (node: HierarchyNodeItem) => {
     if (scopeState.isEntireOrg || !node) return;
 
@@ -441,7 +538,85 @@ export function HierarchyScopePickerModal({
     }
   };
 
-  const handleRemoveChip = (id: string, type: HierarchyNodeType) => {
+  // Bulk select all campuses under a specific parent node
+  const handleSelectAllCampusesUnderNode = (node: HierarchyNodeItem) => {
+    const campusIds = descendantCampusMap.get(node.id) || [];
+    setScopeState((prev) => ({
+      ...prev,
+      isEntireOrg: false,
+      selectedCampusIds: Array.from(new Set([...prev.selectedCampusIds, ...campusIds])),
+    }));
+  };
+
+  // Bulk unselect all campuses under a specific parent node
+  const handleUnselectAllCampusesUnderNode = (node: HierarchyNodeItem) => {
+    const campusIds = descendantCampusMap.get(node.id) || [];
+    setScopeState((prev) => ({
+      ...prev,
+      selectedHeadOfficeIds: node.type === 'HEAD_OFFICE' ? prev.selectedHeadOfficeIds.filter((id) => id !== node.id) : prev.selectedHeadOfficeIds,
+      selectedRegionIds: node.type === 'REGION' ? prev.selectedRegionIds.filter((id) => id !== node.id) : prev.selectedRegionIds,
+      selectedSchoolIds: node.type === 'SCHOOL' ? prev.selectedSchoolIds.filter((id) => id !== node.id) : prev.selectedSchoolIds,
+      selectedCampusIds: prev.selectedCampusIds.filter((id) => !campusIds.includes(id)),
+    }));
+  };
+
+  // Global Select All Authorized Units
+  const handleSelectAllAuthorized = () => {
+    const allHoIds: string[] = [];
+    const allRegIds: string[] = [];
+    const allSchIds: string[] = [];
+    const allCampIds: string[] = [];
+
+    const traverse = (n: HierarchyNodeItem) => {
+      if (n.type === 'HEAD_OFFICE') allHoIds.push(n.id);
+      if (n.type === 'REGION') allRegIds.push(n.id);
+      if (n.type === 'SCHOOL') allSchIds.push(n.id);
+      if (n.type === 'CAMPUS') allCampIds.push(n.id);
+      if (n.children) n.children.forEach(traverse);
+    };
+    safeHierarchy.forEach(traverse);
+
+    setScopeState({
+      isEntireOrg: false,
+      selectedHeadOfficeIds: allHoIds,
+      selectedRegionIds: allRegIds,
+      selectedSchoolIds: allSchIds,
+      selectedCampusIds: allCampIds,
+    });
+  };
+
+  // Search Results Bulk Select
+  const searchResultCampuses = useMemo(() => {
+    if (!searchTerm.trim()) return [];
+    const matchingLeafs: string[] = [];
+    const traverse = (n: HierarchyNodeItem) => {
+      if (matchesSearch(n)) {
+        const desc = descendantCampusMap.get(n.id) || (n.type === 'CAMPUS' ? [n.id] : []);
+        matchingLeafs.push(...desc);
+      }
+      if (n.children) n.children.forEach(traverse);
+    };
+    safeHierarchy.forEach(traverse);
+    return Array.from(new Set(matchingLeafs));
+  }, [searchTerm, matchesSearch, safeHierarchy, descendantCampusMap]);
+
+  const handleSelectSearchResults = () => {
+    setScopeState((prev) => ({
+      ...prev,
+      isEntireOrg: false,
+      selectedCampusIds: Array.from(new Set([...prev.selectedCampusIds, ...searchResultCampuses])),
+    }));
+  };
+
+  const handleUnselectSearchResults = () => {
+    setScopeState((prev) => ({
+      ...prev,
+      selectedCampusIds: prev.selectedCampusIds.filter((id) => !searchResultCampuses.includes(id)),
+    }));
+  };
+
+  // Individual item remove
+  const handleRemoveItem = (id: string, type: HierarchyNodeType) => {
     if (type === 'HEAD_OFFICE') {
       setScopeState((p) => ({ ...p, selectedHeadOfficeIds: p.selectedHeadOfficeIds.filter((x) => x !== id) }));
     } else if (type === 'REGION') {
@@ -461,14 +636,28 @@ export function HierarchyScopePickerModal({
       selectedSchoolIds: [],
       selectedCampusIds: [],
     });
+    setConfirmClearAll(false);
   };
 
-  const totalSelectedCount =
+  const handleClearType = (type: string) => {
+    if (type === 'HEAD_OFFICE') setScopeState((p) => ({ ...p, selectedHeadOfficeIds: [] }));
+    if (type === 'REGION') setScopeState((p) => ({ ...p, selectedRegionIds: [] }));
+    if (type === 'SCHOOL') setScopeState((p) => ({ ...p, selectedSchoolIds: [] }));
+    if (type === 'CAMPUS') setScopeState((p) => ({ ...p, selectedCampusIds: [] }));
+  };
+
+  const totalExplicitCount =
     (scopeState.isEntireOrg ? 1 : 0) +
     (scopeState.selectedHeadOfficeIds?.length || 0) +
     (scopeState.selectedRegionIds?.length || 0) +
     (scopeState.selectedSchoolIds?.length || 0) +
     (scopeState.selectedCampusIds?.length || 0);
+
+  const effectiveCoverageList = useMemo(() => {
+    return resolveEffectiveCoverageDetails(scopeState, safeHierarchy);
+  }, [scopeState, safeHierarchy]);
+
+  const effectiveCoverageCount = effectiveCoverageList.length;
 
   const handleSave = () => {
     const scopeType: ConfigScopeType = scopeState.isEntireOrg ? 'ALL_CAMPUSES' : 'SELECTED_CAMPUSES';
@@ -477,51 +666,54 @@ export function HierarchyScopePickerModal({
     onClose();
   };
 
-  // Compile list of selected items for the "View Selected" list
-  const selectedItemsList = useMemo(() => {
-    const list: Array<{ id: string; name: string; type: HierarchyNodeType; breadcrumb: string }> = [];
+  // Compile list of explicit selected items for "Selected Targets" drawer
+  const explicitSelectedItems = useMemo(() => {
+    const list: Array<{ id: string; name: string; type: HierarchyNodeType; path: string }> = [];
     scopeState.selectedHeadOfficeIds.forEach((id) => {
       const n = flatLookup.get(id);
-      if (n) list.push({ id: n.id, name: n.name, type: 'HEAD_OFFICE', breadcrumb: breadcrumbMap.get(n.id) || n.name });
+      if (n) list.push({ id: n.id, name: n.name, type: 'HEAD_OFFICE', path: ancestorPathMap.get(n.id) || '' });
     });
     scopeState.selectedRegionIds.forEach((id) => {
       const n = flatLookup.get(id);
-      if (n) list.push({ id: n.id, name: n.name, type: 'REGION', breadcrumb: breadcrumbMap.get(n.id) || n.name });
+      if (n) list.push({ id: n.id, name: n.name, type: 'REGION', path: ancestorPathMap.get(n.id) || '' });
     });
     scopeState.selectedSchoolIds.forEach((id) => {
       const n = flatLookup.get(id);
-      if (n) list.push({ id: n.id, name: n.name, type: 'SCHOOL', breadcrumb: breadcrumbMap.get(n.id) || n.name });
+      if (n) list.push({ id: n.id, name: n.name, type: 'SCHOOL', path: ancestorPathMap.get(n.id) || '' });
     });
     scopeState.selectedCampusIds.forEach((id) => {
       const n = flatLookup.get(id);
-      if (n) list.push({ id: n.id, name: n.name, type: 'CAMPUS', breadcrumb: breadcrumbMap.get(n.id) || n.name });
+      if (n) list.push({ id: n.id, name: n.name, type: 'CAMPUS', path: ancestorPathMap.get(n.id) || '' });
     });
     return list;
-  }, [scopeState, flatLookup, breadcrumbMap]);
+  }, [scopeState, flatLookup, ancestorPathMap]);
 
   const filteredSelectedDrawerList = useMemo(() => {
-    if (!selectedDrawerSearch.trim()) return selectedItemsList;
-    const q = selectedDrawerSearch.toLowerCase();
-    return selectedItemsList.filter(
-      (item) => item.name.toLowerCase().includes(q) || item.breadcrumb.toLowerCase().includes(q)
-    );
-  }, [selectedItemsList, selectedDrawerSearch]);
+    return explicitSelectedItems.filter((item) => {
+      if (selectedDrawerTypeFilter !== 'ALL' && item.type !== selectedDrawerTypeFilter) return false;
+      if (selectedDrawerSearch.trim()) {
+        const q = selectedDrawerSearch.toLowerCase();
+        return item.name.toLowerCase().includes(q) || item.path.toLowerCase().includes(q);
+      }
+      return true;
+    });
+  }, [explicitSelectedItems, selectedDrawerTypeFilter, selectedDrawerSearch]);
 
   // ── CONDITIONAL RENDER AFTER ALL HOOKS ──
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-2xl w-full p-4 sm:p-6 shadow-2xl space-y-3.5 animate-in fade-in zoom-in-95 my-auto max-h-[92vh] flex flex-col justify-between relative">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-2xl w-full p-4 sm:p-6 shadow-2xl space-y-3 animate-in fade-in zoom-in-95 my-auto max-h-[92vh] flex flex-col justify-between relative">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 shrink-0">
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5 shrink-0">
           <div>
             <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
               <span>🏛️</span>
               <span>Configure Hierarchy Applicability</span>
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Mixed multi-level selection with automatic inheritance across large school networks.
+              Assign form across Head Offices, Regions, Schools, or Campuses with automatic inheritance.
             </p>
           </div>
           <button
@@ -539,7 +731,7 @@ export function HierarchyScopePickerModal({
             canApplyUniversal ? 'cursor-pointer' : 'opacity-60 cursor-not-allowed'
           } ${
             scopeState.isEntireOrg
-              ? 'border-emerald-500 bg-emerald-50/70 dark:bg-emerald-950/40 ring-2 ring-emerald-500/20'
+              ? 'border-indigo-600 bg-indigo-50/70 dark:bg-indigo-950/40 ring-2 ring-indigo-500/20'
               : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 hover:bg-slate-100'
           }`}
         >
@@ -549,7 +741,7 @@ export function HierarchyScopePickerModal({
               checked={scopeState.isEntireOrg}
               disabled={!canApplyUniversal}
               onChange={(e) => handleToggleEntireOrg(e.target.checked)}
-              className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 w-4 h-4 disabled:opacity-50 cursor-pointer"
+              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-4 h-4 disabled:opacity-50 cursor-pointer"
             />
             <div>
               <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
@@ -564,7 +756,7 @@ export function HierarchyScopePickerModal({
             </div>
           </div>
           {scopeState.isEntireOrg && (
-            <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/60 px-2 py-0.5 rounded-full">
+            <span className="text-xs font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-100 dark:bg-indigo-900/60 px-2 py-0.5 rounded-full">
               Universal Active
             </span>
           )}
@@ -572,63 +764,107 @@ export function HierarchyScopePickerModal({
 
         {/* Search Bar & View Filter Toolbar */}
         {!scopeState.isEntireOrg && (
-          <div className="flex items-center gap-2 shrink-0">
-            <div className="relative flex-1">
-              <span className="absolute left-3 top-2.5 text-xs text-slate-400">🔍</span>
-              <input
-                type="text"
-                placeholder="Search Head Office, Region, School or Campus..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-8 pr-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-              />
-              {searchTerm && (
+          <div className="space-y-1.5 shrink-0">
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <span className="absolute left-3 top-2 text-xs text-slate-400">🔍</span>
+                <input
+                  type="text"
+                  placeholder="Search Head Office, Region, School or Campus..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-8 pr-7 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                />
+                {searchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchTerm('')}
+                    className="absolute right-2.5 top-2 text-xs text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* View Filter Pill (All | Selected) */}
+              <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold shrink-0">
                 <button
                   type="button"
-                  onClick={() => setSearchTerm('')}
-                  className="absolute right-3 top-2.5 text-xs text-slate-400 hover:text-slate-600"
+                  onClick={() => setViewFilter('ALL')}
+                  className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                    viewFilter === 'ALL'
+                      ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                  }`}
                 >
-                  ✕
+                  All
                 </button>
-              )}
+                <button
+                  type="button"
+                  onClick={() => setViewFilter('SELECTED_ONLY')}
+                  className={`px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 cursor-pointer ${
+                    viewFilter === 'SELECTED_ONLY'
+                      ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                  }`}
+                >
+                  <span>Selected</span>
+                  {totalExplicitCount > 0 && (
+                    <span className="px-1.5 py-0.2 bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 rounded-full text-[10px]">
+                      {totalExplicitCount}
+                    </span>
+                  )}
+                </button>
+              </div>
             </div>
 
-            {/* View Filter Pill (All | Selected) */}
-            <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold shrink-0">
-              <button
-                type="button"
-                onClick={() => setViewFilter('ALL')}
-                className={`px-2.5 py-1.5 rounded-lg transition-all ${
-                  viewFilter === 'ALL'
-                    ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-                }`}
-              >
-                All
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewFilter('SELECTED_ONLY')}
-                className={`px-2.5 py-1.5 rounded-lg transition-all flex items-center gap-1 ${
-                  viewFilter === 'SELECTED_ONLY'
-                    ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-                }`}
-              >
-                <span>Selected</span>
-                {totalSelectedCount > 0 && (
-                  <span className="px-1.5 py-0.2 bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 rounded-full text-[10px]">
-                    {totalSelectedCount}
-                  </span>
-                )}
-              </button>
+            {/* Quick Bulk Action Bar */}
+            <div className="flex items-center justify-between text-[11px] px-1 text-slate-500 dark:text-slate-400">
+              {searchTerm && searchResultCampuses.length > 0 ? (
+                <div className="flex items-center gap-2">
+                  <span>Found {searchResultCampuses.length} matching locations:</span>
+                  <button
+                    type="button"
+                    onClick={handleSelectSearchResults}
+                    className="text-indigo-600 dark:text-indigo-400 font-bold hover:underline cursor-pointer"
+                  >
+                    Select Results ({searchResultCampuses.length})
+                  </button>
+                  <span>·</span>
+                  <button
+                    type="button"
+                    onClick={handleUnselectSearchResults}
+                    className="text-slate-400 hover:text-rose-500 cursor-pointer"
+                  >
+                    Unselect Results
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleSelectAllAuthorized}
+                    className="text-indigo-600 dark:text-indigo-400 font-medium hover:underline cursor-pointer"
+                  >
+                    Select All Authorized
+                  </button>
+                  <span>·</span>
+                  <button
+                    type="button"
+                    onClick={handleClearAll}
+                    className="text-slate-400 hover:text-rose-500 cursor-pointer"
+                  >
+                    Clear Selection
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
 
         {/* Hierarchy Tree Body (Scrollable viewport) */}
         {!scopeState.isEntireOrg ? (
-          <div className="border border-slate-200 dark:border-slate-800 rounded-2xl p-3 bg-white dark:bg-slate-900/60 flex-1 overflow-y-auto space-y-2.5 min-h-[220px] max-h-[360px]">
+          <div className="border border-slate-200 dark:border-slate-800 rounded-2xl p-2.5 bg-white dark:bg-slate-900/60 flex-1 overflow-y-auto space-y-2 min-h-[220px] max-h-[350px]">
             {safeHierarchy.filter(matchesSearch).filter(matchesSelectedOnly).length === 0 ? (
               <div className="text-center py-10 text-xs text-slate-400 space-y-1">
                 <span className="text-xl block">🔍</span>
@@ -645,11 +881,11 @@ export function HierarchyScopePickerModal({
               </div>
             ) : (
               safeHierarchy.filter(matchesSearch).filter(matchesSelectedOnly).map((rootNode) => {
-                const rootSelState = getNodeSelectionState(rootNode);
+                const rootSel = getNodeSelectionState(rootNode);
                 const campusCount = countCampuses(rootNode);
 
                 return (
-                  <div key={rootNode.id} className="space-y-1.5">
+                  <div key={rootNode.id} className="space-y-1">
                     {/* Level 1: Head Office / Direct School */}
                     <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
                       <div className="flex items-center gap-2 min-w-0">
@@ -666,9 +902,9 @@ export function HierarchyScopePickerModal({
                         )}
                         <input
                           type="checkbox"
-                          checked={rootSelState === 'FULL'}
+                          checked={rootSel.state === 'FULL'}
                           ref={(el) => {
-                            if (el) el.indeterminate = rootSelState === 'PARTIAL';
+                            if (el) el.indeterminate = rootSel.state === 'PARTIAL';
                           }}
                           onChange={() => handleToggleNode(rootNode)}
                           className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4 cursor-pointer"
@@ -677,7 +913,7 @@ export function HierarchyScopePickerModal({
                           {rootNode.name}
                         </span>
                       </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
+                      <div className="flex items-center gap-2 shrink-0">
                         <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
                           {campusCount} {campusCount === 1 ? 'Campus' : 'Campuses'}
                         </span>
@@ -689,9 +925,9 @@ export function HierarchyScopePickerModal({
 
                     {/* Level 2: Regions / Schools */}
                     {expandedNodes[rootNode.id] && rootNode.children && rootNode.children.length > 0 && (
-                      <div className="pl-4 sm:pl-6 space-y-1.5 border-l-2 border-slate-100 dark:border-slate-800 ml-3">
+                      <div className="pl-4 sm:pl-6 space-y-1 border-l-2 border-slate-100 dark:border-slate-800 ml-3">
                         {rootNode.children.filter(matchesSearch).filter(matchesSelectedOnly).map((childNode) => {
-                          const childSelState = getNodeSelectionState(childNode);
+                          const childSel = getNodeSelectionState(childNode);
                           const childCampusCount = countCampuses(childNode);
                           const coveredByParent = getCoveringAncestor(childNode.id);
 
@@ -712,10 +948,10 @@ export function HierarchyScopePickerModal({
                                   )}
                                   <input
                                     type="checkbox"
-                                    checked={childSelState === 'FULL'}
+                                    checked={childSel.state === 'FULL'}
                                     disabled={!!coveredByParent}
                                     ref={(el) => {
-                                      if (el) el.indeterminate = childSelState === 'PARTIAL';
+                                      if (el) el.indeterminate = childSel.state === 'PARTIAL';
                                     }}
                                     onChange={() => handleToggleNode(childNode)}
                                     className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5 disabled:opacity-40 cursor-pointer"
@@ -724,15 +960,36 @@ export function HierarchyScopePickerModal({
                                     {childNode.name}
                                   </span>
                                 </div>
-                                <div className="flex items-center gap-1.5 shrink-0">
+                                <div className="flex items-center gap-2 shrink-0">
                                   {coveredByParent ? (
                                     <span className="text-[10px] text-amber-600 dark:text-amber-400 italic">
                                       Covered by {coveredByParent}
                                     </span>
                                   ) : (
-                                    <span className="text-[10px] text-slate-400 font-medium">
-                                      {childCampusCount} {childCampusCount === 1 ? 'Campus' : 'Campuses'}
-                                    </span>
+                                    <>
+                                      {childNode.children && childNode.children.length > 0 && (
+                                        <div className="flex items-center gap-1 text-[10px]">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleSelectAllCampusesUnderNode(childNode)}
+                                            className="text-indigo-600 hover:underline cursor-pointer"
+                                          >
+                                            Select All
+                                          </button>
+                                          <span className="text-slate-300">/</span>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleUnselectAllCampusesUnderNode(childNode)}
+                                            className="text-slate-400 hover:text-rose-500 cursor-pointer"
+                                          >
+                                            Clear
+                                          </button>
+                                        </div>
+                                      )}
+                                      <span className="text-[10px] text-slate-400 font-medium">
+                                        {childCampusCount} {childCampusCount === 1 ? 'Campus' : 'Campuses'}
+                                      </span>
+                                    </>
                                   )}
                                   <span className="text-[9px] uppercase text-slate-400 bg-slate-100 dark:bg-slate-800 px-1 py-0.2 rounded">
                                     {childNode.type}
@@ -744,7 +1001,7 @@ export function HierarchyScopePickerModal({
                               {expandedNodes[childNode.id] && childNode.children && childNode.children.length > 0 && (
                                 <div className="pl-4 sm:pl-5 space-y-1 border-l border-slate-100 dark:border-slate-800 ml-2">
                                   {childNode.children.filter(matchesSearch).filter(matchesSelectedOnly).map((grandChild) => {
-                                    const grandChildSelState = getNodeSelectionState(grandChild);
+                                    const grandChildSel = getNodeSelectionState(grandChild);
                                     const grandChildCampuses = countCampuses(grandChild);
                                     const coveredBy = getCoveringAncestor(grandChild.id);
 
@@ -768,10 +1025,10 @@ export function HierarchyScopePickerModal({
                                             )}
                                             <input
                                               type="checkbox"
-                                              checked={grandChildSelState === 'FULL'}
+                                              checked={grandChildSel.state === 'FULL'}
                                               disabled={!!coveredBy}
                                               ref={(el) => {
-                                                if (el) el.indeterminate = grandChildSelState === 'PARTIAL';
+                                                if (el) el.indeterminate = grandChildSel.state === 'PARTIAL';
                                               }}
                                               onChange={() => handleToggleNode(grandChild)}
                                               className="rounded border-slate-300 text-indigo-600 h-3.5 w-3.5 disabled:opacity-40 cursor-pointer"
@@ -780,15 +1037,36 @@ export function HierarchyScopePickerModal({
                                               {grandChild.name}
                                             </span>
                                           </div>
-                                          <div className="flex items-center gap-1.5 shrink-0">
+                                          <div className="flex items-center gap-2 shrink-0">
                                             {coveredBy ? (
                                               <span className="text-[10px] text-amber-600 dark:text-amber-400 italic">
                                                 Covered
                                               </span>
                                             ) : (
-                                              <span className="text-[10px] text-slate-400 font-medium">
-                                                {grandChildCampuses} {grandChildCampuses === 1 ? 'Campus' : 'Campuses'}
-                                              </span>
+                                              <>
+                                                {grandChild.children && grandChild.children.length > 0 && (
+                                                  <div className="flex items-center gap-1 text-[10px]">
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => handleSelectAllCampusesUnderNode(grandChild)}
+                                                      className="text-indigo-600 hover:underline cursor-pointer"
+                                                    >
+                                                      Select All
+                                                    </button>
+                                                    <span className="text-slate-300">/</span>
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => handleUnselectAllCampusesUnderNode(grandChild)}
+                                                      className="text-slate-400 hover:text-rose-500 cursor-pointer"
+                                                    >
+                                                      Clear
+                                                    </button>
+                                                  </div>
+                                                )}
+                                                <span className="text-[10px] text-slate-400 font-medium">
+                                                  {grandChildCampuses} {grandChildCampuses === 1 ? 'Campus' : 'Campuses'}
+                                                </span>
+                                              </>
                                             )}
                                             <span className="text-[9px] uppercase text-slate-400">
                                               {grandChild.type}
@@ -854,140 +1132,197 @@ export function HierarchyScopePickerModal({
           </div>
         ) : null}
 
-        {/* Adaptive Selected Scope Summary (No Huge Chip Wall for 60+ Campuses) */}
-        {!scopeState.isEntireOrg && totalSelectedCount > 0 && (
-          <div className="p-2.5 sm:p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 space-y-2 shrink-0">
+        {/* Adaptive Selected Targets Summary (Explicit vs Effective Coverage) */}
+        {!scopeState.isEntireOrg && totalExplicitCount > 0 && (
+          <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 space-y-1.5 shrink-0">
             <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
-              <span className="flex items-center gap-1.5">
-                <span>Selected Targets:</span>
-                <span className="px-1.5 py-0.2 rounded-full bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 text-[11px]">
-                  {totalSelectedCount}
-                </span>
-              </span>
               <div className="flex items-center gap-2">
-                {totalSelectedCount > 4 && (
-                  <button
-                    type="button"
-                    onClick={() => setShowSelectedDrawer(true)}
-                    className="text-[11px] text-indigo-600 dark:text-indigo-400 font-bold hover:underline cursor-pointer"
-                  >
-                    View Selected ({totalSelectedCount})
-                  </button>
-                )}
+                <span>Selected Targets ({totalExplicitCount})</span>
+                <span className="text-[11px] font-normal text-slate-500">
+                  · Effective Coverage: <strong className="text-indigo-600 dark:text-indigo-400">{effectiveCoverageCount} Campuses</strong>
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowSelectedDrawer(true)}
+                  className="text-[11px] text-indigo-600 dark:text-indigo-400 font-bold hover:underline cursor-pointer"
+                >
+                  View Selected ({totalExplicitCount})
+                </button>
+                <span>·</span>
                 <button
                   type="button"
                   onClick={handleClearAll}
-                  className="text-[11px] text-slate-400 hover:text-rose-500 font-medium cursor-pointer"
+                  className="text-[11px] text-slate-400 hover:text-rose-500 cursor-pointer"
                 >
                   Clear All
                 </button>
               </div>
             </div>
 
-            {/* If small count (<= 4), show inline chips. If large count (> 4), show clean collapsed summary */}
-            {totalSelectedCount <= 4 ? (
-              <div className="flex flex-wrap gap-1.5 max-h-16 overflow-y-auto">
+            {/* Small counts show compact inline chips */}
+            {totalExplicitCount <= 4 && (
+              <div className="flex flex-wrap gap-1.5 pt-0.5">
                 {scopeState.selectedHeadOfficeIds.map((id) => (
                   <span
                     key={id}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-semibold bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-200 border border-indigo-200 dark:border-indigo-800"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-semibold bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-200 border border-indigo-200 dark:border-indigo-800"
                   >
                     <span>🏛️ {flatLookup.get(id)?.name || id}</span>
-                    <button onClick={() => handleRemoveChip(id, 'HEAD_OFFICE')} className="text-xs font-bold cursor-pointer">✕</button>
+                    <button onClick={() => handleRemoveItem(id, 'HEAD_OFFICE')} className="text-xs font-bold cursor-pointer">✕</button>
                   </span>
                 ))}
                 {scopeState.selectedRegionIds.map((id) => (
                   <span
                     key={id}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-semibold bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-200 border border-indigo-200 dark:border-indigo-800"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-semibold bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-200 border border-indigo-200 dark:border-indigo-800"
                   >
                     <span>🗺️ {flatLookup.get(id)?.name || id}</span>
-                    <button onClick={() => handleRemoveChip(id, 'REGION')} className="text-xs font-bold cursor-pointer">✕</button>
+                    <button onClick={() => handleRemoveItem(id, 'REGION')} className="text-xs font-bold cursor-pointer">✕</button>
                   </span>
                 ))}
                 {scopeState.selectedSchoolIds.map((id) => (
                   <span
                     key={id}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-semibold bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-200 border border-indigo-200 dark:border-indigo-800"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-semibold bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-200 border border-indigo-200 dark:border-indigo-800"
                   >
                     <span>🏫 {flatLookup.get(id)?.name || id}</span>
-                    <button onClick={() => handleRemoveChip(id, 'SCHOOL')} className="text-xs font-bold cursor-pointer">✕</button>
+                    <button onClick={() => handleRemoveItem(id, 'SCHOOL')} className="text-xs font-bold cursor-pointer">✕</button>
                   </span>
                 ))}
                 {scopeState.selectedCampusIds.map((id) => (
                   <span
                     key={id}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-semibold bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-200 border border-indigo-200 dark:border-indigo-800"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-semibold bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-200 border border-indigo-200 dark:border-indigo-800"
                   >
                     <span>📍 {flatLookup.get(id)?.name || id}</span>
-                    <button onClick={() => handleRemoveChip(id, 'CAMPUS')} className="text-xs font-bold cursor-pointer">✕</button>
+                    <button onClick={() => handleRemoveItem(id, 'CAMPUS')} className="text-xs font-bold cursor-pointer">✕</button>
                   </span>
                 ))}
-              </div>
-            ) : (
-              <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-900/60 p-2 rounded-xl border border-slate-200/60 dark:border-slate-800">
-                <span className="truncate mr-2">
-                  {getHierarchyScopeSummary(scopeState)}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setShowSelectedDrawer(true)}
-                  className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-300 font-semibold text-xs shrink-0 hover:bg-indigo-100"
-                >
-                  Manage List
-                </button>
               </div>
             )}
           </div>
         )}
 
-        {/* View Selected Drawer Modal Layer */}
+        {/* ── REDESIGNED "SELECTED TARGETS" MODAL DRAWER ── */}
         {showSelectedDrawer && (
-          <div className="absolute inset-0 z-20 bg-white dark:bg-slate-900 rounded-3xl p-5 flex flex-col justify-between animate-in fade-in zoom-in-95 shadow-xl">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-base">📋</span>
-                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                    Selected Locations ({totalSelectedCount})
-                  </h4>
+          <div className="absolute inset-0 z-30 bg-white dark:bg-slate-900 rounded-3xl p-4 sm:p-5 flex flex-col justify-between animate-in fade-in zoom-in-95 shadow-2xl border border-slate-200 dark:border-slate-800">
+            <div className="space-y-2.5 flex-1 flex flex-col min-h-0">
+              {/* Drawer Header */}
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5 shrink-0">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">📋</span>
+                    <h4 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
+                      Selected Targets ({totalExplicitCount})
+                    </h4>
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    Review or remove organizational units included in this form.
+                  </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setShowSelectedDrawer(false)}
-                  className="text-slate-400 hover:text-slate-600 text-sm font-bold p-1"
+                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-sm font-bold p-1 cursor-pointer"
                 >
                   ✕
                 </button>
               </div>
 
-              <input
-                type="text"
-                placeholder="Filter selected locations..."
-                value={selectedDrawerSearch}
-                onChange={(e) => setSelectedDrawerSearch(e.target.value)}
-                className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-900 dark:text-white"
-              />
+              {/* Summary Strip & Effective Coverage */}
+              <div className="p-2.5 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 flex items-center justify-between text-xs shrink-0">
+                <span className="font-semibold text-slate-700 dark:text-slate-300">
+                  Explicit: <strong className="text-slate-900 dark:text-white">{getHierarchyScopeSummary(scopeState)}</strong>
+                </span>
+                <span className="font-bold text-indigo-700 dark:text-indigo-300">
+                  Coverage: {effectiveCoverageCount} Campuses
+                </span>
+              </div>
 
-              <div className="max-h-64 overflow-y-auto space-y-1.5 pr-1">
+              {/* Search & Type Filter Tabs */}
+              <div className="space-y-1.5 shrink-0">
+                <input
+                  type="text"
+                  placeholder="Search selected targets by name or parent path..."
+                  value={selectedDrawerSearch}
+                  onChange={(e) => setSelectedDrawerSearch(e.target.value)}
+                  className="w-full px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-900 dark:text-white"
+                />
+
+                <div className="flex items-center justify-between gap-1 overflow-x-auto pb-1 text-xs">
+                  <div className="flex items-center gap-1">
+                    {[
+                      { key: 'ALL', label: `All (${totalExplicitCount})` },
+                      { key: 'HEAD_OFFICE', label: `HO (${scopeState.selectedHeadOfficeIds.length})` },
+                      { key: 'REGION', label: `Regions (${scopeState.selectedRegionIds.length})` },
+                      { key: 'SCHOOL', label: `Schools (${scopeState.selectedSchoolIds.length})` },
+                      { key: 'CAMPUS', label: `Campuses (${scopeState.selectedCampusIds.length})` },
+                    ].map((tab) => (
+                      <button
+                        key={tab.key}
+                        type="button"
+                        onClick={() => setSelectedDrawerTypeFilter(tab.key)}
+                        className={`px-2 py-1 rounded-lg text-[11px] font-semibold whitespace-nowrap cursor-pointer transition-colors ${
+                          selectedDrawerTypeFilter === tab.key
+                            ? 'bg-indigo-600 text-white'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {selectedDrawerTypeFilter !== 'ALL' && (
+                    <button
+                      type="button"
+                      onClick={() => handleClearType(selectedDrawerTypeFilter)}
+                      className="text-[10px] text-rose-500 font-bold hover:underline shrink-0 cursor-pointer"
+                    >
+                      Clear {selectedDrawerTypeFilter.replace('_', ' ')}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Selected List */}
+              <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 min-h-[140px] max-h-[300px]">
                 {filteredSelectedDrawerList.length === 0 ? (
-                  <div className="text-center py-6 text-xs text-slate-400">No items match your filter.</div>
+                  <div className="text-center py-8 text-xs text-slate-400">
+                    No matching items in this filter.
+                  </div>
                 ) : (
                   filteredSelectedDrawerList.map((item) => (
                     <div
-                      key={item.id}
+                      key={`${item.type}_${item.id}`}
                       className="flex items-center justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 text-xs"
                     >
-                      <div className="truncate mr-2">
-                        <div className="font-bold text-slate-800 dark:text-slate-200 truncate">{item.name}</div>
-                        <div className="text-[10px] text-slate-400 truncate">{item.breadcrumb}</div>
+                      <div className="min-w-0 mr-2">
+                        <div className="flex items-center gap-1.5">
+                          <span>
+                            {item.type === 'HEAD_OFFICE' ? '🏛️' : item.type === 'REGION' ? '🗺️' : item.type === 'SCHOOL' ? '🏫' : '📍'}
+                          </span>
+                          <span className="font-bold text-slate-800 dark:text-slate-200 truncate">
+                            {item.name}
+                          </span>
+                          <span className="text-[9px] uppercase font-bold text-slate-400 bg-slate-200 dark:bg-slate-700 px-1 py-0.2 rounded">
+                            {item.type}
+                          </span>
+                        </div>
+                        {item.path && (
+                          <div className="text-[10px] text-slate-400 truncate mt-0.5">
+                            {item.path}
+                          </div>
+                        )}
                       </div>
                       <button
                         type="button"
-                        onClick={() => handleRemoveChip(item.id, item.type)}
-                        className="text-rose-500 hover:text-rose-700 font-bold p-1 shrink-0 cursor-pointer"
+                        onClick={() => handleRemoveItem(item.id, item.type)}
+                        className="px-2 py-1 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-[11px] font-bold shrink-0 cursor-pointer"
                       >
-                        ✕
+                        Remove
                       </button>
                     </div>
                   ))
@@ -995,11 +1330,40 @@ export function HierarchyScopePickerModal({
               </div>
             </div>
 
-            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end">
+            {/* Drawer Footer Actions */}
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+              {confirmClearAll ? (
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-rose-600 font-bold">Clear all {totalExplicitCount} targets?</span>
+                  <button
+                    type="button"
+                    onClick={handleClearAll}
+                    className="px-2.5 py-1 rounded-lg bg-rose-600 text-white font-bold text-[11px] cursor-pointer"
+                  >
+                    Confirm
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmClearAll(false)}
+                    className="text-slate-400 hover:text-slate-600 text-[11px] cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setConfirmClearAll(true)}
+                  className="text-xs text-rose-500 font-bold hover:underline cursor-pointer"
+                >
+                  Clear All ({totalExplicitCount})
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={() => setShowSelectedDrawer(false)}
-                className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-bold"
+                className="px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow cursor-pointer"
               >
                 Done
               </button>
@@ -1008,9 +1372,9 @@ export function HierarchyScopePickerModal({
         )}
 
         {/* Footer Actions */}
-        <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 shrink-0">
+        <div className="pt-2.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 shrink-0">
           <div className="text-xs text-slate-500 font-medium truncate max-w-xs sm:max-w-sm">
-            Summary: <span className="font-bold text-slate-800 dark:text-slate-200">{getHierarchyScopeSummary(scopeState)}</span>
+            Scope: <span className="font-bold text-slate-800 dark:text-slate-200">{getHierarchyScopeSummary(scopeState)}</span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -1024,7 +1388,7 @@ export function HierarchyScopePickerModal({
             <button
               type="button"
               onClick={handleSave}
-              disabled={!scopeState.isEntireOrg && totalSelectedCount === 0}
+              disabled={!scopeState.isEntireOrg && totalExplicitCount === 0}
               className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white text-xs font-bold shadow-md shadow-indigo-500/20 cursor-pointer transition-all"
             >
               Apply Scope

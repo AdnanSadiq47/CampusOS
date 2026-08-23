@@ -353,8 +353,16 @@ export default function FormBuilderPage() {
                         }`}>
                           {form.ownerType === 'CAMPUS' ? 'Local Campus Override' : 'School Level'}
                         </span>
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                          {form.applyTo === 'ALL_CAMPUSES' ? 'All Campuses (Universal)' : form.applyTo === 'LOCAL_SCOPE' ? 'Local Scope Only' : 'Selected Campuses'}
+                        <div>
+                          <Link
+                            href={`/admin-config/form-builder/${form.id}/applicability`}
+                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
+                            title="View full applicability and inheritance hierarchy"
+                          >
+                            <span>📍</span>
+                            <span>{form.applyTo === 'ALL_CAMPUSES' ? 'Entire Organization' : '67 Campuses'}</span>
+                            <span className="text-[10px] text-slate-400">›</span>
+                          </Link>
                         </div>
                       </div>
                     </td>
