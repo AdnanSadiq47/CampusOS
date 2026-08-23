@@ -4,6 +4,24 @@ All notable changes to the CampusOS architecture and platform specifications wil
 
 ---
 
+## [2026-08-23] - Administration Configuration Control Center & Regional Offices View Fix
+- **Administration Configuration Home (`/admin-config`)**:
+  - Implemented the central Control Center for Administration Configuration powered by a centralized metadata registry (`apps/web/lib/admin-config-registry.ts`).
+  - Structured 14 canonical configuration categories with explicit sort orders and metadata: Organization Setup, Location & Geography, Academic Setup, Student Setup, HR & Employee Setup, Fee & Billing Setup, Payroll Setup, Library Setup, Transport Setup, Exam & Assessment, Attendance & Devices, Communication Setup, General / Shared Masters, Users & Access.
+  - Built Global Real-Time Configuration Search with keyword matching across 70+ settings and direct navigation to operational pages.
+  - Implemented User-Specific Starred Favorites and Recently Visited tracking with `localStorage` persistence and honest empty states.
+  - Implemented Customizable Quick Actions with modal allowing users to configure pinned shortcut pills.
+  - Implemented Category Detail Drawers/Modals with drilldown into category settings and clean "Coming Soon" indicators for future pages.
+  - Added dual responsive View Modes: **Grid View** (Category Cards with item previews) and **List View** (Sortable Directory Table with Scope classification and direct actions).
+- **Regional Offices View Action Bug Fix**:
+  - Fixed React Hook violation caused by an inline `React.useState` inside a conditional JSX IIFE in `apps/web/app/(admin)/admin-config/regions/page.tsx`.
+  - Re-architected Regional Office View modal to match the approved Schools / Branches visual language with Overview & Hierarchy, Location & Address, and Associated Schools tabs.
+- **Next.js Dev Server Lifecycle & Static Asset Invariant**:
+  - Integrated `pnpm web:dev:check` verifying HTML, 67KB Tailwind CSS bundles, and JS chunk availability (HTTP 200) across all 6 administrative routes.
+  - Documented permanent developer/AI rule preventing concurrent `next dev` and `next build` cache collisions.
+
+---
+
 ## [2026-08-23] - Combined Branch UX Fix, Sort Order & Organization Setup UI Consistency
 - **Branch UX & Username Engine**:
   - Implemented working `Suggest Username` functionality generating normalized, collision-checked, available username candidates from School & Branch identity (`{branchCode}.admin`, `{schoolCode}.{branchCode}`, etc.).

@@ -11,6 +11,7 @@
 const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
 
 const ROUTES = [
+  '/admin-config',
   '/admin-config/head-offices',
   '/admin-config/regions',
   '/admin-config/school-types',

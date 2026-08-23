@@ -87,6 +87,7 @@ export default function RegionsPage() {
   const [isViewModalOpen, setIsViewModalOpen] = useState<boolean>(false);
   const [editingRegion, setEditingRegion] = useState<RegionListItemDto | null>(null);
   const [viewingRegion, setViewingRegion] = useState<RegionListItemDto | null>(null);
+  const [viewTab, setViewTab] = useState<'overview' | 'location' | 'schools'>('overview');
   const [formTab, setFormTab] = useState<'basic' | 'contact' | 'location' | 'config'>('basic');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
@@ -652,11 +653,13 @@ export default function RegionsPage() {
                     <td className="px-5 py-3.5 text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
+                          type="button"
                           onClick={() => {
                             setViewingRegion(region);
+                            setViewTab('overview');
                             setIsViewModalOpen(true);
                           }}
-                          className="px-2.5 py-1 text-xs font-medium rounded-md border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 transition-colors"
+                          className="px-2.5 py-1 text-xs font-medium rounded-md border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
                           title="View full regional office metadata"
                         >
                           View
@@ -953,136 +956,221 @@ export default function RegionsPage() {
       {/* DETAIL / VIEW MODAL                                     */}
       {/* ════════════════════════════════════════════════════════ */}
       {isViewModalOpen && viewingRegion && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
-            onClick={() => setIsViewModalOpen(false)}
-          />
-          <div className="relative z-10 w-full max-w-2xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative z-10 w-full max-w-2xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[90vh]">
             {/* Header */}
-            <div className="flex items-start justify-between p-6 pb-4 border-b border-slate-100 dark:border-slate-800">
-              <div>
-                <div className="flex items-center gap-3 mb-1">
-                  <span className="inline-flex items-center px-2 py-0.5 rounded font-mono text-xs font-bold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900">
+            <div className="flex items-start justify-between p-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2.5">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded font-mono text-xs font-bold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">
                     {viewingRegion.code}
                   </span>
                   <StatusBadge isActive={viewingRegion.isActive} />
                 </div>
-                <h2 className="text-lg font-bold text-slate-900 dark:text-white">{viewingRegion.name}</h2>
+                <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">{viewingRegion.name}</h2>
                 {viewingRegion.shortName && (
-                  <p className="text-sm text-slate-400">{viewingRegion.shortName}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{viewingRegion.shortName}</p>
                 )}
               </div>
               <button
+                type="button"
                 onClick={() => setIsViewModalOpen(false)}
-                className="p-2 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
             {/* Detail Tabs */}
-            {(() => {
-              const [viewTab, setViewTab] = React.useState<'overview' | 'schools' | 'history'>('overview');
-              return (
-                <>
-                  <div className="flex border-b border-slate-100 dark:border-slate-800 px-6">
-                    {[
-                      { key: 'overview', label: 'Overview', icon: '📊' },
-                      { key: 'schools', label: `Schools (${viewingRegion.schoolCount})`, icon: '🏫' },
-                      { key: 'history', label: 'History', icon: '📜' },
-                    ].map((tab: { key: string; label: string; icon: string }) => (
-                      <button
-                        key={tab.key}
-                        onClick={() => setViewTab(tab.key as 'overview' | 'schools' | 'history')}
-                        className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 transition-all whitespace-nowrap ${
-                          viewTab === tab.key
-                            ? 'border-indigo-600 text-indigo-700 dark:text-indigo-400 dark:border-indigo-400'
-                            : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'
-                        }`}
-                      >
-                        {tab.icon} {tab.label}
-                      </button>
-                    ))}
+            <div className="flex border-b border-slate-100 dark:border-slate-800 px-5 bg-slate-50/30 dark:bg-slate-950/30 gap-1 text-xs">
+              <button
+                type="button"
+                onClick={() => setViewTab('overview')}
+                className={`py-2.5 px-3 font-semibold border-b-2 transition-colors whitespace-nowrap cursor-pointer ${
+                  viewTab === 'overview'
+                    ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+              >
+                📊 Overview & Hierarchy
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewTab('location')}
+                className={`py-2.5 px-3 font-semibold border-b-2 transition-colors whitespace-nowrap cursor-pointer ${
+                  viewTab === 'location'
+                    ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+              >
+                📍 Location & Address
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewTab('schools')}
+                className={`py-2.5 px-3 font-semibold border-b-2 transition-colors whitespace-nowrap cursor-pointer ${
+                  viewTab === 'schools'
+                    ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+              >
+                🏫 Associated Schools ({viewingRegion.schoolCount})
+              </button>
+            </div>
+
+            {/* Tab Body */}
+            <div className="p-5 space-y-4 overflow-y-auto max-h-[60vh] text-xs">
+              {viewTab === 'overview' && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-3 border border-slate-100 dark:border-slate-800">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-0.5">
+                        Head Office
+                      </p>
+                      <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                        {viewingRegion.parentName || '— (Direct Organization Level)'}
+                      </p>
+                    </div>
+
+                    <div className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-3 border border-slate-100 dark:border-slate-800">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-0.5">
+                        Regional Head / Director
+                      </p>
+                      <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                        {viewingRegion.directorName || '—'}
+                      </p>
+                    </div>
+
+                    <div className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-3 border border-slate-100 dark:border-slate-800">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-0.5">
+                        Email Address
+                      </p>
+                      <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                        {viewingRegion.email || '—'}
+                      </p>
+                    </div>
+
+                    <div className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-3 border border-slate-100 dark:border-slate-800">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-0.5">
+                        Phone Number
+                      </p>
+                      <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                        {viewingRegion.phone || '—'}
+                      </p>
+                    </div>
                   </div>
 
-                  <div className="p-6 space-y-4 max-h-[calc(90vh-240px)] overflow-y-auto">
-                    {viewTab === 'overview' && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {[
-                          { label: 'Head Office', value: viewingRegion.parentName || '—' },
-                          { label: 'Director', value: viewingRegion.directorName },
-                          { label: 'Email', value: viewingRegion.email },
-                          { label: 'Phone', value: viewingRegion.phone },
-                          {
-                            label: 'Location',
-                            value: [viewingRegion.city, viewingRegion.province].filter(Boolean).join(', '),
-                          },
-                          {
-                            label: 'Schools Under Region',
-                            value: String(viewingRegion.schoolCount),
-                          },
-                          {
-                            label: 'Created',
-                            value: new Date(viewingRegion.createdAt).toLocaleDateString(),
-                          },
-                          {
-                            label: 'Last Updated',
-                            value: new Date(viewingRegion.updatedAt).toLocaleDateString(),
-                          },
-                        ].map(({ label, value }) => (
-                          <div key={label} className="bg-slate-50 dark:bg-slate-950/40 rounded-lg p-3">
-                            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-0.5">
-                              {label}
-                            </p>
-                            <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
-                              {value || <span className="text-slate-300 dark:text-slate-600">—</span>}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+                    <div className="bg-indigo-50/50 dark:bg-indigo-950/30 rounded-xl p-3 border border-indigo-100 dark:border-indigo-900/40 text-center">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                        Schools Under Region
+                      </span>
+                      <p className="text-2xl font-bold text-indigo-700 dark:text-indigo-300 mt-1">
+                        {viewingRegion.schoolCount}
+                      </p>
+                    </div>
 
-                    {viewTab === 'schools' && (
-                      <div className="flex flex-col items-center justify-center py-10 gap-3 text-center">
-                        <span className="text-3xl">🏫</span>
-                        <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">
-                          {viewingRegion.schoolCount > 0
-                            ? `${viewingRegion.schoolCount} school(s) under this region`
-                            : 'No schools assigned yet'}
-                        </p>
-                        <p className="text-xs text-slate-400">School management is available in the Schools section.</p>
-                      </div>
-                    )}
+                    <div className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-3 border border-slate-100 dark:border-slate-800">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-0.5">
+                        Created Date
+                      </p>
+                      <p className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                        {new Date(viewingRegion.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
 
-                    {viewTab === 'history' && (
-                      <div className="flex flex-col items-center justify-center py-10 gap-3 text-center">
-                        <span className="text-3xl">📜</span>
-                        <p className="text-sm text-slate-400">Audit history will appear here.</p>
-                      </div>
-                    )}
+                    <div className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-3 border border-slate-100 dark:border-slate-800">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-0.5">
+                        Last Updated
+                      </p>
+                      <p className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                        {new Date(viewingRegion.updatedAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {viewTab === 'location' && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-3 border border-slate-100 dark:border-slate-800">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-0.5">
+                        City
+                      </p>
+                      <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                        {viewingRegion.city || '—'}
+                      </p>
+                    </div>
+
+                    <div className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-3 border border-slate-100 dark:border-slate-800">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-0.5">
+                        Province / State
+                      </p>
+                      <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                        {viewingRegion.province || '—'}
+                      </p>
+                    </div>
                   </div>
 
-                  <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-slate-100 dark:border-slate-800">
-                    <button
-                      onClick={() => {
-                        setIsViewModalOpen(false);
-                        openEditModal(viewingRegion);
-                      }}
-                      className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold transition-colors"
-                    >
-                      Edit Region
-                    </button>
-                    <button
-                      onClick={() => setIsViewModalOpen(false)}
-                      className="px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-                    >
-                      Close
-                    </button>
+                  <div className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-3.5 border border-slate-100 dark:border-slate-800">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-0.5">
+                      Full Geographic Location
+                    </p>
+                    <p className="text-xs text-slate-700 dark:text-slate-300">
+                      {[viewingRegion.city, viewingRegion.province, 'Pakistan'].filter(Boolean).join(', ')}
+                    </p>
                   </div>
-                </>
-              );
-            })()}
+                </div>
+              )}
+
+              {viewTab === 'schools' && (
+                <div className="space-y-3">
+                  {viewingRegion.schoolCount > 0 ? (
+                    <div className="p-4 rounded-xl border border-blue-100 dark:border-blue-950/60 bg-blue-50/30 dark:bg-blue-950/20 text-center space-y-2">
+                      <span className="text-3xl">🏫</span>
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                        {viewingRegion.schoolCount} School(s) Managed by this Regional Directorate
+                      </p>
+                      <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                        To add, edit, or configure branches for these schools, navigate to Administration Configuration → Schools.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="p-6 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-center space-y-2">
+                      <span className="text-3xl">🏫</span>
+                      <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                        No Schools Assigned Yet
+                      </p>
+                      <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                        When creating a new School, select '{viewingRegion.name}' as the parent region.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center justify-end gap-2 p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsViewModalOpen(false);
+                  openEditModal(viewingRegion);
+                }}
+                className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-sm transition-colors cursor-pointer"
+              >
+                Edit Regional Office
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsViewModalOpen(false)}
+                className="px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
