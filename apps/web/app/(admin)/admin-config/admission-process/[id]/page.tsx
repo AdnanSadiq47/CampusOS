@@ -8,8 +8,15 @@ import {
   AdmissionProcessStepConfig,
   AdmissionStepType,
   AdmissionStepCategory,
+  ConfigScopeType,
 } from '@campus-os/types';
-import { AssignedToDetailsModal } from '../../../../../components/AssignedToDetailsModal';
+import {
+  AssignedToDetailsModal,
+} from '../../../../../components/AssignedToDetailsModal';
+import {
+  HierarchyScopePickerModal,
+  SelectedHierarchyState,
+} from '../../../../../components/HierarchyScopePickerModal';
 
 // Available Step Library Items for adding new steps
 interface StepLibraryItem {
@@ -19,9 +26,11 @@ interface StepLibraryItem {
   description: string;
   defaultRequired: boolean;
   requiresForm?: 'PRE_ADMISSION' | 'ADMISSION';
+  isUnique?: boolean;
 }
 
 const STEP_LIBRARY: StepLibraryItem[] = [
+  // APPLICATION
   {
     stepType: 'PRE_ADMISSION',
     defaultName: 'Pre-Admission Application',
@@ -29,6 +38,7 @@ const STEP_LIBRARY: StepLibraryItem[] = [
     description: 'Initial student & parent application intake via public or internal form.',
     defaultRequired: true,
     requiresForm: 'PRE_ADMISSION',
+    isUnique: true,
   },
   {
     stepType: 'APPLICATION_REVIEW',
@@ -44,13 +54,7 @@ const STEP_LIBRARY: StepLibraryItem[] = [
     description: 'Verification of birth certificates, previous transcripts, and CNIC/B-Forms.',
     defaultRequired: true,
   },
-  {
-    stepType: 'REGISTRATION_FEE',
-    defaultName: 'Registration Fee',
-    category: 'CONFIRMATION',
-    description: 'Collection of non-refundable application/registration processing fee.',
-    defaultRequired: false,
-  },
+  // ASSESSMENT
   {
     stepType: 'ASSESSMENT_TEST',
     defaultName: 'Assessment / Test',
@@ -72,6 +76,7 @@ const STEP_LIBRARY: StepLibraryItem[] = [
     description: 'Academic committee verification of age, grades, and admission criteria.',
     defaultRequired: true,
   },
+  // DECISION
   {
     stepType: 'APPROVAL',
     defaultName: 'Admission Approval',
@@ -86,12 +91,20 @@ const STEP_LIBRARY: StepLibraryItem[] = [
     description: 'Optional waiting pool queue when class capacity is reached.',
     defaultRequired: false,
   },
+  // CONFIRMATION
   {
     stepType: 'SEAT_CONFIRMATION',
     defaultName: 'Seat Confirmation',
     category: 'CONFIRMATION',
     description: 'Formal reservation and lock of student seat in target grade/section.',
     defaultRequired: true,
+  },
+  {
+    stepType: 'REGISTRATION_FEE',
+    defaultName: 'Registration Fee',
+    category: 'CONFIRMATION',
+    description: 'Collection of non-refundable application/registration processing fee.',
+    defaultRequired: false,
   },
   {
     stepType: 'INITIAL_ADMISSION_FEE',
@@ -107,6 +120,7 @@ const STEP_LIBRARY: StepLibraryItem[] = [
     description: 'Comprehensive formal admission package with final guardian undertakings.',
     defaultRequired: true,
     requiresForm: 'ADMISSION',
+    isUnique: true,
   },
 ];
 
@@ -200,15 +214,63 @@ export default function AdmissionProcessBuilderPage() {
   const [steps, setSteps] = useState<AdmissionProcessStepConfig[]>(process.steps);
   const [showAddStepModal, setShowAddStepModal] = useState(false);
   const [stepSearch, setStepSearch] = useState('');
+  const [addStepFeedback, setAddStepFeedback] = useState<string | null>(null);
+
+  // Step Settings Modal
   const [editingStep, setEditingStep] = useState<AdmissionProcessStepConfig | null>(null);
   const [showMoreStepSettings, setShowMoreStepSettings] = useState(false);
+
+  // Remove Step Confirmation Modal
+  const [stepToRemove, setStepToRemove] = useState<AdmissionProcessStepConfig | null>(null);
+
+  // Activate Review Modal
+  const [showActivateReviewModal, setShowActivateReviewModal] = useState(false);
+
+  // Feedback & Modals
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null);
   const [showAssignedModal, setShowAssignedModal] = useState(false);
+  const [showScopePickerModal, setShowScopePickerModal] = useState(false);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
 
-  // Fetch process details
+  // Hierarchy State
+  const [hierarchyScopeState, setHierarchyScopeState] = useState<SelectedHierarchyState>({
+    isEntireOrg: true,
+    selectedHeadOfficeIds: [],
+    selectedRegionIds: [],
+    selectedSchoolIds: [],
+    selectedCampusIds: [],
+  });
+
+  // Drag and Drop State
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+
+  // Load process & draft persistence
   useEffect(() => {
+    // 1. Try restoring from localStorage first
+    const draftKey = `campusos_proc_draft_${processId}`;
+    const savedDraft = typeof window !== 'undefined' ? localStorage.getItem(draftKey) : null;
+    if (savedDraft) {
+      try {
+        const parsed = JSON.parse(savedDraft);
+        if (parsed && Array.isArray(parsed.steps) && parsed.steps.length > 0) {
+          setProcess(parsed);
+          setSteps(parsed.steps);
+          setHierarchyScopeState({
+            isEntireOrg: parsed.applyTo === 'ALL_CAMPUSES',
+            selectedHeadOfficeIds: [],
+            selectedRegionIds: [],
+            selectedSchoolIds: [],
+            selectedCampusIds: parsed.branchIds || [],
+          });
+          return;
+        }
+      } catch (e) {
+        // Fallback to fetch
+      }
+    }
+
+    // 2. Fetch from backend
     const loadProcess = async () => {
       try {
         const res = await fetch(`http://localhost:4000/admin/admission-processes/${processId}`, {
@@ -221,9 +283,16 @@ export default function AdmissionProcessBuilderPage() {
           const data = await res.json();
           setProcess(data);
           setSteps(data.steps || []);
+          setHierarchyScopeState({
+            isEntireOrg: data.applyTo === 'ALL_CAMPUSES',
+            selectedHeadOfficeIds: [],
+            selectedRegionIds: [],
+            selectedSchoolIds: [],
+            selectedCampusIds: data.branchIds || [],
+          });
         }
       } catch (e) {
-        // Fallback to default
+        // Fallback to default state
       }
     };
     loadProcess();
@@ -249,14 +318,52 @@ export default function AdmissionProcessBuilderPage() {
     reindexSteps(newSteps);
   };
 
-  const handleRemoveStep = (id: string) => {
-    const toRemove = steps.find((s) => s.id === id);
-    if (toRemove?.isSystemTerminal) {
-      alert('"Student Registration" is the required terminal system step and cannot be removed.');
+  // Drag and Drop Handlers
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    const step = steps[index];
+    if (step?.isSystemTerminal) {
+      e.preventDefault();
       return;
     }
-    const newSteps = steps.filter((s) => s.id !== id);
+    setDraggedIndex(index);
+    e.dataTransfer.setData('text/plain', String(index));
+  };
+
+  const handleDragOver = (e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault();
+    const targetStep = steps[targetIndex];
+    if (targetStep?.isSystemTerminal) {
+      e.dataTransfer.dropEffect = 'none';
+      return;
+    }
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === targetIndex) return;
+
+    const targetStep = steps[targetIndex];
+    if (targetStep?.isSystemTerminal) return;
+
+    const newSteps = [...steps];
+    const [draggedItem] = newSteps.splice(draggedIndex, 1);
+    if (!draggedItem) return;
+
+    newSteps.splice(targetIndex, 0, draggedItem);
     reindexSteps(newSteps);
+    setDraggedIndex(null);
+  };
+
+  const confirmRemoveStep = () => {
+    if (!stepToRemove) return;
+    if (stepToRemove.isSystemTerminal) {
+      setStepToRemove(null);
+      return;
+    }
+    const newSteps = steps.filter((s) => s.id !== stepToRemove.id);
+    reindexSteps(newSteps);
+    setStepToRemove(null);
   };
 
   const reindexSteps = (newSteps: AdmissionProcessStepConfig[]) => {
@@ -265,9 +372,27 @@ export default function AdmissionProcessBuilderPage() {
       sortOrder: idx + 1,
     }));
     setSteps(updated);
+
+    // Auto-update draft persistence
+    const updatedProc = { ...process, steps: updated, totalStepsCount: updated.length };
+    setProcess(updatedProc);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`campusos_proc_draft_${processId}`, JSON.stringify(updatedProc));
+    }
   };
 
   const handleAddStepFromLibrary = (item: StepLibraryItem) => {
+    // Check for duplicate protection
+    if (item.stepType === 'STUDENT_REGISTRATION') {
+      setAddStepFeedback('Student Registration is already included as the final step.');
+      return;
+    }
+    if (item.isUnique && steps.some((s) => s.stepType === item.stepType)) {
+      setAddStepFeedback(`"${item.defaultName}" is already included in this admission journey.`);
+      return;
+    }
+
+    setAddStepFeedback(null);
     const newStepId = `step_${Date.now()}`;
     const newStep: AdmissionProcessStepConfig = {
       id: newStepId,
@@ -328,14 +453,14 @@ export default function AdmissionProcessBuilderPage() {
 
     const regSteps = steps.filter((s) => s.stepType === 'STUDENT_REGISTRATION');
     if (regSteps.length === 0) {
-      errors.push('Process must include the "Student Registration" terminal step.');
+      errors.push('Process must include the "Student Registration" final step.');
     } else if (regSteps.length > 1) {
       errors.push('Only one "Student Registration" step is permitted.');
     }
 
     const lastStep = steps[steps.length - 1]!;
     if (lastStep.stepType !== 'STUDENT_REGISTRATION') {
-      errors.push('"Student Registration" must be the final terminal step in the admission journey.');
+      errors.push('"Student Registration" must be the final step in the admission journey.');
     }
 
     const admFormSteps = steps.filter((s) => s.stepType === 'FINAL_ADMISSION_FORM');
@@ -361,20 +486,81 @@ export default function AdmissionProcessBuilderPage() {
 
   const handleSaveDraft = async () => {
     setValidationErrors([]);
+    const updatedProc: AdmissionProcessDto = {
+      ...process,
+      steps,
+      totalStepsCount: steps.length,
+      applyTo: hierarchyScopeState.isEntireOrg ? 'ALL_CAMPUSES' : 'SELECTED_CAMPUSES',
+      branchIds: hierarchyScopeState.selectedCampusIds,
+      updatedAt: new Date(),
+    };
+    setProcess(updatedProc);
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`campusos_proc_draft_${processId}`, JSON.stringify(updatedProc));
+    }
+
+    try {
+      await fetch(`http://localhost:4000/admin/admission-processes/${processId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-id': '11111111-1111-1111-1111-111111111111',
+          'x-user-role': 'ADMIN',
+        },
+        body: JSON.stringify(updatedProc),
+      });
+    } catch (e) {
+      // Offline fallback ok
+    }
+
     setSaveSuccessMessage('Draft saved successfully.');
     setTimeout(() => setSaveSuccessMessage(null), 3000);
   };
 
-  const handleActivate = async () => {
+  const handleInitiateActivate = () => {
     const res = validateJourney();
     if (!res.isValid) {
       setValidationErrors(res.errors);
       return;
     }
     setValidationErrors([]);
-    setProcess({ ...process, status: 'ACTIVE', currentVersionNumber: process.currentVersionNumber + 1 });
-    setSaveSuccessMessage(`Admission Process Activated! Version v${process.currentVersionNumber + 1} is now live.`);
-    setTimeout(() => setSaveSuccessMessage(null), 4000);
+    setShowActivateReviewModal(true);
+  };
+
+  const handleConfirmActivate = async () => {
+    const nextVersion = process.currentVersionNumber + 1;
+    const updatedProc: AdmissionProcessDto = {
+      ...process,
+      steps,
+      totalStepsCount: steps.length,
+      status: 'ACTIVE',
+      currentVersionNumber: nextVersion,
+      applyTo: hierarchyScopeState.isEntireOrg ? 'ALL_CAMPUSES' : 'SELECTED_CAMPUSES',
+      branchIds: hierarchyScopeState.selectedCampusIds,
+      updatedAt: new Date(),
+    };
+    setProcess(updatedProc);
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`campusos_proc_draft_${processId}`, JSON.stringify(updatedProc));
+    }
+
+    try {
+      await fetch(`http://localhost:4000/admin/admission-processes/${processId}/activate`, {
+        method: 'PATCH',
+        headers: {
+          'x-tenant-id': '11111111-1111-1111-1111-111111111111',
+          'x-user-role': 'ADMIN',
+        },
+      });
+    } catch (e) {
+      // Mock activation ok
+    }
+
+    setShowActivateReviewModal(false);
+    setSaveSuccessMessage(`Admission Process Activated! Version v${nextVersion} is now live.`);
+    setTimeout(() => setSaveSuccessMessage(null), 4500);
   };
 
   const filteredStepLibrary = STEP_LIBRARY.filter(
@@ -382,6 +568,9 @@ export default function AdmissionProcessBuilderPage() {
       item.defaultName.toLowerCase().includes(stepSearch.toLowerCase()) ||
       item.description.toLowerCase().includes(stepSearch.toLowerCase())
   );
+
+  const preAdmForm = steps.find((s) => s.stepType === 'PRE_ADMISSION');
+  const finalAdmForm = steps.find((s) => s.stepType === 'FINAL_ADMISSION_FORM');
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-20">
@@ -429,7 +618,7 @@ export default function AdmissionProcessBuilderPage() {
           </button>
           <button
             type="button"
-            onClick={handleActivate}
+            onClick={handleInitiateActivate}
             className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm transition-colors cursor-pointer"
           >
             Activate Process
@@ -437,24 +626,31 @@ export default function AdmissionProcessBuilderPage() {
         </div>
       </div>
 
-      {/* Scope Pill */}
+      {/* 2. Assigned To Header Pill */}
       <div className="flex items-center justify-between p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs">
-        <div className="flex items-center gap-2">
-          <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-            Assigned Scope:
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <span className="text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+            Assigned To:
           </span>
           <button
             type="button"
             onClick={() => setShowAssignedModal(true)}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-semibold cursor-pointer hover:bg-slate-200"
+            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold cursor-pointer transition-colors"
           >
-            <span>{process.applyTo === 'ALL_CAMPUSES' ? '🌐 All Campuses' : '📍 Selected Campuses'}</span>
-            <span className="text-slate-400 text-[10px]">›</span>
+            <span>{hierarchyScopeState.isEntireOrg ? '🌐 All Campuses' : `📍 ${hierarchyScopeState.selectedCampusIds.length || 2} Campuses`}</span>
+            <span className="text-slate-400 text-xs">›</span>
           </button>
         </div>
-        <p className="text-[11px] text-slate-400 hidden sm:block">
-          Starter Template: <span className="font-bold text-slate-700 dark:text-slate-300 capitalize">{process.starterTemplate.toLowerCase()}</span>
-        </p>
+
+        {process.canEdit && (
+          <button
+            type="button"
+            onClick={() => setShowScopePickerModal(true)}
+            className="px-3 py-1 rounded-xl text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 transition-colors cursor-pointer"
+          >
+            Change Assignment
+          </button>
+        )}
       </div>
 
       {/* Feedback Alerts */}
@@ -479,31 +675,51 @@ export default function AdmissionProcessBuilderPage() {
         </div>
       )}
 
-      {/* 2. Vertical Journey Canvas */}
+      {/* 3. Vertical Journey Canvas */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
             Admission Steps ({steps.length})
           </h2>
-          <span className="text-[11px] text-slate-400">Drag or use Move Up/Down to reorder</span>
+          <span className="text-[11px] text-slate-400 hidden sm:inline">
+            Drag using ⠿ or use Move Up/Down to reorder
+          </span>
         </div>
 
         <div className="space-y-2.5">
           {steps.map((step, idx) => {
             const isTerminal = step.isSystemTerminal;
             return (
-              <div key={step.id}>
+              <div
+                key={step.id}
+                draggable={!isTerminal}
+                onDragStart={(e) => handleDragStart(e, idx)}
+                onDragOver={(e) => handleDragOver(e, idx)}
+                onDrop={(e) => handleDrop(e, idx)}
+              >
                 {/* Step Card */}
                 <div
                   className={`p-4 rounded-2xl border transition-all ${
                     isTerminal
-                      ? 'bg-purple-50/40 dark:bg-purple-950/20 border-purple-200 dark:border-purple-900/60'
-                      : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-indigo-300'
+                      ? 'bg-purple-50/30 dark:bg-purple-950/20 border-purple-200 dark:border-purple-900/60'
+                      : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-indigo-300 shadow-sm'
                   }`}
                 >
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    {/* Left: Number + Details */}
+                    {/* Left: Drag Handle + Number + Details */}
                     <div className="flex items-start sm:items-center gap-3">
+                      {/* Drag Handle */}
+                      {!isTerminal ? (
+                        <span
+                          className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-grab active:cursor-grabbing text-base select-none px-0.5 pt-0.5 sm:pt-0"
+                          title="Drag to reorder"
+                        >
+                          ⠿
+                        </span>
+                      ) : (
+                        <span className="w-4" />
+                      )}
+
                       <div
                         className={`w-7 h-7 rounded-xl flex items-center justify-center font-black text-xs shrink-0 ${
                           isTerminal
@@ -519,37 +735,43 @@ export default function AdmissionProcessBuilderPage() {
                           <span className="font-bold text-sm text-slate-900 dark:text-white">
                             {step.displayName}
                           </span>
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                              step.isRequired
-                                ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800'
-                                : 'bg-slate-100 text-slate-600 border border-slate-200'
-                            }`}
-                          >
-                            {step.isRequired ? 'Required' : 'Optional'}
-                          </span>
-                          {isTerminal && (
+
+                          {isTerminal ? (
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-100 text-purple-800 dark:bg-purple-900/60 dark:text-purple-300">
-                              System Terminal Step
+                              Final Step
+                            </span>
+                          ) : !step.isRequired ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                              Optional
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                              Required
                             </span>
                           )}
                         </div>
 
-                        {/* Secondary metadata chips */}
-                        <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 flex-wrap">
-                          {step.attachedFormName && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[11px] font-medium text-slate-700 dark:text-slate-300">
-                              <span>📝</span>
-                              <span>{step.attachedFormName}</span>
-                            </span>
-                          )}
-                          {step.responsibleRole && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[11px] font-medium text-slate-700 dark:text-slate-300">
-                              <span>👤</span>
-                              <span>{step.responsibleRole}</span>
-                            </span>
-                          )}
-                        </div>
+                        {/* Secondary info / attached form */}
+                        {isTerminal ? (
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                            Student record will be created after successful admission.
+                          </p>
+                        ) : (
+                          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 flex-wrap">
+                            {step.attachedFormName && (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                                <span>📄</span>
+                                <span>{step.attachedFormName}</span>
+                              </span>
+                            )}
+                            {step.responsibleRole && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                                <span>👤</span>
+                                <span>{step.responsibleRole}</span>
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -560,7 +782,7 @@ export default function AdmissionProcessBuilderPage() {
                           <button
                             type="button"
                             onClick={() => setEditingStep(step)}
-                            className="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer"
+                            className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer transition-colors"
                           >
                             Edit
                           </button>
@@ -568,24 +790,24 @@ export default function AdmissionProcessBuilderPage() {
                             type="button"
                             disabled={idx === 0}
                             onClick={() => handleMoveUp(idx)}
-                            className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-30 text-xs hover:bg-slate-100 cursor-pointer"
+                            className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-20 text-xs hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
                             title="Move Up"
                           >
-                            ▲
+                            ↑
                           </button>
                           <button
                             type="button"
                             disabled={idx >= steps.length - 2}
                             onClick={() => handleMoveDown(idx)}
-                            className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-30 text-xs hover:bg-slate-100 cursor-pointer"
+                            className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-20 text-xs hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
                             title="Move Down"
                           >
-                            ▼
+                            ↓
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleRemoveStep(step.id)}
-                            className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs cursor-pointer"
+                            onClick={() => setStepToRemove(step)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs cursor-pointer transition-colors"
                             title="Remove Step"
                           >
                             ✕
@@ -598,7 +820,7 @@ export default function AdmissionProcessBuilderPage() {
 
                 {/* Downward Connector Arrow */}
                 {idx < steps.length - 1 && (
-                  <div className="text-center py-0.5 text-slate-300 dark:text-slate-700 font-bold text-sm">
+                  <div className="text-center py-1 text-slate-300 dark:text-slate-700 font-bold text-sm">
                     ↓
                   </div>
                 )}
@@ -611,7 +833,10 @@ export default function AdmissionProcessBuilderPage() {
         <div className="pt-2">
           <button
             type="button"
-            onClick={() => setShowAddStepModal(true)}
+            onClick={() => {
+              setAddStepFeedback(null);
+              setShowAddStepModal(true);
+            }}
             className="w-full py-3.5 rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-500 dark:hover:border-indigo-400 bg-white/50 dark:bg-slate-900/50 hover:bg-indigo-50/30 text-xs font-bold text-indigo-600 dark:text-indigo-400 flex items-center justify-center gap-2 transition-all cursor-pointer"
           >
             <span>+</span>
@@ -623,7 +848,7 @@ export default function AdmissionProcessBuilderPage() {
       {/* ── ADD STEP LIBRARY MODAL ── */}
       {showAddStepModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 my-8 max-h-[85vh] flex flex-col justify-between">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-xl w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 my-8 max-h-[85vh] flex flex-col justify-between">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 shrink-0">
               <div>
                 <h3 className="text-base font-bold text-slate-900 dark:text-white">Add Step to Journey</h3>
@@ -638,6 +863,13 @@ export default function AdmissionProcessBuilderPage() {
               </button>
             </div>
 
+            {addStepFeedback && (
+              <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold flex items-center gap-2">
+                <span>⚠️</span>
+                <span>{addStepFeedback}</span>
+              </div>
+            )}
+
             {/* Search */}
             <div className="shrink-0">
               <input
@@ -651,24 +883,36 @@ export default function AdmissionProcessBuilderPage() {
 
             {/* Step Library List */}
             <div className="flex-1 overflow-y-auto space-y-2 pr-1 text-xs">
-              {filteredStepLibrary.map((item) => (
-                <div
-                  key={item.stepType}
-                  onClick={() => handleAddStepFromLibrary(item)}
-                  className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-indigo-500 hover:bg-indigo-50/40 dark:hover:bg-indigo-950/30 cursor-pointer transition-all flex items-center justify-between"
-                >
-                  <div className="space-y-0.5">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-slate-900 dark:text-white">{item.defaultName}</span>
-                      <span className="px-2 py-0.2 rounded text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-500">
-                        {item.category}
-                      </span>
+              {filteredStepLibrary.map((item) => {
+                const isAlreadyAdded = item.isUnique && steps.some((s) => s.stepType === item.stepType);
+                return (
+                  <div
+                    key={item.stepType}
+                    onClick={() => handleAddStepFromLibrary(item)}
+                    className={`p-3.5 rounded-xl border transition-all flex items-center justify-between ${
+                      isAlreadyAdded
+                        ? 'opacity-50 border-slate-200 bg-slate-50 cursor-not-allowed'
+                        : 'border-slate-200 dark:border-slate-700 hover:border-indigo-500 hover:bg-indigo-50/40 dark:hover:bg-indigo-950/30 cursor-pointer'
+                    }`}
+                  >
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-900 dark:text-white">{item.defaultName}</span>
+                        <span className="px-2 py-0.2 rounded text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-500">
+                          {item.category}
+                        </span>
+                        {isAlreadyAdded && (
+                          <span className="text-[10px] text-slate-400 font-semibold">Already Added</span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">{item.description}</p>
                     </div>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">{item.description}</p>
+                    {!isAlreadyAdded && (
+                      <span className="text-indigo-600 font-extrabold text-sm ml-3">+ Add</span>
+                    )}
                   </div>
-                  <span className="text-indigo-600 font-extrabold text-sm ml-3">+ Add</span>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             <div className="pt-2 flex justify-end shrink-0">
@@ -691,7 +935,7 @@ export default function AdmissionProcessBuilderPage() {
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 shrink-0">
               <div>
                 <h3 className="text-base font-bold text-slate-900 dark:text-white">Step Settings</h3>
-                <p className="text-xs text-slate-400">{editingStep.stepType}</p>
+                <p className="text-xs text-slate-400">{editingStep.displayName}</p>
               </div>
               <button
                 type="button"
@@ -706,31 +950,51 @@ export default function AdmissionProcessBuilderPage() {
               {/* 1. Display Name */}
               <div>
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                  Step Display Name *
+                  Step Name *
                 </label>
                 <input
                   type="text"
                   value={editingStep.displayName}
                   onChange={(e) => setEditingStep({ ...editingStep, displayName: e.target.value })}
+                  placeholder="e.g. Entrance Test"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold"
                 />
               </div>
 
-              {/* 2. Required vs Optional */}
-              <div className="flex items-center justify-between p-3 rounded-xl border border-slate-200 dark:border-slate-700">
-                <div>
-                  <span className="font-bold text-slate-800 dark:text-slate-200 block">Required Step</span>
-                  <span className="text-[11px] text-slate-400">Applicant cannot skip this stage.</span>
+              {/* 2. Step Requirement (Radio) */}
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                  Step Requirement
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingStep({ ...editingStep, isRequired: true })}
+                    className={`p-3 rounded-xl border text-left transition-all ${
+                      editingStep.isRequired
+                        ? 'border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/40 text-indigo-900 dark:text-indigo-200 font-bold'
+                        : 'border-slate-200 dark:border-slate-700 text-slate-600'
+                    }`}
+                  >
+                    <span className="block text-xs font-bold">Required</span>
+                    <span className="text-[10px] text-slate-400">Cannot be skipped</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingStep({ ...editingStep, isRequired: false })}
+                    className={`p-3 rounded-xl border text-left transition-all ${
+                      !editingStep.isRequired
+                        ? 'border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/40 text-indigo-900 dark:text-indigo-200 font-bold'
+                        : 'border-slate-200 dark:border-slate-700 text-slate-600'
+                    }`}
+                  >
+                    <span className="block text-xs font-bold">Optional</span>
+                    <span className="text-[10px] text-slate-400">Can be skipped by staff</span>
+                  </button>
                 </div>
-                <input
-                  type="checkbox"
-                  checked={editingStep.isRequired}
-                  onChange={(e) => setEditingStep({ ...editingStep, isRequired: e.target.checked })}
-                  className="h-4 w-4 text-indigo-600 rounded cursor-pointer"
-                />
               </div>
 
-              {/* 3. Who Handles This */}
+              {/* 3. Who Handles This? */}
               <div>
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
                   Who Handles This?
@@ -740,16 +1004,17 @@ export default function AdmissionProcessBuilderPage() {
                   onChange={(e) => setEditingStep({ ...editingStep, responsibleRole: e.target.value })}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold cursor-pointer"
                 >
-                  <option value="">General Admissions Permission</option>
+                  <option value="">Use Default Admission Permissions</option>
                   <option value="Admissions Officer">Admissions Officer</option>
                   <option value="Principal / Vice Principal">Principal / Vice Principal</option>
                   <option value="Registrar">Registrar</option>
                   <option value="Academic Coordinator">Academic Coordinator</option>
+                  <option value="Teacher / Evaluator">Teacher / Evaluator</option>
                   <option value="Accounts / Finance">Accounts / Finance</option>
                 </select>
               </div>
 
-              {/* 4. Attached Dynamic Form Selection */}
+              {/* 4. Attached Dynamic Form Selection (Only when applicable) */}
               {(editingStep.stepType === 'PRE_ADMISSION' || editingStep.stepType === 'FINAL_ADMISSION_FORM') && (
                 <div className="p-3.5 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 space-y-2">
                   <div className="flex items-center justify-between">
@@ -775,9 +1040,9 @@ export default function AdmissionProcessBuilderPage() {
                         attachedFormName: found?.name,
                       });
                     }}
-                    className="w-full px-3 py-2 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white cursor-pointer"
+                    className="w-full px-3 py-2.5 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white cursor-pointer"
                   >
-                    <option value="">Select Published Form...</option>
+                    <option value="">Select Existing Form...</option>
                     {(editingStep.stepType === 'PRE_ADMISSION'
                       ? PUBLISHED_PRE_ADMISSION_FORMS
                       : PUBLISHED_FINAL_ADMISSION_FORMS
@@ -806,11 +1071,16 @@ export default function AdmissionProcessBuilderPage() {
 
                 {showMoreStepSettings && (
                   <div className="mt-3 space-y-3 p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 animate-in fade-in">
-                    {/* Auto Move */}
+                    {/* Auto Continue */}
                     <div className="flex items-center justify-between">
-                      <span className="font-semibold text-slate-700 dark:text-slate-300">
-                        Auto Move to Next Step
-                      </span>
+                      <div>
+                        <span className="font-semibold text-slate-700 dark:text-slate-300 block">
+                          Auto Continue
+                        </span>
+                        <span className="text-[10px] text-slate-400">
+                          Automatically continue to the next step after successful completion
+                        </span>
+                      </div>
                       <input
                         type="checkbox"
                         checked={editingStep.autoMoveToNext ?? true}
@@ -847,10 +1117,10 @@ export default function AdmissionProcessBuilderPage() {
                       />
                     </div>
 
-                    {/* Instructions */}
+                    {/* Internal Instructions */}
                     <div>
                       <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-                        Staff Instructions
+                        Internal Instructions
                       </label>
                       <textarea
                         rows={2}
@@ -861,6 +1131,51 @@ export default function AdmissionProcessBuilderPage() {
                         placeholder="Internal guidelines for staff when completing this step"
                         className="w-full px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
                       />
+                    </div>
+
+                    {/* Notification Toggles */}
+                    <div className="border-t border-slate-200 dark:border-slate-700 pt-2 space-y-2">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                        Notifications
+                      </span>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-600 dark:text-slate-300">
+                          Applicant / Parent Notification
+                        </span>
+                        <input
+                          type="checkbox"
+                          checked={editingStep.notifications?.notifyApplicant ?? true}
+                          onChange={(e) =>
+                            setEditingStep({
+                              ...editingStep,
+                              notifications: {
+                                notifyApplicant: e.target.checked,
+                                notifyInternalTeam: editingStep.notifications?.notifyInternalTeam ?? false,
+                              },
+                            })
+                          }
+                          className="h-4 w-4 text-indigo-600 rounded cursor-pointer"
+                        />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-600 dark:text-slate-300">
+                          Internal Team Notification
+                        </span>
+                        <input
+                          type="checkbox"
+                          checked={editingStep.notifications?.notifyInternalTeam ?? false}
+                          onChange={(e) =>
+                            setEditingStep({
+                              ...editingStep,
+                              notifications: {
+                                notifyApplicant: editingStep.notifications?.notifyApplicant ?? true,
+                                notifyInternalTeam: e.target.checked,
+                              },
+                            })
+                          }
+                          className="h-4 w-4 text-indigo-600 rounded cursor-pointer"
+                        />
+                      </div>
                     </div>
                   </div>
                 )}
@@ -880,30 +1195,154 @@ export default function AdmissionProcessBuilderPage() {
                 type="button"
                 onClick={() => {
                   const updated = steps.map((s) => (s.id === editingStep.id ? editingStep : s));
-                  setSteps(updated);
+                  reindexSteps(updated);
                   setEditingStep(null);
                 }}
                 className="px-5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm cursor-pointer"
               >
-                Done
+                Save Changes
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── ASSIGNED TO POPUP ── */}
+      {/* ── REMOVE STEP CONFIRMATION MODAL ── */}
+      {stepToRemove && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
+            <div className="space-y-1">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                Remove &quot;{stepToRemove.displayName}&quot;?
+              </h3>
+              <p className="text-xs text-slate-500">
+                This step will be removed from this draft process. You can add it back later from the step library.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setStepToRemove(null)}
+                className="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmRemoveStep}
+                className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-sm cursor-pointer"
+              >
+                Remove Step
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── ACTIVATE REVIEW CONFIRMATION MODAL ── */}
+      {showActivateReviewModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 my-8">
+            <div className="space-y-1 border-b border-slate-100 dark:border-slate-800 pb-3">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">Ready to Activate?</h3>
+              <p className="text-xs font-medium text-slate-500">{process.name} ({process.code})</p>
+            </div>
+
+            <div className="space-y-2.5 text-xs">
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 space-y-1.5">
+                <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 block">
+                  Journey Summary ({steps.length} Steps)
+                </span>
+                <div className="space-y-1">
+                  {steps.map((st, i) => (
+                    <div key={st.id} className="flex items-center gap-1.5 text-[11px] text-slate-700 dark:text-slate-300">
+                      <span className="font-mono text-slate-400">{i + 1}.</span>
+                      <span className="font-semibold">{st.displayName}</span>
+                      {st.isSystemTerminal && (
+                        <span className="text-[9px] px-1.5 py-0.2 bg-purple-100 text-purple-700 rounded font-bold">
+                          Final Step
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {preAdmForm?.attachedFormName && (
+                <div className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                  <span className="text-slate-500 font-semibold">Pre-Admission Form:</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">{preAdmForm.attachedFormName}</span>
+                </div>
+              )}
+
+              {finalAdmForm?.attachedFormName && (
+                <div className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                  <span className="text-slate-500 font-semibold">Final Admission Form:</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">{finalAdmForm.attachedFormName}</span>
+                </div>
+              )}
+
+              <div className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                <span className="text-slate-500 font-semibold">Assigned To:</span>
+                <span className="font-bold text-indigo-600 dark:text-indigo-400">
+                  {hierarchyScopeState.isEntireOrg ? '🌐 All Campuses' : `📍 ${hierarchyScopeState.selectedCampusIds.length || 2} Campuses`}
+                </span>
+              </div>
+
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 bg-indigo-50/50 dark:bg-indigo-950/30 p-3 rounded-xl border border-indigo-100 dark:border-indigo-900/40">
+                ℹ️ New admissions will use this process version (v{process.currentVersionNumber + 1}). Existing admission journeys will remain on their current version.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowActivateReviewModal(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmActivate}
+                className="px-5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-md transition-all cursor-pointer"
+              >
+                Activate Process
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── ASSIGNED TO POPUP (REUSED COMPONENT) ── */}
       {showAssignedModal && (
         <AssignedToDetailsModal
           isOpen={true}
           onClose={() => setShowAssignedModal(false)}
           formName={`${process.name} (${process.code})`}
-          scopeState={{
-            isEntireOrg: process.applyTo === 'ALL_CAMPUSES',
-            selectedHeadOfficeIds: [],
-            selectedRegionIds: [],
-            selectedSchoolIds: [],
-            selectedCampusIds: process.branchIds || [],
+          scopeState={hierarchyScopeState}
+        />
+      )}
+
+      {/* ── HIERARCHY SCOPE PICKER MODAL (CHANGE ASSIGNMENT) ── */}
+      {showScopePickerModal && (
+        <HierarchyScopePickerModal
+          isOpen={showScopePickerModal}
+          onClose={() => setShowScopePickerModal(false)}
+          initialState={hierarchyScopeState}
+          onApply={(newState) => {
+            setHierarchyScopeState(newState);
+            setShowScopePickerModal(false);
+            const updatedProc: AdmissionProcessDto = {
+              ...process,
+              applyTo: (newState.isEntireOrg ? 'ALL_CAMPUSES' : 'SELECTED_CAMPUSES') as ConfigScopeType,
+              branchIds: newState.selectedCampusIds,
+            };
+            setProcess(updatedProc);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem(`campusos_proc_draft_${processId}`, JSON.stringify(updatedProc));
+            }
           }}
         />
       )}
@@ -934,16 +1373,27 @@ export default function AdmissionProcessBuilderPage() {
                 {steps.map((st, idx) => (
                   <div key={st.id || idx}>
                     <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-slate-400">{idx + 1}.</span>
-                        <span className="font-bold text-slate-800 dark:text-slate-200">{st.displayName}</span>
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-400">{idx + 1}.</span>
+                          <span className="font-bold text-slate-800 dark:text-slate-200">{st.displayName}</span>
+                        </div>
+                        {st.attachedFormName && (
+                          <div className="text-[10px] text-slate-500 pl-5">
+                            📄 {st.attachedFormName}
+                          </div>
+                        )}
                       </div>
                       <span
                         className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                          st.isRequired ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-600'
+                          st.isSystemTerminal
+                            ? 'bg-purple-100 text-purple-700 font-bold'
+                            : st.isRequired
+                            ? 'bg-indigo-100 text-indigo-700'
+                            : 'bg-amber-100 text-amber-700'
                         }`}
                       >
-                        {st.isRequired ? 'Required' : 'Optional'}
+                        {st.isSystemTerminal ? 'Final Step' : st.isRequired ? 'Required' : 'Optional'}
                       </span>
                     </div>
                     {idx < steps.length - 1 && (
