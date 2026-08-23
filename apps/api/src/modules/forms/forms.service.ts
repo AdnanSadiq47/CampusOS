@@ -1019,9 +1019,23 @@ export class FormsService {
         .set({ currentVersionId: createdVer!.id, updatedAt: new Date() })
         .where(and(eq(formDefinitions.organizationId, tenantId), eq(formDefinitions.id, createdForm!.id)));
 
-      // 6. Sync scope branches
-      if (applyTo === 'SELECTED_CAMPUSES' && dto.branchIds && dto.branchIds.length > 0) {
-        const valuesToInsert = dto.branchIds.map((bId) => ({
+      // 6. Sync scope branches with validation & deduplication
+      if (applyTo === 'SELECTED_CAMPUSES') {
+        if (!dto.branchIds || dto.branchIds.length === 0) {
+          throw new BadRequestException('Please select at least one location.');
+        }
+
+        const uniqueBranchIds = Array.from(new Set(dto.branchIds));
+
+        // Security authorization check
+        if (_authorizedBranchIds && _authorizedBranchIds.length > 0) {
+          const isUnauthorized = uniqueBranchIds.some((bId) => !_authorizedBranchIds.includes(bId));
+          if (isUnauthorized) {
+            throw new ForbiddenException('You are not authorized to assign forms to one or more selected locations.');
+          }
+        }
+
+        const valuesToInsert = uniqueBranchIds.map((bId) => ({
           organizationId: tenantId,
           entityType: 'form_definition',
           entityId: createdForm!.id,
@@ -1056,7 +1070,7 @@ export class FormsService {
         description: createdForm!.description,
         ownerId,
         applyTo,
-        branchIds: dto.branchIds || [],
+        branchIds: applyTo === 'SELECTED_CAMPUSES' ? Array.from(new Set(dto.branchIds || [])) : [],
         branchNames: [],
         ...gov,
         currentVersionNumber: 1,

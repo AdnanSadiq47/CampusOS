@@ -1158,4 +1158,116 @@ describe('CampusOS Dynamic Form Builder Platform Foundation & Governance (PGlite
     expect(saved.schemaPayload.sections[1]!.id).toBe('sec_1');
     expect(saved.schemaPayload.sections[2]!.id).toBe('sec_2');
   });
+
+  it('TEST 36 — SELECTED_CAMPUSES with zero selections is blocked server-side', async () => {
+    await expect(
+      formsService.createFormDefinition(
+        TENANT_A,
+        {
+          name: 'Zero Location Form',
+          formPurpose: 'PRE_REGISTRATION',
+          applyTo: 'SELECTED_CAMPUSES',
+          branchIds: [],
+        },
+        ACTOR_USER
+      )
+    ).rejects.toThrow(/Please select at least one location/);
+  });
+
+  it('TEST 37 — Unauthorized branch selection is rejected server-side', async () => {
+    await expect(
+      formsService.createFormDefinition(
+        TENANT_A,
+        {
+          name: 'Unauthorized Scope Form',
+          formPurpose: 'PRE_REGISTRATION',
+          applyTo: 'SELECTED_CAMPUSES',
+          branchIds: [CAMPUS_B],
+        },
+        ACTOR_USER,
+        [CAMPUS_A], // User only authorized for CAMPUS_A
+        'CAMPUS_ADMIN'
+      )
+    ).rejects.toThrow(/You are not authorized to assign forms to one or more selected locations/);
+  });
+
+  it('TEST 38 — Redundant overlapping branch IDs are deduplicated', async () => {
+    const form = await formsService.createFormDefinition(
+      TENANT_A,
+      {
+        name: 'Deduplicated Targets Form',
+        formPurpose: 'PRE_REGISTRATION',
+        applyTo: 'SELECTED_CAMPUSES',
+        branchIds: [CAMPUS_A, CAMPUS_A, CAMPUS_B, CAMPUS_A, CAMPUS_B], // Duplicated IDs
+      },
+      ACTOR_USER
+    );
+
+    expect(form.branchIds?.length).toBe(2);
+    expect(form.branchIds).toContain(CAMPUS_A);
+    expect(form.branchIds).toContain(CAMPUS_B);
+  });
+
+  it('TEST 39 — Hierarchy precedence: local campus override takes precedence over selected campuses and universal', async () => {
+    // 1. Universal form
+    const universal = await formsService.createFormDefinition(
+      TENANT_A,
+      { name: 'Universal Base Form', formPurpose: 'CUSTOM', applyTo: 'ALL_CAMPUSES' },
+      ACTOR_USER
+    );
+    await formsService.publishFormVersion(TENANT_A, universal.id, undefined, ACTOR_USER);
+
+    // 2. Selected campuses form for CAMPUS_A
+    const selectedScope = await formsService.createFormDefinition(
+      TENANT_A,
+      { name: 'Selected Scope Form', formPurpose: 'CUSTOM', applyTo: 'SELECTED_CAMPUSES', branchIds: [CAMPUS_A] },
+      ACTOR_USER
+    );
+    await formsService.publishFormVersion(TENANT_A, selectedScope.id, undefined, ACTOR_USER);
+
+    // CAMPUS_A resolves the selected scope form, while CAMPUS_B falls back to universal
+    const resA = await formsService.resolvePublishedForm(TENANT_A, 'CUSTOM', CAMPUS_A);
+    const resB = await formsService.resolvePublishedForm(TENANT_A, 'CUSTOM', CAMPUS_B);
+    expect(resA.formDefinitionId).toBe(selectedScope.id);
+    expect(resB.formDefinitionId).toBe(universal.id);
+
+    // 3. Local campus override for CAMPUS_A
+    const localOverride = await formsService.createFormDefinition(
+      TENANT_A,
+      {
+        name: 'Local Campus A Override Form',
+        formPurpose: 'CUSTOM',
+        ownerType: 'CAMPUS',
+        ownerId: CAMPUS_A,
+        applyTo: 'LOCAL_SCOPE',
+      },
+      ACTOR_USER,
+      [CAMPUS_A],
+      'CAMPUS_ADMIN'
+    );
+    await formsService.publishFormVersion(TENANT_A, localOverride.id, undefined, ACTOR_USER, 'CAMPUS_ADMIN');
+
+    // CAMPUS_A now resolves the local override form with top priority
+    const resAOverride = await formsService.resolvePublishedForm(TENANT_A, 'CUSTOM', CAMPUS_A);
+    expect(resAOverride.formDefinitionId).toBe(localOverride.id);
+    expect(resAOverride.sourceOrigin).toBe('LOCAL');
+  });
+
+  it('TEST 40 — Single-location and variable-depth hierarchy forms resolve correctly', async () => {
+    const singleLocForm = await formsService.createFormDefinition(
+      TENANT_A,
+      {
+        name: 'Single Location School Form',
+        formPurpose: 'PRE_REGISTRATION',
+        applyTo: 'SELECTED_CAMPUSES',
+        branchIds: [CAMPUS_B],
+      },
+      ACTOR_USER
+    );
+    await formsService.publishFormVersion(TENANT_A, singleLocForm.id, undefined, ACTOR_USER);
+
+    const resolved = await formsService.resolvePublishedForm(TENANT_A, 'PRE_REGISTRATION', CAMPUS_B);
+    expect(resolved.formDefinitionId).toBe(singleLocForm.id);
+    expect(resolved.resolvedCampusId).toBe(CAMPUS_B);
+  });
 });

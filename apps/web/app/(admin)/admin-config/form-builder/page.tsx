@@ -11,6 +11,10 @@ import { ResponsiveFilterToolbar } from '../../../../components/ResponsiveFilter
 import { ResponsiveActionMenu } from '../../../../components/ResponsiveActionMenu';
 import { FormRuntimeRenderer } from '../../../../components/FormRuntimeRenderer';
 import {
+  FormHierarchyScopeSelector,
+  FormApplyMode,
+} from '../../../../components/FormHierarchyScopeSelector';
+import {
   FormDefinitionListItemDto,
   FormPurpose,
   ConfigScopeType,
@@ -102,10 +106,13 @@ export default function FormBuilderPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newFormName, setNewFormName] = useState('');
   const [newFormPurpose, setNewFormPurpose] = useState<FormPurpose>('PRE_REGISTRATION');
+  const [newFormApplyMode, setNewFormApplyMode] = useState<FormApplyMode>('ENTIRE_ORGANIZATION');
   const [newFormScope, setNewFormScope] = useState<ConfigScopeType>('ALL_CAMPUSES');
+  const [newFormBranchIds, setNewFormBranchIds] = useState<string[]>([]);
   const [newFormStarterOption, setNewFormStarterOption] = useState<'BLANK' | 'TEMPLATE' | 'COPY'>('BLANK');
   const [selectedTemplateId, setSelectedTemplateId] = useState('tmpl_basic_prereg');
   const [copySourceFormId, setCopySourceFormId] = useState('');
+  const [scopeValidationError, setScopeValidationError] = useState<string | null>(null);
 
   // Live Preview Modal state
   const [previewForm, setPreviewForm] = useState<FormDefinitionListItemDto | null>(null);
@@ -130,6 +137,11 @@ export default function FormBuilderPage() {
     e.preventDefault();
     if (!newFormName.trim()) return;
 
+    if (newFormApplyMode !== 'ENTIRE_ORGANIZATION' && newFormBranchIds.length === 0) {
+      setScopeValidationError('Please select at least one location.');
+      return;
+    }
+
     const newId = `form_${Date.now()}`;
     const newRecord: FormDefinitionListItemDto = {
       id: newId,
@@ -140,6 +152,7 @@ export default function FormBuilderPage() {
       description: `Custom ${newFormPurpose.toLowerCase()} dynamic form.`,
       ownerType: 'SCHOOL',
       applyTo: newFormScope,
+      branchIds: newFormBranchIds,
       sourceOrigin: 'LOCAL',
       isInherited: false,
       canEdit: true,
@@ -158,6 +171,9 @@ export default function FormBuilderPage() {
     setForms([newRecord, ...forms]);
     setShowCreateModal(false);
     setNewFormName('');
+    setNewFormBranchIds([]);
+    setNewFormApplyMode('ENTIRE_ORGANIZATION');
+    setScopeValidationError(null);
     router.push(`/admin-config/form-builder/${newId}`);
   };
 
@@ -421,7 +437,7 @@ export default function FormBuilderPage() {
       {/* Create Form Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 my-8">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <h3 className="text-lg font-bold text-slate-900 dark:text-white">Create New Dynamic Form</h3>
               <button
@@ -433,21 +449,21 @@ export default function FormBuilderPage() {
             </div>
 
             <form onSubmit={handleCreateSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1">
-                  Form Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Online Pre-Registration 2026"
-                  value={newFormName}
-                  onChange={(e) => setNewFormName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                />
-              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1">
+                    Form Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Online Pre-Registration 2026"
+                    value={newFormName}
+                    onChange={(e) => setNewFormName(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  />
+                </div>
 
-              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1">
                     Purpose *
@@ -462,20 +478,29 @@ export default function FormBuilderPage() {
                     <option value="CUSTOM">Custom Form</option>
                   </select>
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1">
-                    Campus Scope *
-                  </label>
-                  <select
-                    value={newFormScope}
-                    onChange={(e) => setNewFormScope(e.target.value as ConfigScopeType)}
-                    className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                  >
-                    <option value="ALL_CAMPUSES">All Campuses (Universal)</option>
-                    <option value="SELECTED_CAMPUSES">Selected Campuses</option>
-                  </select>
-                </div>
               </div>
+
+              {/* ── Hierarchy Applicability Scope Selector ── */}
+              <FormHierarchyScopeSelector
+                applyMode={newFormApplyMode}
+                onChangeApplyMode={(mode, scope) => {
+                  setNewFormApplyMode(mode);
+                  setNewFormScope(scope);
+                  setScopeValidationError(null);
+                }}
+                selectedBranchIds={newFormBranchIds}
+                onChangeBranchIds={(ids) => {
+                  setNewFormBranchIds(ids);
+                  if (ids.length > 0) setScopeValidationError(null);
+                }}
+              />
+
+              {scopeValidationError && (
+                <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-200 flex items-center gap-2">
+                  <span>⚠️</span>
+                  <span>{scopeValidationError}</span>
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-2">
