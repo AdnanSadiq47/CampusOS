@@ -1270,4 +1270,59 @@ describe('CampusOS Dynamic Form Builder Platform Foundation & Governance (PGlite
     expect(resolved.formDefinitionId).toBe(singleLocForm.id);
     expect(resolved.resolvedCampusId).toBe(CAMPUS_B);
   });
+
+  it('TEST 41 — Mixed multi-level selection supports multiple targets simultaneously', async () => {
+    const mixedForm = await formsService.createFormDefinition(
+      TENANT_A,
+      {
+        name: 'Mixed Multi-Level Scope Form',
+        formPurpose: 'ADMISSION',
+        applyTo: 'SELECTED_CAMPUSES',
+        branchIds: [CAMPUS_A, CAMPUS_B],
+      },
+      ACTOR_USER
+    );
+
+    expect(mixedForm.applyTo).toBe('SELECTED_CAMPUSES');
+    expect(mixedForm.branchIds?.length).toBe(2);
+    expect(mixedForm.branchIds).toContain(CAMPUS_A);
+    expect(mixedForm.branchIds).toContain(CAMPUS_B);
+  });
+
+  it('TEST 42 — Multi-level targets resolve published form across all selected branches', async () => {
+    const form = await formsService.createFormDefinition(
+      TENANT_A,
+      {
+        name: 'Multi-Target Active Resolution Form',
+        formPurpose: 'CUSTOM',
+        applyTo: 'SELECTED_CAMPUSES',
+        branchIds: [CAMPUS_A, CAMPUS_B],
+      },
+      ACTOR_USER
+    );
+
+    await formsService.publishFormVersion(TENANT_A, form.id, undefined, ACTOR_USER);
+
+    const resA = await formsService.resolvePublishedForm(TENANT_A, 'CUSTOM', CAMPUS_A);
+    const resB = await formsService.resolvePublishedForm(TENANT_A, 'CUSTOM', CAMPUS_B);
+
+    expect(resA.formDefinitionId).toBe(form.id);
+    expect(resB.formDefinitionId).toBe(form.id);
+  });
+
+  it('TEST 43 — Entire organization mode clears individual branch assignments', async () => {
+    const form = await formsService.createFormDefinition(
+      TENANT_A,
+      {
+        name: 'Org Universal Mode Form',
+        formPurpose: 'CUSTOM',
+        applyTo: 'ALL_CAMPUSES',
+        branchIds: [],
+      },
+      ACTOR_USER
+    );
+
+    expect(form.applyTo).toBe('ALL_CAMPUSES');
+    expect(form.branchIds).toEqual([]);
+  });
 });

@@ -5,6 +5,11 @@ import Link from 'next/link';
 import { CLIENT_MASTER_FIELD_CATALOG, FIELD_CATEGORIES_INFO, FieldCategoryInfo } from '../../../../../lib/forms-catalog';
 import { FormRuntimeRenderer } from '../../../../../components/FormRuntimeRenderer';
 import {
+  HierarchyScopePickerModal,
+  SelectedHierarchyState,
+  getHierarchyScopeSummary,
+} from '../../../../../components/HierarchyScopePickerModal';
+import {
   FormFieldInstance,
   FormSectionInstance,
   FormConditionalRule,
@@ -36,6 +41,14 @@ export default function FormBuilderEditorPage() {
   const [versionNumber] = useState(1);
   const [versionStatus, setVersionStatus] = useState<'DRAFT' | 'PUBLISHED'>('DRAFT');
   const [isSaved, setIsSaved] = useState(true);
+  const [showScopePickerModal, setShowScopePickerModal] = useState(false);
+  const [hierarchyScopeState, setHierarchyScopeState] = useState<SelectedHierarchyState>({
+    isEntireOrg: true,
+    selectedHeadOfficeIds: [],
+    selectedRegionIds: [],
+    selectedSchoolIds: [],
+    selectedCampusIds: [],
+  });
 
   // Field library search & filter
   const [librarySearch, setLibrarySearch] = useState('');
@@ -668,10 +681,24 @@ export default function FormBuilderEditorPage() {
                 v{versionNumber} {versionStatus}
               </span>
             </div>
-            <div className="text-xs text-slate-400 flex items-center gap-2 mt-0.5">
+            <div className="text-xs text-slate-400 flex flex-wrap items-center gap-2 mt-1">
               <span>{formPurpose.replace('_', ' ')}</span>
               <span>•</span>
               <span>{isSaved ? '✓ Saved' : '● Unsaved changes'}</span>
+              <span>•</span>
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium">
+                <span>Scope:</span>
+                <span className="font-semibold text-slate-900 dark:text-white truncate max-w-xs sm:max-w-sm">
+                  {getHierarchyScopeSummary(hierarchyScopeState)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowScopePickerModal(true)}
+                  className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline ml-1"
+                >
+                  Manage
+                </button>
+              </span>
             </div>
           </div>
         </div>
@@ -1389,6 +1416,20 @@ export default function FormBuilderEditorPage() {
           )}
         </div>
       )}
+      {/* Dedicated Mixed Multi-Level Hierarchy Scope Picker Modal */}
+      <HierarchyScopePickerModal
+        isOpen={showScopePickerModal}
+        onClose={() => setShowScopePickerModal(false)}
+        initialState={hierarchyScopeState}
+        onApply={(newState) => {
+          setHierarchyScopeState(newState);
+          setIsSaved(false);
+          setToast({
+            id: `toast_${Date.now()}`,
+            text: `Scope updated to "${getHierarchyScopeSummary(newState)}"`,
+          });
+        }}
+      />
     </div>
   );
 }
