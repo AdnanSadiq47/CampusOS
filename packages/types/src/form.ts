@@ -5,9 +5,23 @@
 
 import { ConfigOwnerType, ConfigScopeType, ConfigSourceOrigin } from './academic.js';
 
-export type FormPurpose = 'PRE_REGISTRATION' | 'ADMISSION' | 'CUSTOM';
+export type FormPurpose = 'PRE_ADMISSION' | 'ADMISSION' | 'PRE_REGISTRATION' | 'CUSTOM';
 export type FormVersionStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
 export type FieldOrigin = 'CANONICAL' | 'STANDARD' | 'CUSTOM';
+
+export type FormAccessType = 'INTERNAL_ONLY' | 'PUBLIC_ONLINE' | 'BOTH';
+export type PublicFormStatus = 'OPEN' | 'CLOSED';
+
+export interface PublicFormSettings {
+  accessType: FormAccessType;
+  publicStatus: PublicFormStatus;
+  openFrom?: Date | string | null;
+  closeOn?: Date | string | null;
+  publicSlug?: string;
+  confirmationMessage?: string;
+  notifyApplicantEmail?: boolean;
+  notifyInternalTeam?: boolean;
+}
 
 export type FieldCategory =
   | 'STUDENT_BASIC'

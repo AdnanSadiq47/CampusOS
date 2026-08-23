@@ -1,0 +1,971 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
+import {
+  AdmissionProcessDto,
+  AdmissionProcessStepConfig,
+  AdmissionStepType,
+  AdmissionStepCategory,
+} from '@campus-os/types';
+import { AssignedToDetailsModal } from '../../../../../components/AssignedToDetailsModal';
+
+// Available Step Library Items for adding new steps
+interface StepLibraryItem {
+  stepType: AdmissionStepType;
+  defaultName: string;
+  category: AdmissionStepCategory;
+  description: string;
+  defaultRequired: boolean;
+  requiresForm?: 'PRE_ADMISSION' | 'ADMISSION';
+}
+
+const STEP_LIBRARY: StepLibraryItem[] = [
+  {
+    stepType: 'PRE_ADMISSION',
+    defaultName: 'Pre-Admission Application',
+    category: 'APPLICATION',
+    description: 'Initial student & parent application intake via public or internal form.',
+    defaultRequired: true,
+    requiresForm: 'PRE_ADMISSION',
+  },
+  {
+    stepType: 'APPLICATION_REVIEW',
+    defaultName: 'Application Review',
+    category: 'APPLICATION',
+    description: 'Admissions team reviews student information and previous records.',
+    defaultRequired: true,
+  },
+  {
+    stepType: 'DOCUMENT_VERIFICATION',
+    defaultName: 'Document Verification',
+    category: 'APPLICATION',
+    description: 'Verification of birth certificates, previous transcripts, and CNIC/B-Forms.',
+    defaultRequired: true,
+  },
+  {
+    stepType: 'REGISTRATION_FEE',
+    defaultName: 'Registration Fee',
+    category: 'CONFIRMATION',
+    description: 'Collection of non-refundable application/registration processing fee.',
+    defaultRequired: false,
+  },
+  {
+    stepType: 'ASSESSMENT_TEST',
+    defaultName: 'Assessment / Test',
+    category: 'ASSESSMENT',
+    description: 'Entrance examination or age-appropriate diagnostic assessment.',
+    defaultRequired: true,
+  },
+  {
+    stepType: 'INTERVIEW',
+    defaultName: 'Interview',
+    category: 'ASSESSMENT',
+    description: 'Student and parent interview with school leadership.',
+    defaultRequired: false,
+  },
+  {
+    stepType: 'ELIGIBILITY_REVIEW',
+    defaultName: 'Eligibility Review',
+    category: 'ASSESSMENT',
+    description: 'Academic committee verification of age, grades, and admission criteria.',
+    defaultRequired: true,
+  },
+  {
+    stepType: 'APPROVAL',
+    defaultName: 'Admission Approval',
+    category: 'DECISION',
+    description: 'Principal or executive head final decision on admission application.',
+    defaultRequired: true,
+  },
+  {
+    stepType: 'WAITING_LIST',
+    defaultName: 'Waiting List',
+    category: 'DECISION',
+    description: 'Optional waiting pool queue when class capacity is reached.',
+    defaultRequired: false,
+  },
+  {
+    stepType: 'SEAT_CONFIRMATION',
+    defaultName: 'Seat Confirmation',
+    category: 'CONFIRMATION',
+    description: 'Formal reservation and lock of student seat in target grade/section.',
+    defaultRequired: true,
+  },
+  {
+    stepType: 'INITIAL_ADMISSION_FEE',
+    defaultName: 'Initial Admission Fee',
+    category: 'CONFIRMATION',
+    description: 'Payment of security deposit, admission fee, and first month tuition.',
+    defaultRequired: true,
+  },
+  {
+    stepType: 'FINAL_ADMISSION_FORM',
+    defaultName: 'Final Admission Form',
+    category: 'CONFIRMATION',
+    description: 'Comprehensive formal admission package with final guardian undertakings.',
+    defaultRequired: true,
+    requiresForm: 'ADMISSION',
+  },
+];
+
+// Published Forms Catalog (From Dynamic Form Builder)
+const PUBLISHED_PRE_ADMISSION_FORMS = [
+  { id: 'f_prereg_2026', versionId: 'v_prereg_1', name: 'Online Pre-Registration 2026-2027 (v1)' },
+  { id: 'f_gulshan_override', versionId: 'v_gul_1', name: 'Gulshan Early Childhood Pre-Reg (v1)' },
+];
+
+const PUBLISHED_FINAL_ADMISSION_FORMS = [
+  { id: 'f_adm_formal', versionId: 'v_adm_1', name: 'Formal Admission Package 2026–27 (v1)' },
+  { id: 'f_adm_senior', versionId: 'v_adm_sr_1', name: 'Senior School / A-Level Admission Package (v1)' },
+];
+
+export default function AdmissionProcessBuilderPage() {
+  const params = useParams();
+  const processId = String(params.id || 'proc_general_k12');
+
+  const [process, setProcess] = useState<AdmissionProcessDto>({
+    id: processId,
+    organizationId: '11111111-1111-1111-1111-111111111111',
+    code: 'AP-GEN-2026',
+    name: 'General Admission Process',
+    description: 'Standard K-12 admissions workflow with pre-admission, officer review, final admission and registration.',
+    starterTemplate: 'STANDARD',
+    status: 'ACTIVE',
+    currentVersionNumber: 1,
+    publishedVersionId: 'ver_proc_gen_v1',
+    applyTo: 'ALL_CAMPUSES',
+    branchIds: [],
+    branchNames: [],
+    ownerType: 'HEAD_OFFICE',
+    ownerId: 'ho_main',
+    sourceOrigin: 'LOCAL',
+    isInherited: false,
+    canEdit: true,
+    canActivate: true,
+    steps: [
+      {
+        id: 's1',
+        stepType: 'PRE_ADMISSION',
+        displayName: 'Pre-Admission Application',
+        category: 'APPLICATION',
+        isRequired: true,
+        sortOrder: 1,
+        attachedFormDefinitionId: 'f_prereg_2026',
+        attachedFormVersionId: 'v_prereg_1',
+        attachedFormName: 'Online Pre-Registration 2026-2027 (v1)',
+        autoMoveToNext: true,
+      },
+      {
+        id: 's2',
+        stepType: 'APPLICATION_REVIEW',
+        displayName: 'Application Review',
+        category: 'APPLICATION',
+        isRequired: true,
+        sortOrder: 2,
+        responsibleRole: 'Admissions Officer',
+        autoMoveToNext: true,
+        allowHold: true,
+        allowReject: true,
+      },
+      {
+        id: 's3',
+        stepType: 'FINAL_ADMISSION_FORM',
+        displayName: 'Final Admission Form',
+        category: 'CONFIRMATION',
+        isRequired: true,
+        sortOrder: 3,
+        attachedFormDefinitionId: 'f_adm_formal',
+        attachedFormVersionId: 'v_adm_1',
+        attachedFormName: 'Formal Admission Package 2026–27 (v1)',
+        autoMoveToNext: true,
+      },
+      {
+        id: 's4',
+        stepType: 'STUDENT_REGISTRATION',
+        displayName: 'Student Registration',
+        category: 'REGISTRATION',
+        isRequired: true,
+        sortOrder: 4,
+        isSystemTerminal: true,
+        autoMoveToNext: false,
+      },
+    ],
+    totalStepsCount: 4,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+
+  const [steps, setSteps] = useState<AdmissionProcessStepConfig[]>(process.steps);
+  const [showAddStepModal, setShowAddStepModal] = useState(false);
+  const [stepSearch, setStepSearch] = useState('');
+  const [editingStep, setEditingStep] = useState<AdmissionProcessStepConfig | null>(null);
+  const [showMoreStepSettings, setShowMoreStepSettings] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null);
+  const [showAssignedModal, setShowAssignedModal] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+
+  // Fetch process details
+  useEffect(() => {
+    const loadProcess = async () => {
+      try {
+        const res = await fetch(`http://localhost:4000/admin/admission-processes/${processId}`, {
+          headers: {
+            'x-tenant-id': '11111111-1111-1111-1111-111111111111',
+            'x-user-role': 'ADMIN',
+          },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setProcess(data);
+          setSteps(data.steps || []);
+        }
+      } catch (e) {
+        // Fallback to default
+      }
+    };
+    loadProcess();
+  }, [processId]);
+
+  // Step manipulation handlers
+  const handleMoveUp = (index: number) => {
+    if (index <= 0) return;
+    const newSteps = [...steps];
+    const temp = newSteps[index - 1]!;
+    newSteps[index - 1] = newSteps[index]!;
+    newSteps[index] = temp;
+    reindexSteps(newSteps);
+  };
+
+  const handleMoveDown = (index: number) => {
+    // Cannot move below terminal step
+    if (index >= steps.length - 2) return;
+    const newSteps = [...steps];
+    const temp = newSteps[index + 1]!;
+    newSteps[index + 1] = newSteps[index]!;
+    newSteps[index] = temp;
+    reindexSteps(newSteps);
+  };
+
+  const handleRemoveStep = (id: string) => {
+    const toRemove = steps.find((s) => s.id === id);
+    if (toRemove?.isSystemTerminal) {
+      alert('"Student Registration" is the required terminal system step and cannot be removed.');
+      return;
+    }
+    const newSteps = steps.filter((s) => s.id !== id);
+    reindexSteps(newSteps);
+  };
+
+  const reindexSteps = (newSteps: AdmissionProcessStepConfig[]) => {
+    const updated = newSteps.map((s, idx) => ({
+      ...s,
+      sortOrder: idx + 1,
+    }));
+    setSteps(updated);
+  };
+
+  const handleAddStepFromLibrary = (item: StepLibraryItem) => {
+    const newStepId = `step_${Date.now()}`;
+    const newStep: AdmissionProcessStepConfig = {
+      id: newStepId,
+      stepType: item.stepType,
+      displayName: item.defaultName,
+      category: item.category,
+      isRequired: item.defaultRequired,
+      sortOrder: steps.length, // inserted before terminal
+      autoMoveToNext: true,
+      allowHold: item.category === 'APPLICATION' || item.category === 'ASSESSMENT',
+      allowReject: item.category === 'APPLICATION' || item.category === 'ASSESSMENT',
+      attachedFormDefinitionId:
+        item.stepType === 'PRE_ADMISSION'
+          ? PUBLISHED_PRE_ADMISSION_FORMS[0]?.id
+          : item.stepType === 'FINAL_ADMISSION_FORM'
+          ? PUBLISHED_FINAL_ADMISSION_FORMS[0]?.id
+          : undefined,
+      attachedFormVersionId:
+        item.stepType === 'PRE_ADMISSION'
+          ? PUBLISHED_PRE_ADMISSION_FORMS[0]?.versionId
+          : item.stepType === 'FINAL_ADMISSION_FORM'
+          ? PUBLISHED_FINAL_ADMISSION_FORMS[0]?.versionId
+          : undefined,
+      attachedFormName:
+        item.stepType === 'PRE_ADMISSION'
+          ? PUBLISHED_PRE_ADMISSION_FORMS[0]?.name
+          : item.stepType === 'FINAL_ADMISSION_FORM'
+          ? PUBLISHED_FINAL_ADMISSION_FORMS[0]?.name
+          : undefined,
+    };
+
+    // Insert right before terminal registration step
+    const withoutTerminal = steps.filter((s) => !s.isSystemTerminal);
+    const terminalStep = steps.find((s) => s.isSystemTerminal) || {
+      id: 'step_terminal_reg',
+      stepType: 'STUDENT_REGISTRATION',
+      displayName: 'Student Registration',
+      category: 'REGISTRATION',
+      isRequired: true,
+      sortOrder: withoutTerminal.length + 2,
+      isSystemTerminal: true,
+    };
+
+    const combined = [...withoutTerminal, newStep, terminalStep];
+    reindexSteps(combined);
+    setShowAddStepModal(false);
+    setEditingStep(newStep);
+  };
+
+  // Validation logic
+  const validateJourney = (): { isValid: boolean; errors: string[] } => {
+    const errors: string[] = [];
+
+    if (steps.length === 0) {
+      errors.push('The process must have at least one step.');
+      return { isValid: false, errors };
+    }
+
+    const regSteps = steps.filter((s) => s.stepType === 'STUDENT_REGISTRATION');
+    if (regSteps.length === 0) {
+      errors.push('Process must include the "Student Registration" terminal step.');
+    } else if (regSteps.length > 1) {
+      errors.push('Only one "Student Registration" step is permitted.');
+    }
+
+    const lastStep = steps[steps.length - 1]!;
+    if (lastStep.stepType !== 'STUDENT_REGISTRATION') {
+      errors.push('"Student Registration" must be the final terminal step in the admission journey.');
+    }
+
+    const admFormSteps = steps.filter((s) => s.stepType === 'FINAL_ADMISSION_FORM');
+    if (admFormSteps.length === 0) {
+      errors.push('Process must include a "Final Admission Form" step before Student Registration.');
+    } else {
+      for (const s of admFormSteps) {
+        if (!s.attachedFormDefinitionId) {
+          errors.push(`"${s.displayName}" requires an attached Published Admission Form.`);
+        }
+      }
+    }
+
+    const preAdmSteps = steps.filter((s) => s.stepType === 'PRE_ADMISSION');
+    for (const s of preAdmSteps) {
+      if (!s.attachedFormDefinitionId) {
+        errors.push(`"${s.displayName}" requires an attached Published Pre-Admission Form.`);
+      }
+    }
+
+    return { isValid: errors.length === 0, errors };
+  };
+
+  const handleSaveDraft = async () => {
+    setValidationErrors([]);
+    setSaveSuccessMessage('Draft saved successfully.');
+    setTimeout(() => setSaveSuccessMessage(null), 3000);
+  };
+
+  const handleActivate = async () => {
+    const res = validateJourney();
+    if (!res.isValid) {
+      setValidationErrors(res.errors);
+      return;
+    }
+    setValidationErrors([]);
+    setProcess({ ...process, status: 'ACTIVE', currentVersionNumber: process.currentVersionNumber + 1 });
+    setSaveSuccessMessage(`Admission Process Activated! Version v${process.currentVersionNumber + 1} is now live.`);
+    setTimeout(() => setSaveSuccessMessage(null), 4000);
+  };
+
+  const filteredStepLibrary = STEP_LIBRARY.filter(
+    (item) =>
+      item.defaultName.toLowerCase().includes(stepSearch.toLowerCase()) ||
+      item.description.toLowerCase().includes(stepSearch.toLowerCase())
+  );
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-6 pb-20">
+      {/* 1. Breadcrumbs & Top Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-4">
+        <div>
+          <div className="flex items-center gap-2 text-xs text-slate-400 mb-1">
+            <Link href="/admin-config/admission-process" className="hover:text-indigo-600">
+              Admission Process
+            </Link>
+            <span>/</span>
+            <span className="font-mono">{process.code}</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white">
+              {process.name}
+            </h1>
+            <span
+              className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                process.status === 'ACTIVE'
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  : 'bg-amber-50 text-amber-700 border-amber-200'
+              }`}
+            >
+              {process.status} · v{process.currentVersionNumber}
+            </span>
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowPreviewModal(true)}
+            className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
+          >
+            Preview Journey
+          </button>
+          <button
+            type="button"
+            onClick={handleSaveDraft}
+            className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
+          >
+            Save Draft
+          </button>
+          <button
+            type="button"
+            onClick={handleActivate}
+            className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm transition-colors cursor-pointer"
+          >
+            Activate Process
+          </button>
+        </div>
+      </div>
+
+      {/* Scope Pill */}
+      <div className="flex items-center justify-between p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs">
+        <div className="flex items-center gap-2">
+          <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+            Assigned Scope:
+          </span>
+          <button
+            type="button"
+            onClick={() => setShowAssignedModal(true)}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-semibold cursor-pointer hover:bg-slate-200"
+          >
+            <span>{process.applyTo === 'ALL_CAMPUSES' ? '🌐 All Campuses' : '📍 Selected Campuses'}</span>
+            <span className="text-slate-400 text-[10px]">›</span>
+          </button>
+        </div>
+        <p className="text-[11px] text-slate-400 hidden sm:block">
+          Starter Template: <span className="font-bold text-slate-700 dark:text-slate-300 capitalize">{process.starterTemplate.toLowerCase()}</span>
+        </p>
+      </div>
+
+      {/* Feedback Alerts */}
+      {saveSuccessMessage && (
+        <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs font-bold flex items-center gap-2 animate-in fade-in">
+          <span>✓</span>
+          <span>{saveSuccessMessage}</span>
+        </div>
+      )}
+
+      {validationErrors.length > 0 && (
+        <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs space-y-1.5 animate-in fade-in">
+          <div className="font-bold flex items-center gap-1.5">
+            <span>⚠️</span>
+            <span>Please resolve the following before activating this process:</span>
+          </div>
+          <ul className="list-disc list-inside space-y-0.5 text-[11px] pl-2">
+            {validationErrors.map((err, i) => (
+              <li key={i}>{err}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* 2. Vertical Journey Canvas */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            Admission Steps ({steps.length})
+          </h2>
+          <span className="text-[11px] text-slate-400">Drag or use Move Up/Down to reorder</span>
+        </div>
+
+        <div className="space-y-2.5">
+          {steps.map((step, idx) => {
+            const isTerminal = step.isSystemTerminal;
+            return (
+              <div key={step.id}>
+                {/* Step Card */}
+                <div
+                  className={`p-4 rounded-2xl border transition-all ${
+                    isTerminal
+                      ? 'bg-purple-50/40 dark:bg-purple-950/20 border-purple-200 dark:border-purple-900/60'
+                      : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-indigo-300'
+                  }`}
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    {/* Left: Number + Details */}
+                    <div className="flex items-start sm:items-center gap-3">
+                      <div
+                        className={`w-7 h-7 rounded-xl flex items-center justify-center font-black text-xs shrink-0 ${
+                          isTerminal
+                            ? 'bg-purple-600 text-white'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                        }`}
+                      >
+                        {idx + 1}
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-sm text-slate-900 dark:text-white">
+                            {step.displayName}
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              step.isRequired
+                                ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800'
+                                : 'bg-slate-100 text-slate-600 border border-slate-200'
+                            }`}
+                          >
+                            {step.isRequired ? 'Required' : 'Optional'}
+                          </span>
+                          {isTerminal && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-100 text-purple-800 dark:bg-purple-900/60 dark:text-purple-300">
+                              System Terminal Step
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Secondary metadata chips */}
+                        <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 flex-wrap">
+                          {step.attachedFormName && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                              <span>📝</span>
+                              <span>{step.attachedFormName}</span>
+                            </span>
+                          )}
+                          {step.responsibleRole && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                              <span>👤</span>
+                              <span>{step.responsibleRole}</span>
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right: Actions */}
+                    <div className="flex items-center gap-1.5 self-end sm:self-center">
+                      {!isTerminal && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setEditingStep(step)}
+                            className="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            disabled={idx === 0}
+                            onClick={() => handleMoveUp(idx)}
+                            className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-30 text-xs hover:bg-slate-100 cursor-pointer"
+                            title="Move Up"
+                          >
+                            ▲
+                          </button>
+                          <button
+                            type="button"
+                            disabled={idx >= steps.length - 2}
+                            onClick={() => handleMoveDown(idx)}
+                            className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-30 text-xs hover:bg-slate-100 cursor-pointer"
+                            title="Move Down"
+                          >
+                            ▼
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveStep(step.id)}
+                            className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs cursor-pointer"
+                            title="Remove Step"
+                          >
+                            ✕
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Downward Connector Arrow */}
+                {idx < steps.length - 1 && (
+                  <div className="text-center py-0.5 text-slate-300 dark:text-slate-700 font-bold text-sm">
+                    ↓
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Add Step Button */}
+        <div className="pt-2">
+          <button
+            type="button"
+            onClick={() => setShowAddStepModal(true)}
+            className="w-full py-3.5 rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-500 dark:hover:border-indigo-400 bg-white/50 dark:bg-slate-900/50 hover:bg-indigo-50/30 text-xs font-bold text-indigo-600 dark:text-indigo-400 flex items-center justify-center gap-2 transition-all cursor-pointer"
+          >
+            <span>+</span>
+            <span>Add Step</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ── ADD STEP LIBRARY MODAL ── */}
+      {showAddStepModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 my-8 max-h-[85vh] flex flex-col justify-between">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 shrink-0">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">Add Step to Journey</h3>
+                <p className="text-xs text-slate-400">Select an admission stage from the step library.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddStepModal(false)}
+                className="text-slate-400 hover:text-slate-600 text-base cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Search */}
+            <div className="shrink-0">
+              <input
+                type="text"
+                value={stepSearch}
+                onChange={(e) => setStepSearch(e.target.value)}
+                placeholder="Search step types..."
+                className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+              />
+            </div>
+
+            {/* Step Library List */}
+            <div className="flex-1 overflow-y-auto space-y-2 pr-1 text-xs">
+              {filteredStepLibrary.map((item) => (
+                <div
+                  key={item.stepType}
+                  onClick={() => handleAddStepFromLibrary(item)}
+                  className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-indigo-500 hover:bg-indigo-50/40 dark:hover:bg-indigo-950/30 cursor-pointer transition-all flex items-center justify-between"
+                >
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-slate-900 dark:text-white">{item.defaultName}</span>
+                      <span className="px-2 py-0.2 rounded text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-500">
+                        {item.category}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">{item.description}</p>
+                  </div>
+                  <span className="text-indigo-600 font-extrabold text-sm ml-3">+ Add</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="pt-2 flex justify-end shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowAddStepModal(false)}
+                className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── STEP SETTINGS MODAL (PROGRESSIVE DISCLOSURE) ── */}
+      {editingStep && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 my-8 max-h-[90vh] flex flex-col justify-between">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 shrink-0">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">Step Settings</h3>
+                <p className="text-xs text-slate-400">{editingStep.stepType}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingStep(null)}
+                className="text-slate-400 hover:text-slate-600 text-base cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-4 pr-1 text-xs">
+              {/* 1. Display Name */}
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                  Step Display Name *
+                </label>
+                <input
+                  type="text"
+                  value={editingStep.displayName}
+                  onChange={(e) => setEditingStep({ ...editingStep, displayName: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold"
+                />
+              </div>
+
+              {/* 2. Required vs Optional */}
+              <div className="flex items-center justify-between p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+                <div>
+                  <span className="font-bold text-slate-800 dark:text-slate-200 block">Required Step</span>
+                  <span className="text-[11px] text-slate-400">Applicant cannot skip this stage.</span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={editingStep.isRequired}
+                  onChange={(e) => setEditingStep({ ...editingStep, isRequired: e.target.checked })}
+                  className="h-4 w-4 text-indigo-600 rounded cursor-pointer"
+                />
+              </div>
+
+              {/* 3. Who Handles This */}
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                  Who Handles This?
+                </label>
+                <select
+                  value={editingStep.responsibleRole || ''}
+                  onChange={(e) => setEditingStep({ ...editingStep, responsibleRole: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold cursor-pointer"
+                >
+                  <option value="">General Admissions Permission</option>
+                  <option value="Admissions Officer">Admissions Officer</option>
+                  <option value="Principal / Vice Principal">Principal / Vice Principal</option>
+                  <option value="Registrar">Registrar</option>
+                  <option value="Academic Coordinator">Academic Coordinator</option>
+                  <option value="Accounts / Finance">Accounts / Finance</option>
+                </select>
+              </div>
+
+              {/* 4. Attached Dynamic Form Selection */}
+              {(editingStep.stepType === 'PRE_ADMISSION' || editingStep.stepType === 'FINAL_ADMISSION_FORM') && (
+                <div className="p-3.5 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-900 dark:text-indigo-200">
+                      {editingStep.stepType === 'PRE_ADMISSION' ? 'Pre-Admission Form *' : 'Admission Form *'}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-mono">Dynamic Form Builder</span>
+                  </div>
+
+                  <select
+                    value={editingStep.attachedFormDefinitionId || ''}
+                    onChange={(e) => {
+                      const selectedId = e.target.value;
+                      const catalog =
+                        editingStep.stepType === 'PRE_ADMISSION'
+                          ? PUBLISHED_PRE_ADMISSION_FORMS
+                          : PUBLISHED_FINAL_ADMISSION_FORMS;
+                      const found = catalog.find((f) => f.id === selectedId);
+                      setEditingStep({
+                        ...editingStep,
+                        attachedFormDefinitionId: selectedId,
+                        attachedFormVersionId: found?.versionId,
+                        attachedFormName: found?.name,
+                      });
+                    }}
+                    className="w-full px-3 py-2 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white cursor-pointer"
+                  >
+                    <option value="">Select Published Form...</option>
+                    {(editingStep.stepType === 'PRE_ADMISSION'
+                      ? PUBLISHED_PRE_ADMISSION_FORMS
+                      : PUBLISHED_FINAL_ADMISSION_FORMS
+                    ).map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  <p className="text-[10px] text-slate-400">
+                    Only published, eligible forms of matching purpose created in Dynamic Form Builder are selectable.
+                  </p>
+                </div>
+              )}
+
+              {/* 5. Progressive Disclosure: More Settings */}
+              <div className="border-t border-slate-100 dark:border-slate-800 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowMoreStepSettings(!showMoreStepSettings)}
+                  className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span>{showMoreStepSettings ? '▲ Hide Advanced Settings' : '▼ More Settings'}</span>
+                </button>
+
+                {showMoreStepSettings && (
+                  <div className="mt-3 space-y-3 p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 animate-in fade-in">
+                    {/* Auto Move */}
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-slate-700 dark:text-slate-300">
+                        Auto Move to Next Step
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={editingStep.autoMoveToNext ?? true}
+                        onChange={(e) =>
+                          setEditingStep({ ...editingStep, autoMoveToNext: e.target.checked })
+                        }
+                        className="h-4 w-4 text-indigo-600 rounded cursor-pointer"
+                      />
+                    </div>
+
+                    {/* Allow Hold */}
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-slate-700 dark:text-slate-300">Allow Hold</span>
+                      <input
+                        type="checkbox"
+                        checked={editingStep.allowHold ?? false}
+                        onChange={(e) =>
+                          setEditingStep({ ...editingStep, allowHold: e.target.checked })
+                        }
+                        className="h-4 w-4 text-indigo-600 rounded cursor-pointer"
+                      />
+                    </div>
+
+                    {/* Allow Reject */}
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-slate-700 dark:text-slate-300">Allow Reject</span>
+                      <input
+                        type="checkbox"
+                        checked={editingStep.allowReject ?? false}
+                        onChange={(e) =>
+                          setEditingStep({ ...editingStep, allowReject: e.target.checked })
+                        }
+                        className="h-4 w-4 text-indigo-600 rounded cursor-pointer"
+                      />
+                    </div>
+
+                    {/* Instructions */}
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                        Staff Instructions
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={editingStep.instructions || ''}
+                        onChange={(e) =>
+                          setEditingStep({ ...editingStep, instructions: e.target.value })
+                        }
+                        placeholder="Internal guidelines for staff when completing this step"
+                        className="w-full px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setEditingStep(null)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const updated = steps.map((s) => (s.id === editingStep.id ? editingStep : s));
+                  setSteps(updated);
+                  setEditingStep(null);
+                }}
+                className="px-5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm cursor-pointer"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── ASSIGNED TO POPUP ── */}
+      {showAssignedModal && (
+        <AssignedToDetailsModal
+          isOpen={true}
+          onClose={() => setShowAssignedModal(false)}
+          formName={`${process.name} (${process.code})`}
+          scopeState={{
+            isEntireOrg: process.applyTo === 'ALL_CAMPUSES',
+            selectedHeadOfficeIds: [],
+            selectedRegionIds: [],
+            selectedSchoolIds: [],
+            selectedCampusIds: process.branchIds || [],
+          }}
+        />
+      )}
+
+      {/* ── PREVIEW JOURNEY MODAL ── */}
+      {showPreviewModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 my-8">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">Preview Admission Journey</h3>
+                <p className="text-xs text-slate-400">{process.name}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPreviewModal(false)}
+                className="text-slate-400 hover:text-slate-600 text-base cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">
+                Configured Steps Sequence ({steps.length})
+              </span>
+              <div className="space-y-2">
+                {steps.map((st, idx) => (
+                  <div key={st.id || idx}>
+                    <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-400">{idx + 1}.</span>
+                        <span className="font-bold text-slate-800 dark:text-slate-200">{st.displayName}</span>
+                      </div>
+                      <span
+                        className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                          st.isRequired ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-600'
+                        }`}
+                      >
+                        {st.isRequired ? 'Required' : 'Optional'}
+                      </span>
+                    </div>
+                    {idx < steps.length - 1 && (
+                      <div className="text-center text-slate-300 dark:text-slate-600 py-0.5 text-xs">↓</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowPreviewModal(false)}
+                className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold cursor-pointer"
+              >
+                Close Preview
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

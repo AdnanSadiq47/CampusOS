@@ -8,7 +8,7 @@ import {
 } from '@campus-os/types';
 
 // Status badge styling helper
-export function getStatusBadge(status: AdmissionStatus) {
+function getStatusBadge(status: AdmissionStatus) {
   switch (status) {
     case 'DRAFT':
       return {
