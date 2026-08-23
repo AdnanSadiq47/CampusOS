@@ -18,4 +18,5 @@ export * from './head-office.js';
 export * from './branch.js';
 export * from './geography.js';
 export * from './academic.js';
+export * from './admissions.js';
 

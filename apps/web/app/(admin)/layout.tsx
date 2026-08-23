@@ -18,6 +18,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       match: (p: string) => p.startsWith('/admin-config') || p === '/schools',
     },
     {
+      href: '/admissions/applications',
+      label: 'Admissions',
+      icon: '🎓',
+      match: (p: string) => p.startsWith('/admissions'),
+    },
+    {
       href: '/builders/hierarchy',
       label: 'Platform Builders',
       icon: '🔧',
@@ -41,6 +47,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { href: '/admin-config/admin-users', label: 'Admin Users', icon: '👥', soon: true },
   ];
 
+  // Admissions operational sub-navigation
+  const admissionsLinks = [
+    { href: '/admissions/applications', label: 'Applications', icon: '📝', soon: false },
+    { href: '/admissions/dashboard', label: 'Dashboard', icon: '📊', soon: true },
+    { href: '/admissions/inquiries', label: 'Inquiries', icon: '💬', soon: true },
+    { href: '/admissions/pre-registration', label: 'Pre-Registration', icon: '📋', soon: true },
+  ];
+
   // Builder strip links (shown for Platform Builders section)
   const builderLinks = [
     { href: '/builders/hierarchy', label: 'Hierarchy Tree', icon: '🌳' },
@@ -52,6 +66,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const isInAdminConfig =
     pathname.startsWith('/admin-config') || pathname === '/schools';
+  const isInAdmissions = pathname.startsWith('/admissions');
   const isInBuilders = pathname.startsWith('/builders');
 
   return (
@@ -199,6 +214,42 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   const isActive =
                     pathname === link.href ||
                     (link.href === '/admin-config/schools' && pathname === '/schools');
+                  return (
+                    <Link
+                      key={link.href}
+                      href={link.soon ? '#' : link.href}
+                      className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 transition-all whitespace-nowrap flex-shrink-0 min-h-[36px] ${
+                        isActive
+                          ? 'border-indigo-600 text-indigo-700 dark:text-indigo-400 dark:border-indigo-400 font-semibold'
+                          : link.soon
+                          ? 'border-transparent text-slate-300 dark:text-slate-600 cursor-not-allowed'
+                          : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:border-slate-300 dark:hover:border-slate-600'
+                      }`}
+                      onClick={link.soon ? (e) => e.preventDefault() : undefined}
+                    >
+                      <span>{link.icon}</span>
+                      <span>{link.label}</span>
+                      {link.soon && (
+                        <span className="px-1 py-0.5 rounded text-[9px] bg-slate-100 dark:bg-slate-800 text-slate-400 font-medium">Soon</span>
+                      )}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── ADMISSIONS OPERATIONAL SECONDARY STRIP ─────────────────── */}
+        {isInAdmissions && (
+          <div className="border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
+            <div className="max-w-[1400px] mx-auto px-3 sm:px-6 lg:px-8">
+              <div className="flex items-center gap-1 overflow-x-auto py-0 scrollbar-none">
+                <div className="flex items-center gap-1.5 pr-2.5 mr-1 border-r border-slate-200 dark:border-slate-700 flex-shrink-0 py-2">
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Admissions</span>
+                </div>
+                {admissionsLinks.map((link) => {
+                  const isActive = pathname === link.href || pathname.startsWith(link.href);
                   return (
                     <Link
                       key={link.href}
