@@ -16,4 +16,5 @@ export * from './regions.js';
 export * from './school-types.js';
 export * from './head-offices.js';
 export * from './branches.js';
+export * from './geography.js';
 

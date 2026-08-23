@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { HeadOfficeListItemDto, CreateHeadOfficeDto } from '@campus-os/types';
 import { AdminConfigPageHeader } from '../../../../components/AdminConfigPageHeader';
+import { GeographyLocationFields } from '../../../../components/GeographySelectors';
 
 export default function HeadOfficesPage() {
   // State
@@ -779,40 +780,14 @@ export default function HeadOfficesPage() {
               {/* TAB 3: LOCATION */}
               {formTab === 'location' && (
                 <div className="space-y-4 text-xs">
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div>
-                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Country</label>
-                      <input
-                        type="text"
-                        placeholder="Pakistan"
-                        value={formData.country || 'Pakistan'}
-                        onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-                        className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Province / State</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Punjab, Sindh, Federal"
-                        value={formData.province || ''}
-                        onChange={(e) => setFormData({ ...formData, province: e.target.value })}
-                        className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">City</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Islamabad, Lahore, Karachi"
-                        value={formData.city || ''}
-                        onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                        className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                      />
-                    </div>
-                  </div>
+                  <GeographyLocationFields
+                    country={formData.country || 'Pakistan'}
+                    province={formData.province || ''}
+                    city={formData.city || ''}
+                    onCountryChange={(country) => setFormData((prev) => ({ ...prev, country }))}
+                    onProvinceChange={(province) => setFormData((prev) => ({ ...prev, province }))}
+                    onCityChange={(city) => setFormData((prev) => ({ ...prev, city }))}
+                  />
 
                   <div>
                     <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Street Address</label>

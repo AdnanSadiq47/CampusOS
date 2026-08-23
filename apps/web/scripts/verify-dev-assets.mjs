@@ -17,6 +17,11 @@ const ROUTES = [
   '/admin-config/school-types',
   '/admin-config/schools',
   '/admin-config/branches',
+  '/admin-config/countries',
+  '/admin-config/states',
+  '/admin-config/cities',
+  '/admin-config/areas',
+  '/admin-config/postal-codes',
 ];
 
 async function verifyRoute(route) {
