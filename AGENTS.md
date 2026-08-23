@@ -164,3 +164,24 @@
     - Root containers and table containers must enforce `overflow-x-auto` or `overflow-x-hidden` to avoid window-level scrollbar breakage.
     - All interactive buttons, action menus (`⋮`), and form inputs must maintain touch-friendly padding and clear visible focus rings.
 
+---
+
+## 14. Platform Dynamic Form Builder Foundation Standards
+
+48. **Separation of Configuration vs Operational Modules**:
+    - **Configuration Layer** (`Administration Configuration` $\rightarrow$ `Forms Setup`): Defines, visualizes, templates, versions, and publishes form schemas.
+    - **Operational Layer** (`Main ERP` $\rightarrow$ `Admissions` / `Pre-Registration`): Dynamically resolves and renders published forms to collect applicant submissions without hardcoded HTML forms.
+49. **Master Field Catalog & Duplicate Canonical Concept Detection**:
+    - Centralized catalog of 80+ fields across 16 categories with canonical, standard, and custom origins.
+    - Duplicate detection prevents creating redundant custom fields for existing core concepts (e.g. warning against creating "DOB" when "Date of Birth" canonical exists).
+    - Stable canonical keys preserve data mapping between Pre-Registration and Admission submissions even when custom labels change.
+50. **Centralized Deterministic Form Resolution**:
+    - `resolvePublishedForm(tenantId, formPurpose, campusId)` strictly evaluates:
+      1. Campus-owned local published form (if authorized).
+      2. School/Region/HO assigned published form via `SELECTED_CAMPUSES`.
+      3. School/Region/HO universal published form via `ALL_CAMPUSES`.
+51. **Immutable Versioning & Lifecycle Governance**:
+    - Published versions with historical applicant submissions are immutable.
+    - New iterations clone schema into draft Version $N+1$.
+    - Unused library fields produce zero empty rows in hybrid structured storage.
+

@@ -20,6 +20,7 @@ export type ConfigCategoryKey =
   | 'org_setup'
   | 'location_geography'
   | 'academic_setup'
+  | 'forms_setup'
   | 'student_setup'
   | 'hr_employee_setup'
   | 'fee_billing_setup'
@@ -77,6 +78,13 @@ export const CONFIG_CATEGORIES: ConfigCategoryMeta[] = [
     description: 'Academic years, boards, classes, sections, groups, and subjects.',
     icon: '🎓',
     sortOrder: 3,
+  },
+  {
+    key: 'forms_setup',
+    name: 'Forms Setup',
+    description: 'Dynamic form builder, versioned schemas, field catalog, and templates.',
+    icon: '📝',
+    sortOrder: 4,
   },
   {
     key: 'student_setup',
@@ -432,6 +440,52 @@ export const CONFIG_REGISTRY: ConfigItem[] = [
     isFavoriteEligible: true,
     isQuickActionEligible: true,
     sortOrder: 7,
+  },
+  // ── Forms Setup Items ──────────────────────────────────────────────
+  {
+    id: 'forms_builder',
+    name: 'Form Builder',
+    category: 'forms_setup',
+    description: 'Design, configure, preview, version, and publish Pre-Registration and Admission dynamic forms.',
+    route: '/admin-config/form-builder',
+    icon: '📝',
+    keywords: ['form builder', 'forms', 'pre-registration form', 'admission form', 'custom forms', 'form designer', 'fields'],
+    requiredPermission: 'MANAGE_FORMS',
+    scopeClassification: 'ORGANIZATION',
+    isImplemented: true,
+    isFavoriteEligible: true,
+    isQuickActionEligible: true,
+    sortOrder: 1,
+  },
+  {
+    id: 'forms_templates',
+    name: 'Form Templates',
+    category: 'forms_setup',
+    description: 'Starter form templates for quick setup: Basic Pre-Reg, Standard Pre-Reg, and Comprehensive Admission.',
+    route: '/admin-config/form-templates',
+    icon: '📋',
+    keywords: ['templates', 'starter forms', 'form templates', 'cloning', 'starters'],
+    requiredPermission: 'MANAGE_FORMS',
+    scopeClassification: 'ORGANIZATION',
+    isImplemented: true,
+    isFavoriteEligible: true,
+    isQuickActionEligible: true,
+    sortOrder: 2,
+  },
+  {
+    id: 'forms_field_library',
+    name: 'Field Library',
+    category: 'forms_setup',
+    description: 'Catalog of 80+ master canonical, standard, and custom fields across all student, parent, and academic categories.',
+    route: '/admin-config/field-library',
+    icon: '📚',
+    keywords: ['field library', 'master fields', 'canonical fields', 'custom fields', 'field catalog', 'smart fields'],
+    requiredPermission: 'MANAGE_FORMS',
+    scopeClassification: 'ORGANIZATION',
+    isImplemented: true,
+    isFavoriteEligible: true,
+    isQuickActionEligible: true,
+    sortOrder: 3,
   },
   {
     id: 'acad_groups',

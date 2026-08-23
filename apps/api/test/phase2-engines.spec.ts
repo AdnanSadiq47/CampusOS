@@ -166,10 +166,16 @@ describe('Phase 2 Platform Dynamic Engines & Virtual ORM Integration Tests', () 
       CREATE TABLE form_definitions (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-        entity_id UUID NOT NULL,
+        entity_id UUID,
         code VARCHAR(64) NOT NULL,
         name VARCHAR(128) NOT NULL,
+        form_purpose VARCHAR(64) DEFAULT 'PRE_REGISTRATION' NOT NULL,
         description TEXT,
+        owner_type VARCHAR(32) DEFAULT 'SCHOOL' NOT NULL,
+        owner_id UUID,
+        apply_to VARCHAR(32) DEFAULT 'ALL_CAMPUSES' NOT NULL,
+        current_version_id UUID,
+        published_version_id UUID,
         is_active BOOLEAN DEFAULT TRUE NOT NULL,
         created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
         updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
@@ -180,16 +186,20 @@ describe('Phase 2 Platform Dynamic Engines & Virtual ORM Integration Tests', () 
       CREATE TABLE form_versions (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-        form_id UUID NOT NULL,
-        version INT NOT NULL,
+        form_id UUID,
+        form_definition_id UUID,
+        version INT,
+        version_number INT,
         status VARCHAR(32) DEFAULT 'DRAFT' NOT NULL,
-        schema_ast JSONB NOT NULL,
+        schema_ast JSONB,
+        schema_payload JSONB,
+        changelog_summary TEXT,
         rules JSONB DEFAULT '[]'::jsonb NOT NULL,
         published_at TIMESTAMPTZ,
         published_by UUID REFERENCES identity_users(id),
+        published_by_user_id UUID REFERENCES identity_users(id),
         created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-        CONSTRAINT uq_form_version_org_id UNIQUE (organization_id, id),
-        CONSTRAINT uq_form_version_number UNIQUE (organization_id, form_id, version)
+        CONSTRAINT uq_form_version_org_id UNIQUE (organization_id, id)
       );
 
       CREATE TABLE workflow_definitions (

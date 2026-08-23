@@ -34,6 +34,7 @@ const GROUP_TO_CATEGORY_KEY: Record<string, string> = {
   'Organization Setup': 'org_setup',
   'Location & Geography': 'location_geography',
   'Academic Setup': 'academic_setup',
+  'Forms Setup': 'forms_setup',
   'Student Setup': 'student_setup',
   'HR & Employee Setup': 'hr_setup',
   'Fee & Billing Setup': 'fee_billing_setup',
@@ -71,6 +72,12 @@ export const ACADEMIC_SETUP_NAV: CategoryNavItem[] = [
   { label: 'Classes / Grades', href: '/admin-config/classes' },
   { label: 'Sections', href: '/admin-config/sections' },
   { label: 'Languages', href: '/admin-config/languages' },
+];
+
+export const FORMS_SETUP_NAV: CategoryNavItem[] = [
+  { label: 'Form Builder', href: '/admin-config/form-builder' },
+  { label: 'Form Templates', href: '/admin-config/form-templates' },
+  { label: 'Field Library', href: '/admin-config/field-library' },
 ];
 
 export function AdminConfigPageHeader({

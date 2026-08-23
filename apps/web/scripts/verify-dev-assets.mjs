@@ -30,6 +30,10 @@ const ROUTES = [
   '/admin-config/classes',
   '/admin-config/sections',
   '/admin-config/languages',
+  '/admin-config/form-builder',
+  '/admin-config/form-templates',
+  '/admin-config/field-library',
+  '/admin-config/form-builder/f_prereg_2026',
 ];
 
 async function verifyRoute(route) {

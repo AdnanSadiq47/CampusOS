@@ -66,15 +66,14 @@ export class FormsService {
         .insert(formVersions)
         .values({
           organizationId: tenantId,
-          formId: form!.id,
-          version: 1,
+          formDefinitionId: form!.id,
+          versionNumber: 1,
           status: 'DRAFT',
-          schemaAst: initialAst as unknown as Record<string, unknown>,
-          rules: [] as unknown as Record<string, unknown>,
+          schemaPayload: initialAst as unknown as Record<string, unknown>,
         })
         .returning();
 
-      return { form, initialVersion: version };
+      return { form, initialVersion: { ...version, version: version!.versionNumber } };
     });
   }
 
@@ -97,46 +96,44 @@ export class FormsService {
       const [latestDraft] = await tx
         .select()
         .from(formVersions)
-        .where(and(eq(formVersions.organizationId, tenantId), eq(formVersions.formId, formId), eq(formVersions.status, 'DRAFT')))
-        .orderBy(desc(formVersions.version))
+        .where(and(eq(formVersions.organizationId, tenantId), eq(formVersions.formDefinitionId, formId), eq(formVersions.status, 'DRAFT')))
+        .orderBy(desc(formVersions.versionNumber))
         .limit(1);
 
       if (latestDraft) {
         const [updated] = await tx
           .update(formVersions)
           .set({
-            schemaAst: dto.schemaAst as unknown as Record<string, unknown>,
-            rules: (dto.rules ?? []) as unknown as Record<string, unknown>,
+            schemaPayload: dto.schemaAst as unknown as Record<string, unknown>,
           })
           .where(eq(formVersions.id, latestDraft.id))
           .returning();
 
-        return updated;
+        return { ...updated, version: updated!.versionNumber };
       }
 
       // If no draft exists (all published/archived), find max version and create version + 1
       const [latestVersion] = await tx
         .select()
         .from(formVersions)
-        .where(and(eq(formVersions.organizationId, tenantId), eq(formVersions.formId, formId)))
-        .orderBy(desc(formVersions.version))
+        .where(and(eq(formVersions.organizationId, tenantId), eq(formVersions.formDefinitionId, formId)))
+        .orderBy(desc(formVersions.versionNumber))
         .limit(1);
 
-      const nextVersionNumber = (latestVersion?.version ?? 0) + 1;
+      const nextVersionNumber = (latestVersion?.versionNumber ?? 0) + 1;
 
       const [newDraft] = await tx
         .insert(formVersions)
         .values({
           organizationId: tenantId,
-          formId,
-          version: nextVersionNumber,
+          formDefinitionId: formId,
+          versionNumber: nextVersionNumber,
           status: 'DRAFT',
-          schemaAst: dto.schemaAst as unknown as Record<string, unknown>,
-          rules: (dto.rules ?? []) as unknown as Record<string, unknown>,
+          schemaPayload: dto.schemaAst as unknown as Record<string, unknown>,
         })
         .returning();
 
-      return newDraft;
+      return { ...newDraft, version: newDraft!.versionNumber };
     });
   }
 
@@ -148,8 +145,8 @@ export class FormsService {
       const [draft] = await tx
         .select()
         .from(formVersions)
-        .where(and(eq(formVersions.organizationId, tenantId), eq(formVersions.formId, formId), eq(formVersions.status, 'DRAFT')))
-        .orderBy(desc(formVersions.version))
+        .where(and(eq(formVersions.organizationId, tenantId), eq(formVersions.formDefinitionId, formId), eq(formVersions.status, 'DRAFT')))
+        .orderBy(desc(formVersions.versionNumber))
         .limit(1);
 
       if (!draft) {
@@ -160,7 +157,7 @@ export class FormsService {
       await tx
         .update(formVersions)
         .set({ status: 'ARCHIVED' })
-        .where(and(eq(formVersions.organizationId, tenantId), eq(formVersions.formId, formId), eq(formVersions.status, 'PUBLISHED')));
+        .where(and(eq(formVersions.organizationId, tenantId), eq(formVersions.formDefinitionId, formId), eq(formVersions.status, 'PUBLISHED')));
 
       // Mark this draft as PUBLISHED
       const [published] = await tx
@@ -168,12 +165,18 @@ export class FormsService {
         .set({
           status: 'PUBLISHED',
           publishedAt: new Date(),
-          publishedBy: userId,
+          publishedByUserId: userId,
         })
         .where(eq(formVersions.id, draft.id))
         .returning();
 
-      return published;
+      // Update publishedVersionId pointer on form definition
+      await tx
+        .update(formDefinitions)
+        .set({ publishedVersionId: published!.id })
+        .where(and(eq(formDefinitions.organizationId, tenantId), eq(formDefinitions.id, formId)));
+
+      return { ...published, version: published!.versionNumber, publishedBy: published!.publishedByUserId };
     });
   }
 
@@ -195,15 +198,15 @@ export class FormsService {
       const [published] = await tx
         .select()
         .from(formVersions)
-        .where(and(eq(formVersions.organizationId, tenantId), eq(formVersions.formId, form.id), eq(formVersions.status, 'PUBLISHED')))
-        .orderBy(desc(formVersions.version))
+        .where(and(eq(formVersions.organizationId, tenantId), eq(formVersions.formDefinitionId, form.id), eq(formVersions.status, 'PUBLISHED')))
+        .orderBy(desc(formVersions.versionNumber))
         .limit(1);
 
       if (!published) {
         throw new NotFoundException(`No published version found for form '${formCode}'`);
       }
 
-      return { form, version: published };
+      return { form, version: { ...published, version: published!.versionNumber } };
     });
   }
 
