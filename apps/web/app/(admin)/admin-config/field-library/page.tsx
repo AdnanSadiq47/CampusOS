@@ -1,12 +1,18 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   AdminConfigPageHeader,
   FORMS_SETUP_NAV,
 } from '../../../../components/AdminConfigPageHeader';
 import { ResponsiveFilterToolbar } from '../../../../components/ResponsiveFilterToolbar';
-import { CLIENT_MASTER_FIELD_CATALOG, FIELD_CATEGORIES_INFO } from '../../../../lib/forms-catalog';
+import {
+  FIELD_CATEGORIES_INFO,
+  getMergedFieldCatalog,
+  savePersistedCustomField,
+  updatePersistedCustomField,
+  checkDuplicateConcept,
+} from '../../../../lib/forms-catalog';
 import {
   FieldCategory,
   FieldDataType,
@@ -14,10 +20,15 @@ import {
 } from '@campus-os/types';
 
 export default function FieldLibraryPage() {
-  const [fields, setFields] = useState<FieldDefinitionDto[]>(CLIENT_MASTER_FIELD_CATALOG);
+  const [fields, setFields] = useState<FieldDefinitionDto[]>([]);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [originFilter, setOriginFilter] = useState('ALL');
+
+  // Load merged catalog on mount
+  useEffect(() => {
+    setFields(getMergedFieldCatalog());
+  }, []);
 
   // Custom Field Modal
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -51,19 +62,9 @@ export default function FieldLibraryPage() {
     setCustomName(name);
     if (!customLabel) setCustomLabel(name);
 
-    const clean = name.trim().toLowerCase();
-    if (clean.includes('dob') || clean.includes('birth') || clean.includes('date of birth')) {
-      setDuplicateWarning(
-        "A canonical system field 'Date of Birth' (STUDENT_DOB) already exists. We recommend using the canonical field for automated age eligibility and ERP synchronization."
-      );
-    } else if (clean.includes('father mobile') || clean.includes('father phone') || clean.includes('sms mobile')) {
-      setDuplicateWarning(
-        "A canonical field 'Father Mobile' / 'Primary Contact Mobile' already exists. We recommend using the canonical field for SMS alerts."
-      );
-    } else if (clean.includes('cnic') || clean.includes('national id')) {
-      setDuplicateWarning(
-        "A canonical field 'Father CNIC' / 'National ID' already exists. We recommend selecting it from the library."
-      );
+    const dup = checkDuplicateConcept(name);
+    if (dup.isDuplicate && dup.message) {
+      setDuplicateWarning(dup.message);
     } else {
       setDuplicateWarning(null);
     }
@@ -73,27 +74,26 @@ export default function FieldLibraryPage() {
     e.preventDefault();
     if (!customName.trim()) return;
 
-    const newField: FieldDefinitionDto = {
-      id: `cust_${Date.now()}`,
-      code: `CUST_${customName.trim().replace(/[^a-zA-Z0-9]/g, '_').toUpperCase()}`,
+    savePersistedCustomField({
       name: customName.trim(),
       category: customCategory,
-      origin: 'CUSTOM',
       dataType: customDataType,
       defaultLabel: customLabel.trim() || customName.trim(),
       defaultPlaceholder: customPlaceholder.trim() || undefined,
-      isSystemProtected: false,
-      isActive: true,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
+    });
 
-    setFields([newField, ...fields]);
+    setFields(getMergedFieldCatalog());
     setShowCreateModal(false);
     setCustomName('');
     setCustomLabel('');
     setCustomPlaceholder('');
     setDuplicateWarning(null);
+  };
+
+  const handleToggleStatus = (field: FieldDefinitionDto) => {
+    if (field.isSystemProtected) return;
+    updatePersistedCustomField(field.id, { isActive: !field.isActive });
+    setFields(getMergedFieldCatalog());
   };
 
   return (
@@ -187,10 +187,25 @@ export default function FieldLibraryPage() {
               </div>
 
               <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-400 font-mono">
-                <span>{fld.code}</span>
-                <span className="uppercase text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
-                  {fld.dataType}
-                </span>
+                <span className="truncate mr-2">{fld.code}</span>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {fld.origin === 'CUSTOM' && (
+                    <button
+                      type="button"
+                      onClick={() => handleToggleStatus(fld)}
+                      className={`text-[10px] font-sans font-bold px-1.5 py-0.5 rounded cursor-pointer transition-colors ${
+                        fld.isActive
+                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                          : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                      }`}
+                    >
+                      {fld.isActive ? 'Active' : 'Inactive'}
+                    </button>
+                  )}
+                  <span className="uppercase text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+                    {fld.dataType}
+                  </span>
+                </div>
               </div>
             </div>
           );

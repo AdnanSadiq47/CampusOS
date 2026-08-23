@@ -2,7 +2,12 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import { CLIENT_MASTER_FIELD_CATALOG, FIELD_CATEGORIES_INFO, FieldCategoryInfo } from '../../../../../lib/forms-catalog';
+import {
+  CLIENT_MASTER_FIELD_CATALOG,
+  FIELD_CATEGORIES_INFO,
+  FieldCategoryInfo,
+  getMergedFieldCatalog,
+} from '../../../../../lib/forms-catalog';
 import { FormRuntimeRenderer } from '../../../../../components/FormRuntimeRenderer';
 import {
   HierarchyScopePickerModal,
@@ -220,7 +225,7 @@ export default function FormBuilderEditorPage() {
 
   // Filtered Field Library
   const filteredLibrary = useMemo(() => {
-    return CLIENT_MASTER_FIELD_CATALOG.filter((f: FieldDefinitionDto) => {
+    return getMergedFieldCatalog().filter((f: FieldDefinitionDto) => {
       if (selectedLibraryCategory !== 'ALL' && f.category !== selectedLibraryCategory) return false;
       if (librarySearch.trim()) {
         const q = librarySearch.toLowerCase();

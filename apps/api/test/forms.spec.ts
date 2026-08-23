@@ -1325,4 +1325,120 @@ describe('CampusOS Dynamic Form Builder Platform Foundation & Governance (PGlite
     expect(form.applyTo).toBe('ALL_CAMPUSES');
     expect(form.branchIds).toEqual([]);
   });
+
+  it('TEST 44 — Create Custom Field persists in database with permanent UUID and tenant isolation', async () => {
+    const customField = await formsService.createCustomField(
+      TENANT_A,
+      {
+        name: 'Applicant Nickname',
+        category: 'STUDENT_BASIC',
+        dataType: 'TEXT',
+        defaultLabel: 'Preferred Nickname',
+        defaultPlaceholder: 'e.g. Ali',
+      },
+      ACTOR_USER
+    );
+
+    expect(customField.id).toBeDefined();
+    expect(customField.name).toBe('Applicant Nickname');
+    expect(customField.origin).toBe('CUSTOM');
+    expect(customField.organizationId).toBe(TENANT_A);
+    expect(customField.isActive).toBe(true);
+
+    // Verify isolation: Field Library for TENANT_B does not include TENANT_A's custom field
+    const tenantBFields = await formsService.listFieldLibrary(TENANT_B);
+    const foundInB = tenantBFields.find((f) => f.id === customField.id);
+    expect(foundInB).toBeUndefined();
+  });
+
+  it('TEST 45 — List Field Library combines Global Master Catalog + Persisted Custom Fields', async () => {
+    await formsService.createCustomField(
+      TENANT_A,
+      {
+        name: 'Family Sports House Preference',
+        category: 'OTHER',
+        dataType: 'SELECT',
+        defaultLabel: 'Sports House',
+        defaultOptions: [
+          { label: 'Jinnah House (Red)', value: 'JINNAH' },
+          { label: 'Iqbal House (Green)', value: 'IQBAL' },
+        ],
+      },
+      ACTOR_USER
+    );
+
+    const allFields = await formsService.listFieldLibrary(TENANT_A);
+    const standardField = allFields.find((f) => f.code === 'STD_FIRST_NAME');
+    const customField = allFields.find((f) => f.name === 'Family Sports House Preference');
+
+    expect(standardField).toBeDefined();
+    expect(standardField?.origin).toBe('CANONICAL');
+    expect(customField).toBeDefined();
+    expect(customField?.origin).toBe('CUSTOM');
+  });
+
+  it('TEST 46 — Duplicate canonical concept protection warns when attempting to duplicate canonical concepts', async () => {
+    await expect(
+      formsService.createCustomField(
+        TENANT_A,
+        {
+          name: 'Student Date of Birth Custom',
+          category: 'STUDENT_BASIC',
+          dataType: 'DATE',
+          defaultLabel: 'Birth Date',
+        },
+        ACTOR_USER
+      )
+    ).rejects.toThrow(/A canonical system field 'Date of Birth' already exists/);
+  });
+
+  it('TEST 47 — Custom field can be added to Form Canvas with custom width, required toggle, and persists in draft', async () => {
+    const custom = await formsService.createCustomField(
+      TENANT_A,
+      {
+        name: 'Guardian Emergency Landline',
+        category: 'GUARDIAN_INFO',
+        dataType: 'TEXT',
+        defaultLabel: 'Emergency Landline',
+      },
+      ACTOR_USER
+    );
+
+    const form = await formsService.createFormDefinition(
+      TENANT_A,
+      { name: 'Custom Field Form', formPurpose: 'PRE_REGISTRATION' },
+      ACTOR_USER
+    );
+
+    const schema: FormSchemaPayload = {
+      rules: [],
+      settings: {},
+      sections: [
+        {
+          id: 'sec_guardian',
+          title: 'Guardian Contact',
+          showSectionHeading: true,
+          columns: 2,
+          sortOrder: 1,
+          fields: [
+            {
+              instanceId: 'fld_g_landline',
+              fieldDefinitionId: custom.id,
+              customLabel: 'Emergency Landline Number',
+              width: 'HALF', // 50% width
+              isRequired: true,
+              sortOrder: 1,
+            },
+          ],
+        },
+      ],
+    };
+
+    const saved = await formsService.saveFormDraft(TENANT_A, form.id, { schemaPayload: schema }, ACTOR_USER);
+    const loadedField = saved.schemaPayload.sections[0]!.fields[0]!;
+
+    expect(loadedField.fieldDefinitionId).toBe(custom.id);
+    expect(loadedField.width).toBe('HALF');
+    expect(loadedField.isRequired).toBe(true);
+  });
 });

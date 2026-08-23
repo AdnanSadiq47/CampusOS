@@ -704,3 +704,111 @@ export const CLIENT_MASTER_FIELD_CATALOG: FieldDefinitionDto[] = [
     defaultValidation: { required: true },
   },
 ];
+
+// ════════════════════════════════════════════════════════════════════
+// PERSISTENT CUSTOM FIELD STORAGE LAYER
+// ════════════════════════════════════════════════════════════════════
+
+const STORAGE_KEY = 'campusos_persisted_custom_fields_v1';
+
+export function getPersistedCustomFields(): FieldDefinitionDto[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    console.error('Failed to load custom fields from storage:', err);
+    return [];
+  }
+}
+
+export function savePersistedCustomField(
+  data: Partial<FieldDefinitionDto> & { name: string; category: FieldCategory; dataType: any }
+): FieldDefinitionDto {
+  const existing = getPersistedCustomFields();
+  const cleanCode = data.code
+    ? data.code.trim().toUpperCase()
+    : `CUST_${data.name.trim().replace(/[^a-zA-Z0-9]/g, '_').toUpperCase()}_${Date.now().toString().slice(-4)}`;
+
+  const persistentId = data.id || `cust_${Date.now()}_${cleanCode.toLowerCase()}`;
+
+  const newField: FieldDefinitionDto = {
+    id: persistentId,
+    code: cleanCode,
+    canonicalKey: data.canonicalKey || null,
+    name: data.name.trim(),
+    description: data.description || null,
+    category: data.category,
+    origin: 'CUSTOM',
+    dataType: data.dataType,
+    defaultLabel: data.defaultLabel?.trim() || data.name.trim(),
+    defaultPlaceholder: data.defaultPlaceholder?.trim() || undefined,
+    defaultHelpText: data.defaultHelpText?.trim() || undefined,
+    defaultOptions: data.defaultOptions || [],
+    defaultValidation: data.defaultValidation || { required: false },
+    isSystemProtected: false,
+    isActive: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  const updated = [newField, ...existing.filter((f) => f.id !== persistentId)];
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+  }
+  return newField;
+}
+
+export function updatePersistedCustomField(
+  id: string,
+  updates: Partial<FieldDefinitionDto>
+): FieldDefinitionDto | null {
+  const existing = getPersistedCustomFields();
+  const target = existing.find((f) => f.id === id);
+  if (!target) return null;
+
+  const modified: FieldDefinitionDto = {
+    ...target,
+    ...updates,
+    updatedAt: new Date(),
+  };
+
+  const updated = existing.map((f) => (f.id === id ? modified : f));
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+  }
+  return modified;
+}
+
+export function getMergedFieldCatalog(): FieldDefinitionDto[] {
+  const customFields = getPersistedCustomFields();
+  return [...CLIENT_MASTER_FIELD_CATALOG, ...customFields];
+}
+
+export function checkDuplicateConcept(name: string): { isDuplicate: boolean; message?: string } {
+  const clean = name.trim().toLowerCase();
+  const matchPatterns: Record<string, string[]> = {
+    STUDENT_DOB: ['dob', 'birth', 'date of birth', 'birthdate'],
+    STUDENT_FULL_NAME: ['full name', 'student name', 'candidate name'],
+    FATHER_MOBILE: ['father mobile', 'father contact', 'father phone'],
+    PRIMARY_CONTACT_MOBILE: ['primary mobile', 'primary phone', 'sms mobile'],
+    IDENTITY_BFORM: ['b-form', 'bform', 'crc', 'child registration certificate'],
+    FATHER_CNIC: ['father cnic', 'father national id', 'father nic'],
+    CURRENT_CITY: ['city', 'residential city'],
+    APPLYING_CLASS: ['class', 'grade', 'applying grade'],
+  };
+
+  for (const [canonicalKey, tokens] of Object.entries(matchPatterns)) {
+    if (tokens.some((t) => clean.includes(t))) {
+      const canonical = CLIENT_MASTER_FIELD_CATALOG.find((f) => f.canonicalKey === canonicalKey);
+      return {
+        isDuplicate: true,
+        message: `A canonical system field '${canonical?.name || canonicalKey}' already exists for this concept. We recommend selecting it from the Field Library for automated ERP binding.`,
+      };
+    }
+  }
+
+  return { isDuplicate: false };
+}
