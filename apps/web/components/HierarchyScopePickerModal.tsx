@@ -45,8 +45,8 @@ export const SAMPLE_AUTHORIZED_HIERARCHY: HierarchyNodeItem[] = [
             children: [
               { id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', name: 'Main Campus (Gulshan)', code: 'CAMPUS-A', type: 'CAMPUS', parentId: 'sch_alpha' },
               { id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', name: 'Clifton Campus', code: 'CAMPUS-B', type: 'CAMPUS', parentId: 'sch_alpha' },
-              { id: 'cccccccc-cccc-cccc-cccc-cccccccccccc', name: 'PECHS Primary Campus', code: 'CAMPUS-C', type: 'CAMPUS', parentId: 'sch_alpha' },
-              { id: 'dddddddd-dddd-dddd-dddd-dddddddddddd', name: 'North Nazimabad Campus', code: 'CAMPUS-D', type: 'CAMPUS', parentId: 'sch_alpha' },
+              { id: 'cccccccc-cccc-cccc-cccc-cccccccccccc', name: 'DHA Phase 6 Campus', code: 'CAMPUS-C', type: 'CAMPUS', parentId: 'sch_alpha' },
+              { id: 'dddddddd-dddd-dddd-dddd-dddddddddddd', name: 'Gulshan Senior Campus', code: 'CAMPUS-D', type: 'CAMPUS', parentId: 'sch_alpha' },
             ],
           },
           {
@@ -76,8 +76,8 @@ export const SAMPLE_AUTHORIZED_HIERARCHY: HierarchyNodeItem[] = [
             type: 'SCHOOL',
             parentId: 'reg_north',
             children: [
-              { id: '11111111-2222-3333-4444-555555555555', name: 'Gulberg Campus (Lahore)', code: 'CAMPUS-G', type: 'CAMPUS', parentId: 'sch_beta' },
-              { id: '22222222-3333-4444-5555-666666666666', name: 'Model Town Campus', code: 'CAMPUS-H', type: 'CAMPUS', parentId: 'sch_beta' },
+              { id: '11111111-2222-3333-4444-555555555555', name: 'Lahore Main Campus', code: 'CAMPUS-G', type: 'CAMPUS', parentId: 'sch_beta' },
+              { id: '22222222-3333-4444-5555-666666666666', name: 'Cantt Lahore Campus', code: 'CAMPUS-H', type: 'CAMPUS', parentId: 'sch_beta' },
               { id: '33333333-4444-5555-6666-777777777777', name: 'Johar Town Campus', code: 'CAMPUS-I', type: 'CAMPUS', parentId: 'sch_beta' },
             ],
           },
@@ -86,13 +86,43 @@ export const SAMPLE_AUTHORIZED_HIERARCHY: HierarchyNodeItem[] = [
     ],
   },
   {
+    id: 'ho_aps',
+    name: 'Army Public Schools Directorate (No-Region Network)',
+    code: 'HO-APS',
+    type: 'HEAD_OFFICE',
+    children: [
+      {
+        id: 'sch_aps_central',
+        name: 'APS Central School (Direct)',
+        code: 'APS-CEN',
+        type: 'SCHOOL',
+        parentId: 'ho_aps',
+        children: [
+          { id: '66666666-7777-8888-9999-000000000001', name: 'Peshawar Main Campus', code: 'APS-PES', type: 'CAMPUS', parentId: 'sch_aps_central' },
+          { id: '66666666-7777-8888-9999-000000000002', name: 'Rawalpindi Campus', code: 'APS-RWP', type: 'CAMPUS', parentId: 'sch_aps_central' },
+        ],
+      },
+      {
+        id: 'sch_aps_south',
+        name: 'APS Southern School (Direct)',
+        code: 'APS-SOU',
+        type: 'SCHOOL',
+        parentId: 'ho_aps',
+        children: [
+          { id: '66666666-7777-8888-9999-000000000003', name: 'Karachi Cantt Campus', code: 'APS-KHI', type: 'CAMPUS', parentId: 'sch_aps_south' },
+          { id: '66666666-7777-8888-9999-000000000004', name: 'Malir Garrison Campus', code: 'APS-MLR', type: 'CAMPUS', parentId: 'sch_aps_south' },
+        ],
+      },
+    ],
+  },
+  {
     id: 'sch_delta_direct',
-    name: 'St. Patrick Direct School (Independent)',
+    name: 'St. Patrick Direct School (Independent / Single School)',
     code: 'SCH-PAT',
     type: 'SCHOOL',
     children: [
-      { id: '44444444-5555-6666-7777-888888888888', name: 'Saddar Campus', code: 'CAMPUS-J', type: 'CAMPUS', parentId: 'sch_delta_direct' },
-      { id: '55555555-6666-7777-8888-999999999999', name: 'Cantt Campus', code: 'CAMPUS-K', type: 'CAMPUS', parentId: 'sch_delta_direct' },
+      { id: '44444444-5555-6666-7777-888888888888', name: 'Main Campus (Saddar)', code: 'CAMPUS-J', type: 'CAMPUS', parentId: 'sch_delta_direct' },
+      { id: '55555555-6666-7777-8888-999999999999', name: 'North Campus', code: 'CAMPUS-K', type: 'CAMPUS', parentId: 'sch_delta_direct' },
     ],
   },
 ];
