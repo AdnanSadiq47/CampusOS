@@ -33,6 +33,7 @@ export function AssignedToDetailsModal({
 }: AssignedToDetailsModalProps) {
   const [search, setSearch] = useState('');
   const [coverageFilter, setCoverageFilter] = useState<'ALL' | 'DIRECT' | 'INHERITED'>('ALL');
+  const [showAllDirectChips, setShowAllDirectChips] = useState(false);
 
   const safeScope = scopeState || {
     isEntireOrg: false,
@@ -48,6 +49,45 @@ export function AssignedToDetailsModal({
     return resolveEffectiveCoverageDetails(safeScope, authorizedHierarchy);
   }, [safeScope, authorizedHierarchy]);
 
+  // Lookup map for parent hierarchy names
+  const flatLookup = useMemo(() => {
+    const map = new Map<string, HierarchyNodeItem>();
+    const traverse = (node: HierarchyNodeItem) => {
+      if (!node) return;
+      map.set(node.id, node);
+      if (node.children && Array.isArray(node.children)) {
+        node.children.forEach(traverse);
+      }
+    };
+    (authorizedHierarchy || []).forEach(traverse);
+    return map;
+  }, [authorizedHierarchy]);
+
+  // Collect compact direct assignment items
+  const directAssignmentItems = useMemo(() => {
+    const items: Array<{ id: string; name: string; type: string; icon: string }> = [];
+
+    safeScope.selectedHeadOfficeIds.forEach((id) => {
+      const n = flatLookup.get(id);
+      items.push({ id, name: n?.name || id, type: 'HEAD OFFICE', icon: '🏛️' });
+    });
+    safeScope.selectedRegionIds.forEach((id) => {
+      const n = flatLookup.get(id);
+      items.push({ id, name: n?.name || id, type: 'REGION', icon: '🗺️' });
+    });
+    safeScope.selectedSchoolIds.forEach((id) => {
+      const n = flatLookup.get(id);
+      items.push({ id, name: n?.name || id, type: 'SCHOOL', icon: '🏫' });
+    });
+    safeScope.selectedCampusIds.forEach((id) => {
+      const n = flatLookup.get(id);
+      items.push({ id, name: n?.name || id, type: 'CAMPUS', icon: '📍' });
+    });
+
+    return items;
+  }, [safeScope, flatLookup]);
+
+  // Filtering coverage list
   const filteredCoverage = useMemo(() => {
     return effectiveCoverage.filter((item) => {
       if (coverageFilter === 'DIRECT' && item.coverageType !== 'DIRECT') return false;
@@ -68,11 +108,14 @@ export function AssignedToDetailsModal({
 
   if (!isOpen) return null;
 
+  const visibleDirectChips = showAllDirectChips ? directAssignmentItems : directAssignmentItems.slice(0, 6);
+  const hiddenDirectCount = directAssignmentItems.length - 6;
+
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-hidden">
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-2xl w-full p-4 sm:p-6 shadow-2xl space-y-4 max-h-[88vh] flex flex-col justify-between animate-in fade-in zoom-in-95 my-auto">
-        {/* Modal Header */}
-        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 shrink-0">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-2xl w-full p-4 sm:p-6 shadow-2xl space-y-3.5 max-h-[88vh] sm:max-h-[85vh] flex flex-col justify-between animate-in fade-in zoom-in-95 my-auto">
+        {/* 1. Modal Header (Compact & Fixed) */}
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5 shrink-0">
           <div>
             <div className="flex items-center gap-2">
               <span className="text-base">📍</span>
@@ -81,7 +124,7 @@ export function AssignedToDetailsModal({
               </h3>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              <strong className="text-slate-800 dark:text-slate-200">{formName}</strong> — See where this form is assigned and where it is currently available.
+              <strong className="text-slate-800 dark:text-slate-200">{formName}</strong> — See where this form is assigned and available.
             </p>
           </div>
           <button
@@ -92,28 +135,26 @@ export function AssignedToDetailsModal({
           </button>
         </div>
 
-        {/* Scrollable Middle Details Area */}
-        <div className="flex-1 overflow-y-auto space-y-4 pr-1 min-h-0">
-          {/* Universal Scope Banner */}
+        {/* 2. Directly Assigned To (Flattened & Compact Strip ~10-15% height) */}
+        <div className="shrink-0 space-y-1.5">
           {isUniversal ? (
-            <div className="p-4 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-indigo-900 dark:text-indigo-200 flex items-center gap-1.5">
-                  <span>🌐</span>
-                  <span>Entire Organization</span>
-                </span>
-                <span className="text-[10px] uppercase font-bold text-indigo-700 bg-indigo-100 dark:bg-indigo-900 px-2 py-0.5 rounded-full">
-                  Universal Availability
-                </span>
+            <div className="p-2.5 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2">
+                <span className="text-base">🌐</span>
+                <div>
+                  <span className="font-bold text-indigo-900 dark:text-indigo-200">Entire Organization</span>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
+                    Universal availability with dynamic inheritance to all present and future campuses.
+                  </span>
+                </div>
               </div>
-              <p className="text-xs text-slate-600 dark:text-slate-300">
-                This form is available across all current schools and campuses ({effectiveCoverage.length} Campuses). New eligible schools and campuses will automatically have access to this form.
-              </p>
+              <span className="text-[10px] uppercase font-bold text-indigo-700 bg-indigo-100 dark:bg-indigo-900 px-2 py-0.5 rounded-full shrink-0">
+                Universal
+              </span>
             </div>
           ) : (
-            /* Directly Assigned Section */
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-xs">
+            <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 space-y-1.5">
+              <div className="flex items-center justify-between text-[11px]">
                 <span className="font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   Directly Assigned To
                 </span>
@@ -122,166 +163,138 @@ export function AssignedToDetailsModal({
                 </span>
               </div>
 
-              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 space-y-2.5">
-                {/* Region Assignments */}
-                {safeScope.selectedRegionIds && safeScope.selectedRegionIds.length > 0 && (
-                  <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
-                      Regions ({safeScope.selectedRegionIds.length})
+              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                {directAssignmentItems.length === 0 ? (
+                  <span className="text-xs text-slate-400 italic">No direct units configured</span>
+                ) : (
+                  visibleDirectChips.map((item) => (
+                    <span
+                      key={`${item.type}_${item.id}`}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 shadow-sm"
+                    >
+                      <span className="text-xs">{item.icon}</span>
+                      <span className="text-[9px] uppercase font-bold text-slate-400">
+                        {item.type} ·
+                      </span>
+                      <span className="truncate max-w-[200px]">{item.name}</span>
                     </span>
-                    <div className="space-y-1">
-                      {safeScope.selectedRegionIds.map((id) => (
-                        <div key={id} className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-xs">
-                          <span className="font-bold text-slate-900 dark:text-white">
-                            🗺️ {id === 'reg_south' ? 'Region South (Sindh & Balochistan)' : 'Region North (Punjab & KPK)'}
-                          </span>
-                          <span className="text-[11px] text-slate-400 block mt-0.5">Central Head Office</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                  ))
                 )}
 
-                {/* School Assignments */}
-                {safeScope.selectedSchoolIds && safeScope.selectedSchoolIds.length > 0 && (
-                  <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
-                      Schools ({safeScope.selectedSchoolIds.length})
-                    </span>
-                    <div className="space-y-1">
-                      {safeScope.selectedSchoolIds.map((id) => (
-                        <div key={id} className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-xs">
-                          <span className="font-bold text-slate-900 dark:text-white">
-                            🏫 {id === 'sch_alpha' ? 'Beaconhouse School Alpha' : id === 'sch_beta' ? 'Bloomfield Hall School Beta' : 'City School Gamma'}
-                          </span>
-                          <span className="text-[11px] text-slate-400 block mt-0.5">
-                            {id === 'sch_beta' ? 'Region North › Central Head Office' : 'Region South › Central Head Office'}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Direct Campus Assignments */}
-                {safeScope.selectedCampusIds && safeScope.selectedCampusIds.length > 0 && (
-                  <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
-                      Direct Campuses ({safeScope.selectedCampusIds.length})
-                    </span>
-                    <div className="space-y-1">
-                      {safeScope.selectedCampusIds.map((id) => (
-                        <div key={id} className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-xs">
-                          <span className="font-bold text-slate-900 dark:text-white">
-                            📍 Main Campus (Saddar)
-                          </span>
-                          <span className="text-[11px] text-slate-400 block mt-0.5">
-                            St. Patrick Direct School
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                {hiddenDirectCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllDirectChips(!showAllDirectChips)}
+                    className="inline-flex items-center px-2 py-1 rounded-xl text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors cursor-pointer"
+                  >
+                    {showAllDirectChips ? 'Show less' : `+${hiddenDirectCount} more`}
+                  </button>
                 )}
               </div>
             </div>
           )}
+        </div>
 
-          {/* Also Available At Section */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                Also Available At ({effectiveCoverage.length} Campuses)
+        {/* 3. Also Available At (Primary Flex-1 Scrollable Area) */}
+        <div className="flex-1 flex flex-col min-h-0 space-y-2 pt-1 border-t border-slate-100 dark:border-slate-800">
+          {/* Header & Filter Pills */}
+          <div className="flex items-center justify-between text-xs shrink-0">
+            <span className="font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+              <span>Also Available At</span>
+              <span className="text-indigo-600 dark:text-indigo-400 font-extrabold">
+                ({effectiveCoverage.length} Campuses)
               </span>
-              <div className="flex items-center gap-1">
-                {(['ALL', 'DIRECT', 'INHERITED'] as const).map((mode) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    onClick={() => setCoverageFilter(mode)}
-                    className={`px-2 py-0.5 rounded-lg text-[10px] font-semibold cursor-pointer transition-colors ${
-                      coverageFilter === mode
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
-                    }`}
-                  >
-                    {mode === 'ALL' ? 'All' : mode === 'DIRECT' ? 'Direct' : 'Inherited'}
-                  </button>
-                ))}
-              </div>
-            </div>
+            </span>
 
-            {/* Search Input inside Popup */}
-            <div className="relative">
-              <span className="absolute left-3 top-2 text-xs text-slate-400">🔍</span>
-              <input
-                type="text"
-                placeholder="Search school or campus..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-8 pr-7 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-              />
-              {search && (
+            <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold">
+              {(['ALL', 'DIRECT', 'INHERITED'] as const).map((mode) => (
                 <button
+                  key={mode}
                   type="button"
-                  onClick={() => setSearch('')}
-                  className="absolute right-2.5 top-2 text-xs text-slate-400 hover:text-slate-600 cursor-pointer"
+                  onClick={() => setCoverageFilter(mode)}
+                  className={`px-2.5 py-0.5 rounded-lg text-[11px] font-semibold cursor-pointer transition-all ${
+                    coverageFilter === mode
+                      ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                  }`}
                 >
-                  ✕
+                  {mode === 'ALL' ? 'All' : mode === 'DIRECT' ? 'Direct' : 'Inherited'}
                 </button>
-              )}
+              ))}
             </div>
+          </div>
 
-            {/* Campus List */}
-            <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
-              {filteredCoverage.length === 0 ? (
-                <div className="text-center py-6 text-xs text-slate-400">
-                  No matching campuses found.
-                </div>
-              ) : (
-                filteredCoverage.map((item) => (
-                  <div
-                    key={item.campusId}
-                    className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs"
-                  >
-                    <div className="min-w-0 mr-2">
-                      <span className="font-bold text-slate-900 dark:text-white truncate block">
-                        📍 {item.campusName}
-                      </span>
-                      <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5 truncate">
-                        {item.schoolName} {item.regionName ? `› ${item.regionName}` : ''}
-                      </span>
-                      <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-medium block mt-0.5">
-                        {item.coverageType === 'DIRECT'
-                          ? 'Directly Assigned'
-                          : `Assigned through: ${item.appliedVia}`}
-                      </span>
-                    </div>
+          {/* Search Bar */}
+          <div className="relative shrink-0">
+            <span className="absolute left-3 top-2 text-xs text-slate-400">🔍</span>
+            <input
+              type="text"
+              placeholder="Search school or campus..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-8 pr-7 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                className="absolute right-2.5 top-2 text-xs text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                ✕
+              </button>
+            )}
+          </div>
 
-                    <span
-                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
-                        item.coverageType === 'DIRECT'
-                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                          : item.coverageType === 'UNIVERSAL'
-                          ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300'
-                          : 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300'
-                      }`}
-                    >
-                      {item.coverageType}
+          {/* Main Scrollable Campus List */}
+          <div className="flex-1 overflow-y-auto min-h-0 space-y-1.5 pr-1">
+            {filteredCoverage.length === 0 ? (
+              <div className="text-center py-10 text-xs text-slate-400 space-y-1">
+                <span className="text-xl block">🔍</span>
+                <span>No campuses found matching search criteria.</span>
+              </div>
+            ) : (
+              filteredCoverage.map((item) => (
+                <div
+                  key={item.campusId}
+                  className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs hover:bg-slate-100/60 dark:hover:bg-slate-800/80 transition-colors"
+                >
+                  <div className="min-w-0 mr-2">
+                    <span className="font-bold text-slate-900 dark:text-white truncate block">
+                      📍 {item.campusName}
+                    </span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5 truncate">
+                      {item.schoolName} {item.regionName ? `› ${item.regionName}` : ''}
+                    </span>
+                    <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold block mt-0.5">
+                      {item.coverageType === 'DIRECT'
+                        ? 'Directly Assigned'
+                        : `Assigned through: ${item.appliedVia}`}
                     </span>
                   </div>
-                ))
-              )}
-            </div>
+
+                  <span
+                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
+                      item.coverageType === 'DIRECT'
+                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                        : item.coverageType === 'UNIVERSAL'
+                        ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300'
+                        : 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300'
+                    }`}
+                  >
+                    {item.coverageType}
+                  </span>
+                </div>
+              ))
+            )}
           </div>
         </div>
 
-        {/* Modal Footer */}
-        <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end shrink-0">
+        {/* 4. Modal Footer Actions (Fixed) */}
+        <div className="pt-2.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end shrink-0">
           <button
             type="button"
             onClick={onClose}
-            className="px-5 py-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-bold shadow hover:bg-slate-800 dark:hover:bg-slate-100 cursor-pointer"
+            className="px-5 py-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-bold shadow hover:bg-slate-800 dark:hover:bg-slate-100 cursor-pointer transition-all"
           >
             Close
           </button>
