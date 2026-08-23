@@ -3,7 +3,6 @@ import {
   TenantTransactionManager,
   schoolTypes,
   schools,
-  auditLogs,
   eq,
   and,
   sql,
@@ -13,10 +12,14 @@ import {
   UpdateSchoolTypeDto,
   SchoolTypeListItemDto,
 } from '@campus-os/types';
+import { AuditService } from '../../core/audit/audit.service.js';
 
 @Injectable()
 export class SchoolTypesService {
-  constructor(private readonly txManager: TenantTransactionManager) {}
+  constructor(
+    private readonly txManager: TenantTransactionManager,
+    private readonly auditService: AuditService
+  ) {}
 
   // ─────────────────────────────────────────────────────────────────
   //  CREATE
@@ -58,16 +61,20 @@ export class SchoolTypesService {
         .returning();
 
       // 3. Audit log
-      await tx.insert(auditLogs).values({
-        organizationId: tenantId,
-        actorId: userId ? userId : null,
-        actorEmail: userId ? 'admin@campus-os.local' : 'system@campus-os.local',
-        entityType: 'school_type',
-        entityId: created!.id,
-        action: 'CREATE',
-        beforeState: null,
-        afterState: created,
-      });
+      await this.auditService.logEvent(
+        {
+          organizationId: tenantId,
+          actorId: userId ? userId : null,
+          actorEmail: userId ? 'admin@campus-os.local' : 'system@campus-os.local',
+          module: 'ORGANIZATION',
+          action: 'CREATE',
+          entityType: 'school_type',
+          entityId: created!.id,
+          beforeState: null,
+          afterState: created,
+        },
+        tx
+      );
 
       return created!;
     });
@@ -264,17 +271,26 @@ export class SchoolTypesService {
         )
         .returning();
 
+      let auditAction = 'UPDATE';
+      if (dto.isActive !== undefined && dto.isActive !== existing.isActive) {
+        auditAction = dto.isActive ? 'ACTIVATE' : 'DEACTIVATE';
+      }
+
       // Audit log
-      await tx.insert(auditLogs).values({
-        organizationId: tenantId,
-        actorId: userId ? userId : null,
-        actorEmail: userId ? 'admin@campus-os.local' : 'system@campus-os.local',
-        entityType: 'school_type',
-        entityId: id,
-        action: 'UPDATE',
-        beforeState: existing,
-        afterState: updated,
-      });
+      await this.auditService.logEvent(
+        {
+          organizationId: tenantId,
+          actorId: userId ? userId : null,
+          actorEmail: userId ? 'admin@campus-os.local' : 'system@campus-os.local',
+          module: 'ORGANIZATION',
+          action: auditAction,
+          entityType: 'school_type',
+          entityId: id,
+          beforeState: existing,
+          afterState: updated,
+        },
+        tx
+      );
 
       return updated!;
     });

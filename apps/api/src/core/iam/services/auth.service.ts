@@ -22,6 +22,7 @@ import {
   PermissionRuleDTO,
   MembershipNodeAssignmentDTO,
 } from '@campus-os/types';
+import { AuditService } from '../../audit/audit.service.js';
 import crypto from 'crypto';
 
 @Injectable()
@@ -30,7 +31,8 @@ export class AuthService {
     private readonly tenantManager: TenantTransactionManager,
     private readonly passwordService: PasswordService,
     private readonly identityRepo: IdentitySecurityRepository,
-    private readonly jwtService: JwtService
+    private readonly jwtService: JwtService,
+    private readonly auditService: AuditService
   ) {}
 
   async login(
@@ -123,6 +125,23 @@ export class AuthService {
       activeMembership.version
     );
 
+    const primaryAssignment = assignments.find((a) => a.isPrimary) || assignments[0];
+    await this.auditService.logEvent({
+      organizationId: tenantId,
+      hierarchyNodeId: primaryAssignment?.hierarchyNodeId || null,
+      actorId: identity.id,
+      actorEmail: identity.email,
+      module: 'IAM',
+      action: 'AUTH_LOGIN',
+      entityType: 'identity_user',
+      entityId: identity.id,
+      outcome: 'SUCCESS',
+      metadata: {
+        sessionId,
+        membershipId: activeMembership.membershipId,
+      },
+    });
+
     return {
       tokens,
       user: authUser,
@@ -193,6 +212,24 @@ export class AuthService {
       identity.securityStamp,
       membership.version
     );
+
+    const primaryAssignment = assignments.find((a) => a.isPrimary) || assignments[0];
+    await this.auditService.logEvent({
+      organizationId: targetOrgId,
+      hierarchyNodeId: primaryAssignment?.hierarchyNodeId || null,
+      actorId: identity.id,
+      actorEmail: identity.email,
+      module: 'IAM',
+      action: 'AUTH_SWITCH_TENANT',
+      entityType: 'identity_user',
+      entityId: identity.id,
+      outcome: 'SUCCESS',
+      metadata: {
+        sessionId,
+        targetOrgId,
+        membershipId: membership.membershipId,
+      },
+    });
 
     return { tokens, user: authUser };
   }

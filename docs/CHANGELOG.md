@@ -4,6 +4,27 @@ All notable changes to the CampusOS architecture and platform specifications wil
 
 ---
 
+## [2026-08-23] - Permanent Audit Logging & Safe Record Lifecycle Policy
+- **Enterprise Audit Architecture (`packages/database`, `packages/types`, `apps/api/src/core/audit`)**:
+  - Enhanced `audit_logs` schema with `hierarchy_node_id` (node scope), `module`, `outcome`, `impersonator_id`, `metadata`, and 5 high-performance B-tree indexes for time-series and scope-aware queries.
+  - Implemented `AuditService` with automated recursive secret sanitization (redacting passwords, hashes, tokens, MFA secrets, API keys, cookies).
+  - Built automated compact field-level `diff` engine (`{ field: { before, after } }`) ignoring unchanged and timestamp fields.
+  - Built scope-aware audit querying enforcing tenant isolation and hierarchical subtree node filtering (`path <@ :nodePath`).
+  - Implemented immutable append-only storage policy with no UPDATE/DELETE capabilities exposed.
+- **Permanent Safe Delete & Record Lifecycle Policy**:
+  - Enforced No-Hard-Delete-by-default standard across all CampusOS entities and management pages.
+  - Standardized state transitions: `Deactivate / Activate`, `Archive`, `Cancel`, `Reverse`, `Revoke`.
+  - Audited and verified all Administration Configuration pages (`schools`, `regions`, `head-offices`, `branches`, `school-types`) to ensure zero raw physical delete actions exist in UI.
+- **Architectural Documentation & Governance**:
+  - Published `/docs/12_AUDIT_LOGGING_AND_RECORD_LIFECYCLE.md` establishing the 10 Permanent AI/Developer Rules.
+  - Updated `AGENTS.md`, `/docs/01_CORE_PRINCIPLES.md`, `/docs/08_DATABASE_ARCHITECTURE.md`, `/docs/09_SECURITY_RULES.md`, `/docs/10_UI_UX_RULES.md`, `/docs/11_AI_RULES.md`.
+- **Integration Test Suite**:
+  - Created `apps/api/test/audit-lifecycle.spec.ts` with 7 comprehensive integration tests covering entity creation audit trails, compact diffs, status transitions (`ACTIVATE`/`DEACTIVATE`), secret sanitization, cross-tenant isolation, branch/node subtree filtering, and immutability.
+  - All 8 API test suites (66/66 tests) passing with 100% success.
+  - Monorepo typechecking 100% clean (`tsc --noEmit` on all projects). Next.js web application build 100% clean (20/20 static routes generated).
+
+---
+
 ## [2026-08-23] - Permanent Organization, Branch Scope, Dynamic Access & Delegated Role Architecture Invariants
 - **Permanent Invariants Integrated Across Documentation & Codebase**:
   - Locked 14 core AI/developer pre-implementation rules into `/AGENTS.md` and `/docs/11_AI_RULES.md`.

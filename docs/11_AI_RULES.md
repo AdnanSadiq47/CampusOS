@@ -93,6 +93,10 @@ Agents must search for and reject these patterns when found in new or modified c
 | Background worker losing node context from initiating request | ❌ FORBIDDEN |
 | Storing credentials inside school/region/branch records | ❌ FORBIDDEN |
 | Navigation visibility used as the sole authorization check | ❌ FORBIDDEN |
+| Adding generic physical `Delete` to a CRUD page | ❌ FORBIDDEN (Use Deactivate/Archive) |
+| Hard delete without `SYSTEM_HARD_DELETE` permission and audit | ❌ FORBIDDEN |
+| Storing raw password, hash, or token in audit log | ❌ FORBIDDEN (Must redact) |
+| Mutation endpoint without structured audit log emission | ❌ FORBIDDEN |
 
 ---
 

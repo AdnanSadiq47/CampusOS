@@ -9,7 +9,6 @@ import {
   organizationMemberships,
   membershipNodeAssignments,
   assignmentRoles,
-  auditLogs,
   eq,
   and,
 } from '@campus-os/database';
@@ -20,12 +19,14 @@ import {
   BranchDetailDto,
 } from '@campus-os/types';
 import { PasswordService } from '../../core/iam/services/password.service.js';
+import { AuditService } from '../../core/audit/audit.service.js';
 
 @Injectable()
 export class BranchesService {
   constructor(
     private readonly txManager: TenantTransactionManager,
-    private readonly passwordService: PasswordService
+    private readonly passwordService: PasswordService,
+    private readonly auditService: AuditService
   ) {}
 
   // ─────────────────────────────────────────────────────────────────
@@ -201,20 +202,25 @@ export class BranchesService {
       }
 
       // 8. Audit Log (Strictly sanitizing: NEVER log password or password hash)
-      await tx.insert(auditLogs).values({
-        organizationId: tenantId,
-        actorId: actorUserId ?? null,
-        actorEmail: actorUserId ? 'admin@campus-os.local' : 'system@campus-os.local',
-        entityType: 'branch',
-        entityId: newBranch!.id,
-        action: 'CREATE',
-        beforeState: null,
-        afterState: {
-          ...newBranch,
-          adminUserProvisioned: !!createdAdminUser,
-          adminEmail: createdAdminUser?.email || null,
+      await this.auditService.logEvent(
+        {
+          organizationId: tenantId,
+          hierarchyNodeId: node!.id,
+          actorId: actorUserId ?? null,
+          actorEmail: actorUserId ? 'admin@campus-os.local' : 'system@campus-os.local',
+          module: 'ORGANIZATION',
+          action: 'CREATE',
+          entityType: 'branch',
+          entityId: newBranch!.id,
+          beforeState: null,
+          afterState: {
+            ...newBranch,
+            adminUserProvisioned: !!createdAdminUser,
+            adminEmail: createdAdminUser?.email || null,
+          },
         },
-      });
+        tx
+      );
 
       return newBranch!;
     });
@@ -453,17 +459,27 @@ export class BranchesService {
           );
       }
 
+      let auditAction = 'UPDATE';
+      if (dto.isActive !== undefined && dto.isActive !== existing.isActive) {
+        auditAction = dto.isActive ? 'ACTIVATE' : 'DEACTIVATE';
+      }
+
       // Audit Log
-      await tx.insert(auditLogs).values({
-        organizationId: tenantId,
-        actorId: actorUserId ?? null,
-        actorEmail: actorUserId ? 'admin@campus-os.local' : 'system@campus-os.local',
-        entityType: 'branch',
-        entityId: id,
-        action: 'UPDATE',
-        beforeState: existing,
-        afterState: updated,
-      });
+      await this.auditService.logEvent(
+        {
+          organizationId: tenantId,
+          hierarchyNodeId: existing.hierarchyNodeId,
+          actorId: actorUserId ?? null,
+          actorEmail: actorUserId ? 'admin@campus-os.local' : 'system@campus-os.local',
+          module: 'ORGANIZATION',
+          action: auditAction,
+          entityType: 'branch',
+          entityId: id,
+          beforeState: existing,
+          afterState: updated,
+        },
+        tx
+      );
 
       return updated!;
     });

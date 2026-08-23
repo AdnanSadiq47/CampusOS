@@ -6,7 +6,6 @@ import {
   schools,
   hierarchyNodes,
   hierarchyNodeTypes,
-  auditLogs,
   eq,
   and,
   sql,
@@ -17,10 +16,14 @@ import {
   HeadOfficeListItemDto,
   HeadOfficeDetailDto,
 } from '@campus-os/types';
+import { AuditService } from '../../core/audit/audit.service.js';
 
 @Injectable()
 export class HeadOfficesService {
-  constructor(private readonly txManager: TenantTransactionManager) {}
+  constructor(
+    private readonly txManager: TenantTransactionManager,
+    private readonly auditService: AuditService
+  ) {}
 
   // ─────────────────────────────────────────────────────────────────
   //  CREATE
@@ -133,16 +136,21 @@ export class HeadOfficesService {
         .returning();
 
       // 6. Audit trail
-      await tx.insert(auditLogs).values({
-        organizationId: tenantId,
-        actorId: userId ?? null,
-        actorEmail: userId ? 'admin@campus-os.local' : 'system@campus-os.local',
-        entityType: 'head_office',
-        entityId: newHeadOffice!.id,
-        action: 'CREATE',
-        beforeState: null,
-        afterState: newHeadOffice,
-      });
+      await this.auditService.logEvent(
+        {
+          organizationId: tenantId,
+          hierarchyNodeId: node!.id,
+          actorId: userId ?? null,
+          actorEmail: userId ? 'admin@campus-os.local' : 'system@campus-os.local',
+          module: 'ORGANIZATION',
+          action: 'CREATE',
+          entityType: 'head_office',
+          entityId: newHeadOffice!.id,
+          beforeState: null,
+          afterState: newHeadOffice,
+        },
+        tx
+      );
 
       return newHeadOffice!;
     });
@@ -377,17 +385,27 @@ export class HeadOfficesService {
           );
       }
 
-      // Audit log
-      await tx.insert(auditLogs).values({
-        organizationId: tenantId,
-        actorId: userId ?? null,
-        actorEmail: userId ? 'admin@campus-os.local' : 'system@campus-os.local',
-        entityType: 'head_office',
-        entityId: id,
-        action: 'UPDATE',
-        beforeState: existing,
-        afterState: updated,
-      });
+      let auditAction = 'UPDATE';
+      if (dto.isActive !== undefined && dto.isActive !== existing.isActive) {
+        auditAction = dto.isActive ? 'ACTIVATE' : 'DEACTIVATE';
+      }
+
+      // Audit log with automatic compact diff and secret redaction
+      await this.auditService.logEvent(
+        {
+          organizationId: tenantId,
+          hierarchyNodeId: existing.hierarchyNodeId,
+          actorId: userId ?? null,
+          actorEmail: userId ? 'admin@campus-os.local' : 'system@campus-os.local',
+          module: 'ORGANIZATION',
+          action: auditAction,
+          entityType: 'head_office',
+          entityId: id,
+          beforeState: existing,
+          afterState: updated,
+        },
+        tx
+      );
 
       return updated!;
     });

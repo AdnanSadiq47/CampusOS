@@ -4,7 +4,6 @@ import {
   regions,
   hierarchyNodes,
   hierarchyNodeTypes,
-  auditLogs,
   eq,
   and,
   sql,
@@ -15,10 +14,14 @@ import {
   RegionListItemDto,
   EligibleRegionParentNodeDto,
 } from '@campus-os/types';
+import { AuditService } from '../../core/audit/audit.service.js';
 
 @Injectable()
 export class RegionsService {
-  constructor(private readonly txManager: TenantTransactionManager) {}
+  constructor(
+    private readonly txManager: TenantTransactionManager,
+    private readonly auditService: AuditService
+  ) {}
 
   /**
    * Ensure a REGION hierarchy node type exists for this organization, or create it.
@@ -155,16 +158,23 @@ export class RegionsService {
         .returning();
 
       // 7. Audit trail
-      await tx.insert(auditLogs).values({
-        organizationId: tenantId,
-        actorId: userId ?? null,
-        entityType: 'region',
-        entityId: newRegion!.id,
-        action: 'CREATE',
-        afterState: newRegion,
-      });
+      await this.auditService.logEvent(
+        {
+          organizationId: tenantId,
+          hierarchyNodeId: node!.id,
+          actorId: userId ?? null,
+          actorEmail: userId ? 'admin@campus-os.local' : 'system@campus-os.local',
+          module: 'ORGANIZATION',
+          action: 'CREATE',
+          entityType: 'region',
+          entityId: newRegion!.id,
+          beforeState: null,
+          afterState: newRegion,
+        },
+        tx
+      );
 
-      return newRegion;
+      return newRegion!;
     });
   }
 
@@ -324,15 +334,26 @@ export class RegionsService {
           );
       }
 
-      await tx.insert(auditLogs).values({
-        organizationId: tenantId,
-        actorId: userId ?? null,
-        entityType: 'region',
-        entityId: id,
-        action: 'UPDATE',
-        beforeState: existing,
-        afterState: updated,
-      });
+      let auditAction = 'UPDATE';
+      if (dto.isActive !== undefined && dto.isActive !== existing.isActive) {
+        auditAction = dto.isActive ? 'ACTIVATE' : 'DEACTIVATE';
+      }
+
+      await this.auditService.logEvent(
+        {
+          organizationId: tenantId,
+          hierarchyNodeId: existing.hierarchyNodeId,
+          actorId: userId ?? null,
+          actorEmail: userId ? 'admin@campus-os.local' : 'system@campus-os.local',
+          module: 'ORGANIZATION',
+          action: auditAction,
+          entityType: 'region',
+          entityId: id,
+          beforeState: existing,
+          afterState: updated,
+        },
+        tx
+      );
 
       return updated;
     });

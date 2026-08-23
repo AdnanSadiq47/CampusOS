@@ -56,3 +56,11 @@
 * **Fail-Closed Session & Revocation Validation**: If Redis or cache validation is unavailable, the server falls back to authoritative PostgreSQL validation. If authoritative PostgreSQL validation cannot be completed, the request **MUST BE DENIED (FAIL CLOSED)**. Never assume validity on error.
 * **Append-Only Audit Trail**: All membership state changes, node assignments, role grants, delegations, and revocations generate immutable CDC audit records.
 * **Node Context in Background Tasks**: Node-scoped asynchronous jobs must propagate tenant, actor, and node scope boundaries to prevent accidental tenant-wide execution.
+
+---
+
+## 7. Principle of Enterprise Auditability & Safe Record Lifecycle
+* **Authoritative Audit Accountability**: CampusOS maintains a structured, tamper-resistant, append-only audit trail capturing actor, tenant, branch/node scope, module, action, target entity, compact field-level deltas (`diff`), and outcome.
+* **Safe Record Lifecycle & No-Hard-Delete-by-Default**: Educational and institutional data represents permanent historic and academic continuity. Physical deletion is strictly prohibited by default. Records transition through domain lifecycle states: `Deactivate`, `Archive`, `Cancel`, `Reverse`, `Revoke`.
+* **Zero Secret Logging Invariant**: Passwords, hashes, tokens, MFA secrets, and API credentials are strictly redacted server-side prior to audit persistence.
+

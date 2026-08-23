@@ -108,3 +108,12 @@ Role delegation is subject to the permanent privilege ceiling rule:
 * No downstream administrator may create, assign, or delegate any role or permission greater than their own authorized/delegated ceiling.
 * Role delegation changes must be audited (actor, source node, target node, roles delegated, timestamp).
 * Role inheritance chains must be verifiable: if a role was granted by delegation, the delegation chain must be auditable.
+
+---
+
+## 11. Audit Log Immutability & Secret Sanitization Invariants
+
+* **Append-Only Immutability**: The `audit_logs` table is strictly append-only. SQL `UPDATE` and `DELETE` permissions are revoked for the application database role.
+* **Server-Side Secret Sanitization**: Plaintext passwords, password hashes, JWT tokens, session cookies, MFA secrets, and API keys are strictly redacted server-side before persisting in audit storage.
+* **Scope-Aware Audit Access**: Audit log inspection endpoints must validate the viewer's effective hierarchy node assignment to prevent unauthorized surveillance of peer or superior nodes.
+

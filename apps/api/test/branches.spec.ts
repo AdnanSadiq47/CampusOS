@@ -17,6 +17,7 @@ import {
 } from '@campus-os/database';
 import { BranchesService } from '../src/modules/branches/branches.service.js';
 import { PasswordService } from '../src/core/iam/services/password.service.js';
+import { AuditService } from '../src/core/audit/audit.service.js';
 import { ConflictException, NotFoundException } from '@nestjs/common';
 
 describe('BranchesService & Campus Management Integration Tests (PGlite)', () => {
@@ -202,18 +203,20 @@ describe('BranchesService & Campus Management Integration Tests (PGlite)', () =>
       CREATE TABLE audit_logs (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         organization_id UUID NOT NULL,
+        hierarchy_node_id UUID,
         actor_id UUID,
-        actor_email VARCHAR(255) NOT NULL,
+        actor_email VARCHAR(255),
         impersonator_id UUID,
-        ip_address VARCHAR(45),
-        user_agent TEXT,
-        session_id UUID,
+        module VARCHAR(64) DEFAULT 'GENERAL' NOT NULL,
+        action VARCHAR(64) NOT NULL,
         entity_type VARCHAR(128) NOT NULL,
         entity_id UUID NOT NULL,
-        action VARCHAR(64) NOT NULL,
         before_state JSONB,
         after_state JSONB,
         diff JSONB,
+        outcome VARCHAR(32) DEFAULT 'SUCCESS' NOT NULL,
+        ip_address INET,
+        user_agent TEXT,
         metadata JSONB DEFAULT '{}'::jsonb NOT NULL,
         created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
       );
@@ -339,7 +342,8 @@ describe('BranchesService & Campus Management Integration Tests (PGlite)', () =>
       },
     } as unknown as TenantTransactionManager;
     passwordService = new PasswordService();
-    branchesService = new BranchesService(txManager, passwordService);
+    const auditService = new AuditService(txManager);
+    branchesService = new BranchesService(txManager, passwordService, auditService);
   });
 
   // ── TEST 1: CREATE BRANCH & ATTACH TO SCHOOL ──────────────────────

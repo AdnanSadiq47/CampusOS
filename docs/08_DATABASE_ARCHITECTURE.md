@@ -98,3 +98,18 @@ CampusOS tests database security and multi-tenant isolation across two explicit,
    * Uses real standalone `postgres:16-alpine` running as a live TCP server process (in GitHub Actions CI container or local Docker).
    * Executed via `packages/database/test/real-postgres-daemon.spec.ts` requiring `REAL_POSTGRES_DATABASE_URL` / `REAL_POSTGRES_ADMIN_URL`.
    * Refuses to silently substitute PGlite; if daemon connection URL is unset, the suite reports `SKIPPED / NOT EXECUTED`.
+
+---
+
+## 6. Audit Trail Architecture & Time-Series Indexing
+
+Audit logging is implemented with high-performance time-series partitioning readiness:
+- **Table**: `audit_logs`
+- **Columns**: `id`, `organization_id`, `hierarchy_node_id`, `actor_id`, `actor_email`, `impersonator_id`, `module`, `action`, `entity_type`, `entity_id`, `before_state`, `after_state`, `diff`, `outcome`, `ip_address`, `user_agent`, `metadata`, `created_at`.
+- **High-Performance B-Tree Indexes**:
+  1. `(organization_id, created_at DESC)`: For tenant-isolated time-series range queries and periodic partition pruning.
+  2. `(organization_id, entity_type, entity_id)`: For instant record history retrieval.
+  3. `(organization_id, hierarchy_node_id)`: For subtree-scoped audit querying (`path <@ :nodePath`).
+  4. `(organization_id, actor_id)`: For user activity auditing.
+  5. `(organization_id, module, action)`: For administrative event aggregation.
+

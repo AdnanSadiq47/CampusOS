@@ -301,3 +301,13 @@ Administration Configuration forms must consume master data from their authorita
 | Designation | Designations master (under Department) |
 | Academic Year | Academic Years master |
 | Exam Type | Exam Types master |
+
+---
+
+## 15. Safe Delete & Record Lifecycle UI Standards
+
+* **No Generic Delete Actions**: Management and CRUD data tables must NEVER display a generic destructive `Delete` button by default.
+* **Approved Row Actions**: Standard action dropdowns provide: `View`, `Edit`, `Activate / Deactivate` (with confirmation modal for state transitions).
+* **Clear State Indicators**: Inactive records are clearly distinguished with neutral/gray badges and reduced visual emphasis, never discarded from view unless explicitly filtered out.
+* **Explicit Lifecycle Terminology**: Use domain-appropriate lifecycle terms: `Deactivate`, `Archive`, `Cancel`, `Reverse`, `Revoke`.
+

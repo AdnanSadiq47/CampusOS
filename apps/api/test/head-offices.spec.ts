@@ -13,6 +13,7 @@ import {
   eq,
 } from '@campus-os/database';
 import { HeadOfficesService } from '../src/modules/head-offices/head-offices.service.js';
+import { AuditService } from '../src/core/audit/audit.service.js';
 import { ConflictException, NotFoundException } from '@nestjs/common';
 
 describe('HeadOfficesService & Variable-Depth Hierarchy Integration Tests (PGlite)', () => {
@@ -159,16 +160,21 @@ describe('HeadOfficesService & Variable-Depth Hierarchy Integration Tests (PGlit
       CREATE TABLE audit_logs (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         organization_id UUID NOT NULL,
+        hierarchy_node_id UUID,
         actor_id UUID,
         actor_email VARCHAR(255),
+        impersonator_id UUID,
+        module VARCHAR(64) DEFAULT 'GENERAL' NOT NULL,
+        action VARCHAR(64) NOT NULL,
         entity_type VARCHAR(64) NOT NULL,
         entity_id UUID NOT NULL,
-        action VARCHAR(32) NOT NULL,
         before_state JSONB,
         after_state JSONB,
         diff JSONB,
-        ip_address VARCHAR(45),
+        outcome VARCHAR(32) DEFAULT 'SUCCESS' NOT NULL,
+        ip_address INET,
         user_agent TEXT,
+        metadata JSONB DEFAULT '{}'::jsonb NOT NULL,
         created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
       );
     `);
@@ -188,7 +194,8 @@ describe('HeadOfficesService & Variable-Depth Hierarchy Integration Tests (PGlit
       },
     } as unknown as TenantTransactionManager;
 
-    headOfficesService = new HeadOfficesService(txManager);
+    const auditService = new AuditService(txManager);
+    headOfficesService = new HeadOfficesService(txManager, auditService);
   });
 
   it('1. Creates a new Head Office and corresponding hierarchy_nodes entry with audit trail', async () => {

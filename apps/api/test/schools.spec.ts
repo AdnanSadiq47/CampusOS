@@ -11,6 +11,7 @@ import {
   eq,
 } from '@campus-os/database';
 import { SchoolsService } from '../src/modules/schools/schools.service.js';
+import { AuditService } from '../src/core/audit/audit.service.js';
 import { ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
 
 describe('SchoolsService & Configurable Hierarchy Integration Tests', () => {
@@ -114,16 +115,21 @@ describe('SchoolsService & Configurable Hierarchy Integration Tests', () => {
       CREATE TABLE audit_logs (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        hierarchy_node_id UUID,
         actor_id UUID,
         actor_email VARCHAR(255),
+        impersonator_id UUID,
+        module VARCHAR(64) DEFAULT 'GENERAL' NOT NULL,
+        action VARCHAR(64) NOT NULL,
         entity_type VARCHAR(64) NOT NULL,
         entity_id UUID NOT NULL,
-        action VARCHAR(32) NOT NULL,
         before_state JSONB,
         after_state JSONB,
         diff JSONB,
+        outcome VARCHAR(32) DEFAULT 'SUCCESS' NOT NULL,
         ip_address INET,
         user_agent TEXT,
+        metadata JSONB DEFAULT '{}'::jsonb NOT NULL,
         created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
       );
     `);
@@ -189,7 +195,8 @@ describe('SchoolsService & Configurable Hierarchy Integration Tests', () => {
     parentRegionSouthId = regionNode!.id;
 
     txManager = new TenantTransactionManager(pglite as any);
-    schoolsService = new SchoolsService(txManager);
+    const auditService = new AuditService(txManager);
+    schoolsService = new SchoolsService(txManager, auditService);
   });
 
   it('1. Successfully creates a School under a Region node with automatic hierarchy synchronization', async () => {

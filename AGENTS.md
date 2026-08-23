@@ -87,30 +87,42 @@
 
 ---
 
-## 9. Explicit AI/Developer Rules (Mandatory Checklist)
+## 9. Permanent Audit Logging & Safe Record Lifecycle Invariants
+
+36. **Enterprise Audit Trail**: Authoritative audit trail for all business, security, organizational, and administrative actions: Who, When, In which Org, In which Campus/Branch scope, In which module, What action, Which record, What fields changed, Outcome.
+37. **Safe Record Lifecycle & No-Hard-Delete-by-Default**: Physical delete is strictly prohibited by default. Domain records transition through Deactivate, Archive, Cancel, Reverse, or Revoke. Hard Delete requires explicit `HARD_DELETE` permission, dependency checks, and audit logging.
+38. **Zero Secret Leakage in Logs**: Passwords, password hashes, JWT tokens, refresh tokens, MFA secrets, API keys, session secrets, and cookies are strictly redacted server-side before persisting in audit logs.
+39. **Compact Field-Level Diffs**: Updates record compact deltas (`diff: { field: { before, after } }`). Large entity snapshot dumps are prohibited.
+40. **Immutable Append-Only Audit Storage**: Audit table is strictly append-only. No application service or user role exposes UPDATE or DELETE actions on audit logs.
+41. **Scope-Aware Audit Visibility**: Audit log queries evaluate the viewer's effective hierarchy node scope using PostgreSQL `ltree` subtree evaluation (`hierarchy_nodes.path <@ :nodePath`).
+42. **Zero Delete in Standard UI**: Standard CRUD and configuration pages display `View`, `Edit`, `Activate / Deactivate` row actions. No generic Delete button.
+
+---
+
+## 10. Explicit AI/Developer Rules (Mandatory Checklist)
 
 **Before implementing any new module, feature, or data table, explicitly document and verify:**
 
-- RULE 1: Never design CampusOS around a single `user.branch_id` or `user.campus_id`.
-- RULE 2: Every CampusOS feature must respect authorized hierarchy/node scope.
-- RULE 3: Relevant ERP data pages must provide authorized multi-select Campus/Branch/Node filtering.
-- RULE 4: Relevant node-scoped data tables must visibly identify the organizational node/campus/branch for each row.
-- RULE 5: A role alone never grants organization-wide data access.
-- RULE 6: A node assignment alone never grants module/page access.
-- RULE 7: Head Office, Region, and separate Branch levels are OPTIONAL.
-- RULE 8: Never create fake hierarchy nodes to satisfy application logic.
-- RULE 9: A School may itself be the effective operational node for single-location organizations.
-- RULE 10: No downstream administrator may delegate privileges beyond their authorized privilege ceiling.
-- RULE 11: Navigation visibility and backend authorization must derive from the same permission model.
-- RULE 12: Frontend filters are never security boundaries.
-- RULE 13: Dashboards, reports, exports, and background jobs must respect the same scope as interactive pages.
-- RULE 14: When implementing a new module, explicitly determine:
-  * tenant ownership
-  * hierarchy/node ownership
-  * module permissions required
-  * page permissions required
-  * action permissions required
-  * data scope (EXACT_NODE / HIERARCHY_SUBTREE / ORGANIZATION_WIDE / OWN_RECORDS)
-  * domain scope (class assignments, section assignments, etc.)
-  * Campus/Branch column requirement (does the data table need a node column?)
-  * Campus/Branch filter requirement (does the page need an authorized multi-select filter?)
+- RULE 1: Never automatically add "Delete" to a CampusOS CRUD page. Use Deactivate / Archive / Cancel / Reverse / Revoke.
+- RULE 2: Hard Delete is exceptional, explicitly permissioned, dependency checked, and audited.
+- RULE 3: Important create/update/status/security/authorization/business actions must emit structured audit events.
+- RULE 4: Never place credentials/secrets in audit or application logs.
+- RULE 5: Audit events must preserve tenant and effective hierarchy/node context (`organization_id`, `hierarchy_node_id`).
+- RULE 6: Audit visibility must respect the viewer's authorized data scope.
+- RULE 7: Do not log every harmless read/click indefinitely.
+- RULE 8: Design audit events to remain compact and scalable with field-level diffs.
+- RULE 9: When creating a new module, define its auditable events and record lifecycle before considering the module complete.
+- RULE 10: Never design CampusOS around a single `user.branch_id` or `user.campus_id`.
+- RULE 11: Every CampusOS feature must respect authorized hierarchy/node scope.
+- RULE 12: Relevant ERP data pages must provide authorized multi-select Campus/Branch/Node filtering.
+- RULE 13: Relevant node-scoped data tables must visibly identify the organizational node/campus/branch for each row.
+- RULE 14: A role alone never grants organization-wide data access.
+- RULE 15: A node assignment alone never grants module/page access.
+- RULE 16: Head Office, Region, and separate Branch levels are OPTIONAL.
+- RULE 17: Never create fake hierarchy nodes to satisfy application logic.
+- RULE 18: A School may itself be the effective operational node for single-location organizations.
+- RULE 19: No downstream administrator may delegate privileges beyond their authorized privilege ceiling.
+- RULE 20: Navigation visibility and backend authorization must derive from the same permission model.
+- RULE 21: Frontend filters are never security boundaries.
+- RULE 22: Dashboards, reports, exports, and background jobs must respect the same scope as interactive pages.
+
