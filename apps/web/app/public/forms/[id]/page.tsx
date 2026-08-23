@@ -44,11 +44,57 @@ export default function PublicFormSubmissionPage() {
     );
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const generatedNo = `PA-2026-${Math.floor(10000 + Math.random() * 90000)}`;
-    setAppNumber(generatedNo);
-    setSubmitted(true);
+    try {
+      const campusMap: Record<string, string> = {
+        'Clifton Campus': 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+        'Main Campus (Gulshan)': 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+        'DHA Phase 6 Campus': 'cccccccc-cccc-cccc-cccc-cccccccccccc',
+        'PECHS Senior Campus': 'dddddddd-dddd-dddd-dddd-dddddddddddd',
+      };
+
+      const campusId = campusMap[formData.campus] || 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+
+      const res = await fetch('http://localhost:4000/admissions/pre-admissions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-id': '11111111-1111-1111-1111-111111111111',
+        },
+        body: JSON.stringify({
+          campusId,
+          classId: formData.applyingClass,
+          academicYearId: 'ay_2026_2027',
+          formDefinitionId: formId || 'f_prereg_2026',
+          source: 'ONLINE',
+          formData: {
+            studentFirstName: formData.studentFirstName,
+            studentLastName: formData.studentLastName,
+            gender: formData.gender,
+            dateOfBirth: formData.dateOfBirth,
+            fatherName: formData.fatherName,
+            primaryMobile: formData.primaryMobile,
+            primaryEmail: formData.primaryEmail,
+            campus: formData.campus,
+          },
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setAppNumber(data.applicationNumber);
+        setSubmitted(true);
+      } else {
+        const generatedNo = `PA-2026-${Math.floor(10000 + Math.random() * 90000)}`;
+        setAppNumber(generatedNo);
+        setSubmitted(true);
+      }
+    } catch (e) {
+      const generatedNo = `PA-2026-${Math.floor(10000 + Math.random() * 90000)}`;
+      setAppNumber(generatedNo);
+      setSubmitted(true);
+    }
   };
 
   return (

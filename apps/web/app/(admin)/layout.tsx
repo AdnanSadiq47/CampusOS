@@ -18,7 +18,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       match: (p: string) => p.startsWith('/admin-config') || p === '/schools',
     },
     {
-      href: '/admissions/applications',
+      href: '/admissions/pre-admissions',
       label: 'Admissions',
       icon: '🎓',
       match: (p: string) => p.startsWith('/admissions'),
@@ -50,10 +50,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   // Admissions operational sub-navigation
   const admissionsLinks = [
-    { href: '/admissions/applications', label: 'Applications', icon: '📝', soon: false },
+    { href: '/admissions/pre-admissions', label: 'Pre-Admissions', icon: '📝', soon: false },
     { href: '/admissions/dashboard', label: 'Dashboard', icon: '📊', soon: true },
     { href: '/admissions/inquiries', label: 'Inquiries', icon: '💬', soon: true },
-    { href: '/admissions/pre-registration', label: 'Pre-Registration', icon: '📋', soon: true },
   ];
 
   // Builder strip links (shown for Platform Builders section)
