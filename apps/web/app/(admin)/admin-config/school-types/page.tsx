@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { SchoolTypeListItemDto, CreateSchoolTypeDto } from '@campus-os/types';
+import { AdminConfigPageHeader } from '../../../../components/AdminConfigPageHeader';
 
 export default function SchoolTypesPage() {
   // State
@@ -284,33 +285,12 @@ export default function SchoolTypesPage() {
       )}
 
       {/* ── 1. PAGE HEADER ──────────────────────────────────────── */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-5">
-        <div>
-          <div className="flex items-center gap-2 text-xs font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-1">
-            <span>Administration Configuration</span>
-            <span>/</span>
-            <span>Organization Setup</span>
-            <span>/</span>
-            <span>School Types</span>
-          </div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
-            School Types
-          </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Manage institution types used when creating schools and educational institutions.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleOpenAddModal}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-sm font-medium shadow-sm shadow-indigo-600/20 transition-all cursor-pointer"
-          >
-            <span>+</span>
-            <span>Add School Type</span>
-          </button>
-        </div>
-      </div>
+      <AdminConfigPageHeader
+        title="School Types"
+        description="Manage institution types used when creating schools and educational institutions."
+        actionButtonText="Add School Type"
+        onAction={handleOpenAddModal}
+      />
 
       {/* ── 2. KPI / SUMMARY CARDS ──────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

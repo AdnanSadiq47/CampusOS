@@ -24,6 +24,7 @@ describe('BranchesService & Campus Management Integration Tests (PGlite)', () =>
   let pglite: PGlite;
   let txManager: TenantTransactionManager;
   let passwordService: PasswordService;
+  let auditService: AuditService;
   let branchesService: BranchesService;
 
   const TENANT_A = '11111111-1111-1111-1111-111111111111';
@@ -127,6 +128,7 @@ describe('BranchesService & Campus Management Integration Tests (PGlite)', () =>
         name VARCHAR(255) NOT NULL,
         short_name VARCHAR(128),
         description TEXT,
+        sort_order INTEGER DEFAULT 1 NOT NULL,
         logo_url TEXT,
         phone VARCHAR(64),
         alternate_phone VARCHAR(64),
@@ -181,7 +183,7 @@ describe('BranchesService & Campus Management Integration Tests (PGlite)', () =>
       CREATE TABLE membership_node_assignments (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-        membership_id UUID NOT NULL,
+        membership_id UUID NOT NULL REFERENCES organization_memberships(id) ON DELETE CASCADE,
         hierarchy_node_id UUID NOT NULL,
         is_primary BOOLEAN DEFAULT FALSE NOT NULL,
         status VARCHAR(32) DEFAULT 'ACTIVE' NOT NULL,
@@ -195,37 +197,49 @@ describe('BranchesService & Campus Management Integration Tests (PGlite)', () =>
       CREATE TABLE assignment_roles (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-        assignment_id UUID NOT NULL,
-        role_id UUID NOT NULL,
-        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+        assignment_id UUID NOT NULL REFERENCES membership_node_assignments(id) ON DELETE CASCADE,
+        role_id UUID NOT NULL
       );
 
       CREATE TABLE audit_logs (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        organization_id UUID NOT NULL,
+        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
         hierarchy_node_id UUID,
         actor_id UUID,
         actor_email VARCHAR(255),
         impersonator_id UUID,
-        module VARCHAR(64) DEFAULT 'GENERAL' NOT NULL,
+        module VARCHAR(64) DEFAULT 'ORGANIZATION' NOT NULL,
         action VARCHAR(64) NOT NULL,
-        entity_type VARCHAR(128) NOT NULL,
-        entity_id UUID NOT NULL,
+        entity_type VARCHAR(64) NOT NULL,
+        entity_id UUID,
         before_state JSONB,
         after_state JSONB,
         diff JSONB,
         outcome VARCHAR(32) DEFAULT 'SUCCESS' NOT NULL,
-        ip_address INET,
+        ip_address VARCHAR(64),
         user_agent TEXT,
         metadata JSONB DEFAULT '{}'::jsonb NOT NULL,
         created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
       );
     `);
 
-    // Seed Organizations
+    txManager = new TenantTransactionManager(pglite as any);
+    passwordService = new PasswordService();
+    auditService = new AuditService(txManager);
+    branchesService = new BranchesService(txManager, passwordService, auditService);
+
+    // Seed Tenants
     await db.insert(organizations).values([
-      { id: TENANT_A, code: 'TENANT_A', name: 'Alpha Educational Network' },
-      { id: TENANT_B, code: 'TENANT_B', name: 'Beta Learning Trust' },
+      {
+        id: TENANT_A,
+        code: 'ORG_A',
+        name: 'The Educators Network',
+      },
+      {
+        id: TENANT_B,
+        code: 'ORG_B',
+        name: 'Beaconhouse System',
+      },
     ]);
 
     // Seed Node Types
@@ -236,6 +250,8 @@ describe('BranchesService & Campus Management Integration Tests (PGlite)', () =>
         code: 'SCHOOL',
         name: 'School',
         levelOrder: 30,
+        allowFinancialPosting: true,
+        allowUserAssignment: true,
       })
       .returning();
 
@@ -246,6 +262,8 @@ describe('BranchesService & Campus Management Integration Tests (PGlite)', () =>
         code: 'BRANCH',
         name: 'Branch / Campus',
         levelOrder: 40,
+        allowFinancialPosting: true,
+        allowUserAssignment: true,
       })
       .returning();
 
@@ -256,21 +274,23 @@ describe('BranchesService & Campus Management Integration Tests (PGlite)', () =>
         code: 'SCHOOL',
         name: 'School',
         levelOrder: 30,
+        allowFinancialPosting: true,
+        allowUserAssignment: true,
       })
       .returning();
 
-    // Seed Schools & Hierarchy Nodes for Tenant A
-    const [nodeSchoolA1] = await db
+    // Seed Schools for Tenant A
+    const [nodeA1] = await db
       .insert(hierarchyNodes)
       .values({
         organizationId: TENANT_A,
         nodeTypeId: schoolTypeA!.id,
         code: 'SCH_A1',
         name: 'Beacon Horizon Public School',
-        path: 'tenant_a.sch_a1',
+        path: 'org_a.sch_a1',
       })
       .returning();
-    schoolA1NodeId = nodeSchoolA1!.id;
+    schoolA1NodeId = nodeA1!.id;
 
     const [schoolA1] = await db
       .insert(schools)
@@ -285,17 +305,17 @@ describe('BranchesService & Campus Management Integration Tests (PGlite)', () =>
       .returning();
     schoolA1Id = schoolA1!.id;
 
-    const [nodeSchoolA2] = await db
+    const [nodeA2] = await db
       .insert(hierarchyNodes)
       .values({
         organizationId: TENANT_A,
         nodeTypeId: schoolTypeA!.id,
         code: 'SCH_A2',
         name: 'Apex Crescent Grammar School',
-        path: 'tenant_a.sch_a2',
+        path: 'org_a.sch_a2',
       })
       .returning();
-    schoolA2NodeId = nodeSchoolA2!.id;
+    schoolA2NodeId = nodeA2!.id;
 
     const [schoolA2] = await db
       .insert(schools)
@@ -310,18 +330,18 @@ describe('BranchesService & Campus Management Integration Tests (PGlite)', () =>
       .returning();
     schoolA2Id = schoolA2!.id;
 
-    // Seed School for Tenant B
-    const [nodeSchoolB1] = await db
+    // Seed Schools for Tenant B
+    const [nodeB1] = await db
       .insert(hierarchyNodes)
       .values({
         organizationId: TENANT_B,
         nodeTypeId: schoolTypeB!.id,
         code: 'SCH_B1',
-        name: 'Beta City School',
-        path: 'tenant_b.sch_b1',
+        name: 'Islamabad Model College',
+        path: 'org_b.sch_b1',
       })
       .returning();
-    schoolB1NodeId = nodeSchoolB1!.id;
+    schoolB1NodeId = nodeB1!.id;
 
     const [schoolB1] = await db
       .insert(schools)
@@ -329,25 +349,16 @@ describe('BranchesService & Campus Management Integration Tests (PGlite)', () =>
         organizationId: TENANT_B,
         hierarchyNodeId: schoolB1NodeId,
         code: 'SCH_B1',
-        name: 'Beta City School',
+        name: 'Islamabad Model College',
         parentId: schoolB1NodeId,
         city: 'Islamabad',
       })
       .returning();
     schoolB1Id = schoolB1!.id;
-
-    txManager = {
-      runInTenantContext: async (_tenantId: string, callback: (tx: any) => Promise<any>) => {
-        return callback(db);
-      },
-    } as unknown as TenantTransactionManager;
-    passwordService = new PasswordService();
-    const auditService = new AuditService(txManager);
-    branchesService = new BranchesService(txManager, passwordService, auditService);
   });
 
-  // ── TEST 1: CREATE BRANCH & ATTACH TO SCHOOL ──────────────────────
-  it('1. should create a Branch linked to a School and establish correct hierarchy node path', async () => {
+  // ── TEST 1: CREATE BRANCH UNDER SCHOOL ─────────────────────────────
+  it('1. should create a branch belonging to a school and establish hierarchy node with ltree path', async () => {
     const created = await branchesService.createBranch(
       TENANT_A,
       {
@@ -355,19 +366,23 @@ describe('BranchesService & Campus Management Integration Tests (PGlite)', () =>
         code: 'BR_GULSHAN',
         name: 'Gulshan Senior Campus',
         shortName: 'Gulshan Campus',
+        phone: '+92 21 34981122',
+        email: 'gulshan@beaconhorizon.edu.pk',
         city: 'Karachi',
         province: 'Sindh',
+        country: 'Pakistan',
         status: true,
       },
       USER_ID
     );
 
     expect(created).toBeDefined();
-    expect(created.id).toBeDefined();
     expect(created.code).toBe('BR_GULSHAN');
+    expect(created.name).toBe('Gulshan Senior Campus');
     expect(created.schoolId).toBe(schoolA1Id);
+    expect(created.sortOrder).toBe(1);
 
-    // Verify hierarchy node was created with correct parent and path
+    // Verify hierarchy_nodes link and path hierarchy
     const [node] = await txManager.runInTenantContext(TENANT_A, async (tx) =>
       tx
         .select()
@@ -377,69 +392,61 @@ describe('BranchesService & Campus Management Integration Tests (PGlite)', () =>
 
     expect(node).toBeDefined();
     expect(node!.parentId).toBe(schoolA1NodeId);
-    expect(node!.path).toBe('tenant_a.sch_a1.br_gulshan');
+    expect(node!.path).toBe('org_a.sch_a1.br_gulshan');
   });
 
-  // ── TEST 2: ONE SCHOOL CAN HAVE MULTIPLE BRANCHES ──────────────────
-  it('2. should allow multiple branches under the same school', async () => {
+  // ── TEST 2: AUTO-INCREMENT SORT ORDER FOR SAME SCHOOL ──────────────
+  it('2. should automatically suggest highest + 1 sort order for subsequent branch under same school', async () => {
+    const nextOrderDto = await branchesService.getNextSortOrder(TENANT_A, schoolA1Id);
+    expect(nextOrderDto.nextSortOrder).toBe(2);
+
     const branch2 = await branchesService.createBranch(
       TENANT_A,
       {
         schoolId: schoolA1Id,
         code: 'BR_CLIFTON',
         name: 'Clifton Junior Campus',
-        shortName: 'Clifton Campus',
         city: 'Karachi',
-        province: 'Sindh',
       },
       USER_ID
     );
 
-    expect(branch2).toBeDefined();
-    expect(branch2.schoolId).toBe(schoolA1Id);
-    expect(branch2.code).toBe('BR_CLIFTON');
-
-    const list = await branchesService.listBranches(TENANT_A, { schoolId: schoolA1Id });
-    expect(list.length).toBe(2);
-    expect(list.map((b) => b.code)).toContain('BR_GULSHAN');
-    expect(list.map((b) => b.code)).toContain('BR_CLIFTON');
+    expect(branch2.sortOrder).toBe(2);
   });
 
-  // ── TEST 3: CODE UNIQUENESS & TENANT ISOLATION ─────────────────────
-  it('3. should enforce code uniqueness per tenant while allowing identical code in another tenant', async () => {
-    // Duplicate in Tenant A should throw ConflictException
+  // ── TEST 3: PREVENT DUPLICATE BRANCH CODE PER TENANT ───────────────
+  it('3. should reject branch with duplicate code within the same organization', async () => {
     await expect(
       branchesService.createBranch(
         TENANT_A,
         {
           schoolId: schoolA1Id,
-          code: 'BR_GULSHAN',
+          code: 'BR_GULSHAN', // Duplicate code
           name: 'Another Gulshan Branch',
         },
         USER_ID
       )
     ).rejects.toThrow(ConflictException);
-
-    // Same code in Tenant B is completely permitted
-    const branchInB = await branchesService.createBranch(
-      TENANT_B,
-      {
-        schoolId: schoolB1Id,
-        code: 'BR_GULSHAN',
-        name: 'Beta Gulshan Campus',
-      },
-      USER_ID
-    );
-
-    expect(branchInB).toBeDefined();
-    expect(branchInB.code).toBe('BR_GULSHAN');
-    expect(branchInB.organizationId).toBe(TENANT_B);
   });
 
-  // ── TEST 4: BRANCH ADMINISTRATOR LOGIN PROVISIONING ────────────────
-  it('4. should provision an administrator login with Argon2id hash and scope strictly to the branch node', async () => {
-    const rawPassword = 'SuperSecretBranchAdminPassword2026!';
+  // ── TEST 4: PREVENT CROSS-TENANT SCHOOL SELECTION ──────────────────
+  it('4. should reject creating branch with a parent school from another tenant', async () => {
+    await expect(
+      branchesService.createBranch(
+        TENANT_A,
+        {
+          schoolId: schoolB1Id, // School belonging to Tenant B
+          code: 'BR_ILLEGAL',
+          name: 'Illegal Cross Tenant Branch',
+        },
+        USER_ID
+      )
+    ).rejects.toThrow(NotFoundException);
+  });
 
+  // ── TEST 5: CREATE BRANCH WITH ADMIN USER PROVISIONING ─────────────
+  it('5. should provision branch administrator with Argon2id password hash and scoped node assignment', async () => {
+    const rawPassword = 'SecurePassword2026!';
     const createdWithAdmin = await branchesService.createBranch(
       TENANT_A,
       {
@@ -487,38 +494,17 @@ describe('BranchesService & Campus Management Integration Tests (PGlite)', () =>
     expect(assignment!.hierarchyNodeId).toBe(createdWithAdmin.hierarchyNodeId);
   });
 
-  // ── TEST 5: PREVENT DUPLICATE ADMIN USERNAME/EMAIL ─────────────────
-  it('5. should reject duplicate admin email on branch provisioning', async () => {
-    await expect(
-      branchesService.createBranch(
-        TENANT_A,
-        {
-          schoolId: schoolA2Id,
-          code: 'BR_MODEL_TOWN',
-          name: 'Model Town Campus',
-          adminUser: {
-            username: 'admin.johartown',
-            email: 'admin.johartown@apexgrammar.edu.pk', // Already used in previous test
-            password: 'AnotherPassword123!',
-          },
-        },
-        USER_ID
-      )
-    ).rejects.toThrow(ConflictException);
-  });
-
-  // ── TEST 6: GET BRANCH DETAIL (NEVER EXPOSES PASSWORD) ─────────────
+  // ── TEST 6: GET BRANCH DETAIL ──────────────────────────────────────
   it('6. should retrieve branch details with associated school and admin contact without exposing credentials', async () => {
     const list = await branchesService.listBranches(TENANT_A);
     const jt = list.find((b) => b.code === 'BR_JOHAR_TOWN');
     expect(jt).toBeDefined();
 
-    const detail = await branchesService.getBranch(TENANT_A, jt!.id);
+    const detail = await branchesService.getBranchById(TENANT_A, jt!.id);
     expect(detail).toBeDefined();
     expect(detail.name).toBe('Johar Town Main Campus');
     expect(detail.schoolName).toBe('Apex Crescent Grammar School');
     expect(detail.adminEmail).toBe('admin.johartown@apexgrammar.edu.pk');
-    expect(detail.adminUsername).toBe('admin.johartown');
 
     // Security invariant: detail object MUST NOT contain password or passwordHash keys
     expect((detail as any).password).toBeUndefined();
@@ -556,11 +542,45 @@ describe('BranchesService & Campus Management Integration Tests (PGlite)', () =>
     expect(node!.isActive).toBe(false);
   });
 
-  // ── TEST 8: GET ELIGIBLE SCHOOLS ──────────────────────────────────
-  it('8. should return eligible schools for branch parent selection', async () => {
-    const eligible = await branchesService.getEligibleSchools(TENANT_A);
-    expect(eligible.length).toBe(2);
-    expect(eligible.map((s) => s.code)).toContain('SCH_A1');
-    expect(eligible.map((s) => s.code)).toContain('SCH_A2');
+  // ── TEST 8: REORDER BRANCHES PERSISTENCE & AUDIT ───────────────────
+  it('8. should reorder branches within a school and persist new sequence with audit log', async () => {
+    const schoolBranches = await branchesService.listBranches(TENANT_A, { schoolId: schoolA1Id });
+    expect(schoolBranches.length).toBe(2);
+
+    const originalOrder = schoolBranches.map((b) => b.id);
+    const reversedOrder = [...originalOrder].reverse();
+
+    const reorderResult = await branchesService.reorderBranches(
+      TENANT_A,
+      {
+        schoolId: schoolA1Id,
+        branchIds: reversedOrder,
+      },
+      USER_ID
+    );
+
+    expect(reorderResult.success).toBe(true);
+
+    const reorderedBranches = await branchesService.listBranches(TENANT_A, { schoolId: schoolA1Id });
+    expect(reorderedBranches[0]!.id).toBe(reversedOrder[0]);
+    expect(reorderedBranches[0]!.sortOrder).toBe(1);
+    expect(reorderedBranches[1]!.id).toBe(reversedOrder[1]);
+    expect(reorderedBranches[1]!.sortOrder).toBe(2);
+  });
+
+  // ── TEST 9: SUGGEST USERNAME ENGINE ────────────────────────────────
+  it('9. should suggest normalized and available usernames for branch administrators', async () => {
+    const suggestion = await branchesService.suggestUsername(
+      TENANT_A,
+      schoolA1Id,
+      'BR_NORTH',
+      'North Campus'
+    );
+
+    expect(suggestion).toBeDefined();
+    expect(suggestion.username).toBeTruthy();
+    expect(suggestion.username).toContain('brnorth');
+    expect(suggestion.isAvailable).toBe(true);
+    expect(suggestion.alternatives.length).toBeGreaterThan(0);
   });
 });

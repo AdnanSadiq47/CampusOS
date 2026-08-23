@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { SchoolListItemDto, EligibleParentNodeDto, CreateSchoolDto, SchoolTypeListItemDto } from '@campus-os/types';
+import { AdminConfigPageHeader } from '../../../../components/AdminConfigPageHeader';
 
 export default function SchoolsPage() {
   // State
@@ -421,28 +422,12 @@ export default function SchoolsPage() {
       )}
 
       {/* 1. Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
-        <div>
-          <nav className="flex items-center gap-1.5 text-xs text-slate-400 mb-2">
-            <span>Administration Configuration</span>
-            <span>/</span>
-            <span className="text-slate-600 dark:text-slate-300 font-medium">Schools</span>
-          </nav>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Schools</h1>
-          <p className="text-sm text-slate-500 mt-1 max-w-xl">
-            Manage educational institutions, campus affiliations, and hierarchy nodes within your network.
-          </p>
-        </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <button
-            onClick={handleOpenAddModal}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold shadow-sm transition-colors"
-          >
-            <span className="text-base leading-none">+</span>
-            <span>Add School</span>
-          </button>
-        </div>
-      </div>
+      <AdminConfigPageHeader
+        title="Schools"
+        description="Manage educational institutions, campus affiliations, and hierarchy nodes within your network."
+        actionButtonText="Add School"
+        onAction={handleOpenAddModal}
+      />
 
       {/* 2. Key Metrics Bar */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

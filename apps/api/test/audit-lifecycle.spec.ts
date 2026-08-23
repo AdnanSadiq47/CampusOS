@@ -136,6 +136,7 @@ describe('Permanent Audit Logging & Safe Record Lifecycle Policy (PGlite)', () =
         area VARCHAR(128),
         address TEXT,
         postal_code VARCHAR(32),
+        sort_order INTEGER DEFAULT 1 NOT NULL,
         notes TEXT,
         is_active BOOLEAN DEFAULT TRUE NOT NULL,
         created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { BranchListItemDto, CreateBranchDto } from '@campus-os/types';
+import { AdminConfigPageHeader } from '../../../../components/AdminConfigPageHeader';
 
 interface SchoolOption {
   id: string;
@@ -22,6 +23,10 @@ export default function BranchesPage() {
   // Modal / Form state
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState<boolean>(false);
+  const [isReorderModalOpen, setIsReorderModalOpen] = useState<boolean>(false);
+  const [reorderSchoolId, setReorderSchoolId] = useState<string>('');
+  const [reorderList, setReorderList] = useState<BranchListItemDto[]>([]);
+
   const [editingBranch, setEditingBranch] = useState<BranchListItemDto | null>(null);
   const [viewingBranch, setViewingBranch] = useState<BranchListItemDto | null>(null);
   const [formTab, setFormTab] = useState<'school' | 'basic' | 'contact' | 'location' | 'admin'>('school');
@@ -51,6 +56,7 @@ export default function BranchesPage() {
     name: '',
     shortName: '',
     description: '',
+    sortOrder: 1,
     logoUrl: '',
     phone: '',
     alternatePhone: '',
@@ -93,6 +99,7 @@ export default function BranchesPage() {
         code: 'BR_KHI_GUL',
         name: 'Gulshan Senior Campus',
         shortName: 'Gulshan Campus',
+        sortOrder: 1,
         logoUrl: null,
         phone: '+92 21 34981122',
         email: 'gulshan@beaconhorizon.edu.pk',
@@ -115,6 +122,7 @@ export default function BranchesPage() {
         code: 'BR_KHI_CLF',
         name: 'Clifton Junior Campus',
         shortName: 'Clifton Campus',
+        sortOrder: 2,
         logoUrl: null,
         phone: '+92 21 35872233',
         email: 'clifton@beaconhorizon.edu.pk',
@@ -137,6 +145,7 @@ export default function BranchesPage() {
         code: 'BR_LHR_JT',
         name: 'Johar Town Main Campus',
         shortName: 'Johar Town',
+        sortOrder: 1,
         logoUrl: null,
         phone: '+92 42 35184455',
         email: 'johartown@apexgrammar.edu.pk',
@@ -159,6 +168,7 @@ export default function BranchesPage() {
         code: 'BR_ISB_F8',
         name: 'F-8 Executive Campus',
         shortName: 'F-8 Campus',
+        sortOrder: 1,
         logoUrl: null,
         phone: '+92 51 2289900',
         email: 'f8@capitalmodel.edu.pk',
@@ -192,9 +202,21 @@ export default function BranchesPage() {
     fetchData();
   }, []);
 
+  // Canonical ordering: schoolName ASC, sortOrder ASC, name ASC
+  const canonicalBranches = useMemo(() => {
+    return [...branches].sort((a, b) => {
+      const schoolComp = (a.schoolName || '').localeCompare(b.schoolName || '');
+      if (schoolComp !== 0) return schoolComp;
+      const orderA = a.sortOrder || 1;
+      const orderB = b.sortOrder || 1;
+      if (orderA !== orderB) return orderA - orderB;
+      return (a.name || '').localeCompare(b.name || '');
+    });
+  }, [branches]);
+
   // Filtered branches
   const filteredBranches = useMemo(() => {
-    return branches.filter((b) => {
+    return canonicalBranches.filter((b) => {
       const q = searchQuery.trim().toLowerCase();
       const matchesSearch =
         !q ||
@@ -214,7 +236,7 @@ export default function BranchesPage() {
 
       return matchesSearch && matchesStatus && matchesSchool;
     });
-  }, [branches, searchQuery, statusFilter, schoolFilter]);
+  }, [canonicalBranches, searchQuery, statusFilter, schoolFilter]);
 
   // KPI calculations
   const kpis = useMemo(() => {
@@ -237,15 +259,45 @@ export default function BranchesPage() {
     showToast('success', 'Strong password generated');
   };
 
-  // Suggest Username from Branch code / name
+  // Calculate Next Sort Order for a given School
+  const getNextSortOrderForSchool = (schoolId: string) => {
+    const schoolBranches = branches.filter((b) => b.schoolId === schoolId);
+    if (schoolBranches.length === 0) return 1;
+    const maxOrder = Math.max(...schoolBranches.map((b) => b.sortOrder || 1));
+    return maxOrder + 1;
+  };
+
+  // Suggest Username from School and Branch code / name
   const suggestUsername = () => {
-    if (formData.code) {
-      const suggested = `admin.${formData.code.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
-      setAdminUsername(suggested);
-    } else if (formData.name) {
-      const suggested = `admin.${formData.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
-      setAdminUsername(suggested);
+    const selectedSchool = schools.find((s) => s.id === formData.schoolId);
+    const schoolCode = selectedSchool?.code
+      ? selectedSchool.code.toLowerCase().replace(/[^a-z0-9]/g, '')
+      : '';
+    const branchCode = formData.code
+      ? formData.code.toLowerCase().replace(/[^a-z0-9]/g, '')
+      : '';
+    const branchName = formData.name
+      ? formData.name.toLowerCase().replace(/[^a-z0-9]/g, '')
+      : '';
+
+    let candidate = '';
+    if (schoolCode && branchCode) {
+      candidate = `${schoolCode}.${branchCode}`;
+    } else if (branchCode) {
+      candidate = `${branchCode}.admin`;
+    } else if (branchName) {
+      candidate = `${branchName}.admin`;
+    } else if (schoolCode) {
+      candidate = `${schoolCode}.branch.admin`;
+    } else {
+      candidate = `branch.admin.${Math.floor(100 + Math.random() * 900)}`;
     }
+
+    setAdminUsername(candidate);
+    if (!adminEmail && selectedSchool) {
+      setAdminEmail(`${candidate}@${schoolCode || 'campus-os'}.edu.pk`);
+    }
+    showToast('success', `Suggested username '${candidate}' generated`);
   };
 
   // Handle Logo Upload
@@ -283,12 +335,16 @@ export default function BranchesPage() {
   // Modal open handlers
   const handleOpenAddModal = () => {
     setEditingBranch(null);
+    const initialSchoolId = (schoolFilter !== 'ALL' ? schoolFilter : schools[0]?.id) || '';
+    const initialSortOrder = getNextSortOrderForSchool(initialSchoolId);
+
     setFormData({
-      schoolId: schools[0]?.id || '',
+      schoolId: initialSchoolId,
       code: '',
       name: '',
       shortName: '',
       description: '',
+      sortOrder: initialSortOrder,
       logoUrl: '',
       phone: '',
       alternatePhone: '',
@@ -324,6 +380,7 @@ export default function BranchesPage() {
       name: b.name,
       shortName: b.shortName || '',
       description: '',
+      sortOrder: b.sortOrder || 1,
       logoUrl: b.logoUrl || '',
       phone: b.phone || '',
       alternatePhone: '',
@@ -347,6 +404,56 @@ export default function BranchesPage() {
     setFormErrors({});
     setFormTab('school');
     setIsModalOpen(true);
+  };
+
+  // Open Reorder Modal
+  const handleOpenReorderModal = (preselectedSchoolId?: string) => {
+    const targetSchoolId =
+      preselectedSchoolId || (schoolFilter !== 'ALL' ? schoolFilter : schools[0]?.id) || '';
+    setReorderSchoolId(targetSchoolId);
+    const schoolBranches = branches
+      .filter((b) => b.schoolId === targetSchoolId)
+      .sort((a, b) => (a.sortOrder || 1) - (b.sortOrder || 1));
+    setReorderList(schoolBranches);
+    setIsReorderModalOpen(true);
+  };
+
+  const handleReorderSchoolChange = (targetSchoolId: string) => {
+    setReorderSchoolId(targetSchoolId);
+    const schoolBranches = branches
+      .filter((b) => b.schoolId === targetSchoolId)
+      .sort((a, b) => (a.sortOrder || 1) - (b.sortOrder || 1));
+    setReorderList(schoolBranches);
+  };
+
+  const handleMoveBranch = (index: number, direction: 'UP' | 'DOWN') => {
+    const targetIndex = direction === 'UP' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= reorderList.length) return;
+
+    const item = reorderList[index];
+    if (!item) return;
+
+    const updated = [...reorderList];
+    updated.splice(index, 1);
+    updated.splice(targetIndex, 0, item);
+    setReorderList(updated);
+  };
+
+  const handleSaveReorder = () => {
+    const reorderedIds = reorderList.map((b) => b.id);
+    const updatedBranches = branches.map((b) => {
+      if (b.schoolId === reorderSchoolId) {
+        const newIndex = reorderedIds.indexOf(b.id);
+        if (newIndex !== -1) {
+          return { ...b, sortOrder: newIndex + 1, updatedAt: new Date() };
+        }
+      }
+      return b;
+    });
+
+    setBranches(updatedBranches);
+    setIsReorderModalOpen(false);
+    showToast('success', 'Branch display sequence reordered and saved.');
   };
 
   // Validation
@@ -397,6 +504,7 @@ export default function BranchesPage() {
       const cleanCode = formData.code.trim().toUpperCase();
       const cleanName = formData.name.trim();
       const selectedSchool = schools.find((s) => s.id === formData.schoolId);
+      const resolvedSortOrder = formData.sortOrder && formData.sortOrder > 0 ? formData.sortOrder : 1;
 
       if (editingBranch) {
         // Update
@@ -410,6 +518,7 @@ export default function BranchesPage() {
               name: cleanName,
               code: cleanCode,
               shortName: formData.shortName?.trim() || null,
+              sortOrder: resolvedSortOrder,
               logoUrl: logoPreview || null,
               phone: formData.phone?.trim() || null,
               email: formData.email?.trim() || null,
@@ -436,6 +545,7 @@ export default function BranchesPage() {
           code: cleanCode,
           name: cleanName,
           shortName: formData.shortName?.trim() || null,
+          sortOrder: resolvedSortOrder,
           logoUrl: logoPreview || null,
           phone: formData.phone?.trim() || null,
           email: formData.email?.trim() || null,
@@ -496,33 +606,14 @@ export default function BranchesPage() {
       )}
 
       {/* ── 1. PAGE HEADER ──────────────────────────────────────── */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-5">
-        <div>
-          <div className="flex items-center gap-2 text-xs font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-1">
-            <span>Administration Configuration</span>
-            <span>/</span>
-            <span>Organization Setup</span>
-            <span>/</span>
-            <span>Branches</span>
-          </div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
-            Branches / Campuses
-          </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Manage school branches, physical campuses, centers, and localized administrative units.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleOpenAddModal}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-sm font-medium shadow-sm shadow-indigo-600/20 transition-all cursor-pointer"
-          >
-            <span>+</span>
-            <span>Add Branch</span>
-          </button>
-        </div>
-      </div>
+      <AdminConfigPageHeader
+        title="Branches"
+        description="Manage school branches, physical campuses, centers, and localized administrative units."
+        actionButtonText="Add Branch"
+        onAction={handleOpenAddModal}
+        secondaryActionText="Reorder Branches"
+        onSecondaryAction={() => handleOpenReorderModal()}
+      />
 
       {/* ── 2. KPI / SUMMARY CARDS ──────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -550,8 +641,8 @@ export default function BranchesPage() {
               ✓
             </span>
           </div>
-          <div className="mt-2 text-2xl font-bold text-emerald-600 dark:text-emerald-400">{kpis.active}</div>
-          <div className="mt-1 text-xs text-slate-400">In active session</div>
+          <div className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">{kpis.active}</div>
+          <div className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">Operational</div>
         </div>
 
         {/* Inactive Branches */}
@@ -564,39 +655,39 @@ export default function BranchesPage() {
               ⏸️
             </span>
           </div>
-          <div className="mt-2 text-2xl font-bold text-slate-600 dark:text-slate-400">{kpis.inactive}</div>
-          <div className="mt-1 text-xs text-slate-400">Suspended / Inactive</div>
+          <div className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">{kpis.inactive}</div>
+          <div className="mt-1 text-xs text-slate-400">Suspended / Draft</div>
         </div>
 
-        {/* Schools with Branches */}
+        {/* Participating Schools */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-              Schools
+              Schools with Campuses
             </span>
             <span className="h-7 w-7 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center text-xs">
               🏫
             </span>
           </div>
-          <div className="mt-2 text-2xl font-bold text-blue-600 dark:text-blue-400">{kpis.uniqueSchoolsWithBranches}</div>
-          <div className="mt-1 text-xs text-slate-400">Parent schools hosting branches</div>
+          <div className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">{kpis.uniqueSchoolsWithBranches}</div>
+          <div className="mt-1 text-xs text-slate-400">Multi-location networks</div>
         </div>
       </div>
 
       {/* ── 3. SEARCH & FILTER BAR ──────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto flex-1">
-          {/* Search Input */}
-          <div className="relative flex-1 min-w-[200px] max-w-md">
-            <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 text-xs">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+          {/* Search */}
+          <div className="relative flex-1 sm:w-64">
+            <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-xs">
               🔍
             </span>
             <input
               type="text"
-              placeholder="Search by branch name, code, school, city, admin..."
+              placeholder="Search code, name, city, admin..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 rounded-lg text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+              className="w-full pl-8 pr-3 py-1.5 rounded-lg text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
             />
           </div>
 
@@ -667,6 +758,7 @@ export default function BranchesPage() {
             <table className="w-full text-left text-xs sm:text-sm">
               <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 text-slate-500 font-semibold uppercase text-[10px] tracking-wider">
                 <tr>
+                  <th className="py-3 px-4">Order</th>
                   <th className="py-3 px-4">Branch Code</th>
                   <th className="py-3 px-4">Branch / Campus Name</th>
                   <th className="py-3 px-4">School</th>
@@ -682,6 +774,13 @@ export default function BranchesPage() {
                     key={b.id}
                     className="hover:bg-slate-50/70 dark:hover:bg-slate-900/50 transition-colors group"
                   >
+                    {/* Sort Order Badge */}
+                    <td className="py-3.5 px-4">
+                      <span className="inline-flex items-center justify-center font-mono font-bold text-xs bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
+                        #{b.sortOrder || 1}
+                      </span>
+                    </td>
+
                     {/* Code */}
                     <td className="py-3.5 px-4 font-mono font-bold text-indigo-600 dark:text-indigo-400">
                       {b.code}
@@ -748,17 +847,21 @@ export default function BranchesPage() {
                         onClick={() => handleToggleStatus(b)}
                         className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition-all ${
                           b.isActive
-                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100'
-                            : 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800 hover:bg-rose-100'
+                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 ring-1 ring-emerald-200 dark:ring-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/60'
+                            : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 ring-1 ring-slate-200 dark:ring-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700'
                         }`}
                         title="Click to toggle status"
                       >
-                        <span className={`h-1.5 w-1.5 rounded-full ${b.isActive ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                        <span>{b.isActive ? 'Active' : 'Inactive'}</span>
+                        <span
+                          className={`h-1.5 w-1.5 rounded-full ${
+                            b.isActive ? 'bg-emerald-500' : 'bg-slate-400'
+                          }`}
+                        />
+                        {b.isActive ? 'ACTIVE' : 'INACTIVE'}
                       </button>
                     </td>
 
-                    {/* Actions */}
+                    {/* Actions: View, Edit, Activate/Deactivate */}
                     <td className="py-3.5 px-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
@@ -766,28 +869,15 @@ export default function BranchesPage() {
                             setViewingBranch(b);
                             setIsViewModalOpen(true);
                           }}
-                          className="px-2.5 py-1 text-xs font-medium rounded-md border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 transition-colors"
-                          title="View branch details"
+                          className="px-2 py-1 rounded text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                         >
                           View
                         </button>
                         <button
                           onClick={() => handleOpenEditModal(b)}
-                          className="px-2.5 py-1 text-xs font-medium rounded-md bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 border border-indigo-200 dark:border-indigo-800 transition-colors"
-                          title="Edit branch"
+                          className="px-2 py-1 rounded text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 transition-colors"
                         >
                           Edit
-                        </button>
-                        <button
-                          onClick={() => handleToggleStatus(b)}
-                          className={`px-2.5 py-1 text-xs font-medium rounded-md border transition-colors ${
-                            b.isActive
-                              ? 'border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40'
-                              : 'border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
-                          }`}
-                          title={b.isActive ? 'Deactivate branch' : 'Activate branch'}
-                        >
-                          {b.isActive ? 'Deactivate' : 'Activate'}
                         </button>
                       </div>
                     </td>
@@ -799,37 +889,150 @@ export default function BranchesPage() {
         )}
       </div>
 
-      {/* ── 5. ADD / EDIT BRANCH MODAL ──────────────────────────── */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
-            {/* Modal Header */}
-            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950">
+      {/* ── 5. REORDER BRANCHES MODAL ────────────────────────────── */}
+      {isReorderModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-800">
               <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
-                  {editingBranch ? `Edit Branch: ${editingBranch.name}` : 'Add New Branch / Campus'}
+                <h3 className="font-bold text-slate-900 dark:text-slate-100 text-base">
+                  Reorder Branches (Display Sequence)
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  {editingBranch ? 'Update branch campus configuration and location details' : 'Configure a campus location and optional administrator login'}
+                  Adjust canonical branch ordering for the selected school.
                 </p>
               </div>
               <button
-                onClick={() => setIsModalOpen(false)}
-                className="h-8 w-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
+                onClick={() => setIsReorderModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg"
               >
                 ✕
               </button>
             </div>
 
-            {/* Modal Tab Navigation */}
-            <div className="flex border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 px-6 pt-2 overflow-x-auto scrollbar-none">
+            <div className="p-4 space-y-4">
+              {/* School Selector */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Target School
+                </label>
+                <select
+                  value={reorderSchoolId}
+                  onChange={(e) => handleReorderSchoolChange(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                >
+                  {schools.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Branch Sequence List */}
+              <div className="space-y-2 max-h-72 overflow-y-auto">
+                {reorderList.length === 0 ? (
+                  <p className="text-xs text-slate-400 text-center py-6">
+                    No branches configured under this school.
+                  </p>
+                ) : (
+                  reorderList.map((branch, index) => (
+                    <div
+                      key={branch.id}
+                      className="flex items-center justify-between p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="h-6 w-6 rounded-lg bg-indigo-600 text-white font-mono font-bold text-xs flex items-center justify-center">
+                          {index + 1}
+                        </span>
+                        <div>
+                          <div className="font-semibold text-xs text-slate-900 dark:text-slate-100">
+                            {branch.name}
+                          </div>
+                          <div className="text-[10px] font-mono text-slate-400">
+                            {branch.code} {branch.city ? `• ${branch.city}` : ''}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          disabled={index === 0}
+                          onClick={() => handleMoveBranch(index, 'UP')}
+                          className="h-7 w-7 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center text-xs font-bold transition-all shadow-sm"
+                          title="Move Up"
+                        >
+                          ▲
+                        </button>
+                        <button
+                          type="button"
+                          disabled={index === reorderList.length - 1}
+                          onClick={() => handleMoveBranch(index, 'DOWN')}
+                          className="h-7 w-7 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center text-xs font-bold transition-all shadow-sm"
+                          title="Move Down"
+                        >
+                          ▼
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
+              <button
+                type="button"
+                onClick={() => setIsReorderModalOpen(false)}
+                className="px-3.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={reorderList.length === 0}
+                onClick={handleSaveReorder}
+                className="px-4 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 transition-colors shadow-sm disabled:opacity-50"
+              >
+                Save Order
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 6. ADD / EDIT BRANCH MODAL ─────────────────────────── */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-2xl w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-800">
+              <div>
+                <h3 className="font-bold text-slate-900 dark:text-slate-100 text-base">
+                  {editingBranch ? 'Edit Branch / Campus' : 'Add New Branch / Campus'}
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Configure school campus attributes, branding, location, and administrative access.
+                </p>
+              </div>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Tabs */}
+            <div className="flex border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50 px-4 gap-1 overflow-x-auto text-xs">
               <button
                 type="button"
                 onClick={() => setFormTab('school')}
-                className={`pb-2.5 px-3 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap ${
+                className={`py-2.5 px-3 font-semibold border-b-2 transition-colors whitespace-nowrap ${
                   formTab === 'school'
                     ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
-                    : 'border-transparent text-slate-500 hover:text-slate-700'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
                 }`}
               >
                 1. School & Branding
@@ -837,32 +1040,32 @@ export default function BranchesPage() {
               <button
                 type="button"
                 onClick={() => setFormTab('basic')}
-                className={`pb-2.5 px-3 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap ${
+                className={`py-2.5 px-3 font-semibold border-b-2 transition-colors whitespace-nowrap ${
                   formTab === 'basic'
                     ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
-                    : 'border-transparent text-slate-500 hover:text-slate-700'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
                 }`}
               >
-                2. Basic Info
+                2. Basic Info & Order
               </button>
               <button
                 type="button"
                 onClick={() => setFormTab('contact')}
-                className={`pb-2.5 px-3 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap ${
+                className={`py-2.5 px-3 font-semibold border-b-2 transition-colors whitespace-nowrap ${
                   formTab === 'contact'
                     ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
-                    : 'border-transparent text-slate-500 hover:text-slate-700'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
                 }`}
               >
-                3. Contact
+                3. Contact Info
               </button>
               <button
                 type="button"
                 onClick={() => setFormTab('location')}
-                className={`pb-2.5 px-3 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap ${
+                className={`py-2.5 px-3 font-semibold border-b-2 transition-colors whitespace-nowrap ${
                   formTab === 'location'
                     ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
-                    : 'border-transparent text-slate-500 hover:text-slate-700'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
                 }`}
               >
                 4. Location
@@ -871,33 +1074,37 @@ export default function BranchesPage() {
                 <button
                   type="button"
                   onClick={() => setFormTab('admin')}
-                  className={`pb-2.5 px-3 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap ${
+                  className={`py-2.5 px-3 font-semibold border-b-2 transition-colors whitespace-nowrap ${
                     formTab === 'admin'
                       ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
-                      : 'border-transparent text-slate-500 hover:text-slate-700'
+                      : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
                   }`}
                 >
-                  5. Administrator Login
+                  5. Admin Login
                 </button>
               )}
             </div>
 
-            {/* Modal Body Form */}
-            <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4">
+            {/* Modal Body */}
+            <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 space-y-4">
               {/* TAB 1: SCHOOL & BRANDING */}
               {formTab === 'school' && (
-                <div className="space-y-5 text-xs">
+                <div className="space-y-4 text-xs">
                   {/* School Selection */}
                   <div>
                     <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      School <span className="text-rose-500">*</span>
+                      Parent School <span className="text-rose-500">*</span>
                     </label>
                     <select
                       value={formData.schoolId}
-                      onChange={(e) => setFormData({ ...formData, schoolId: e.target.value })}
-                      className={`w-full px-3 py-2 rounded-lg border bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-medium focus:outline-none cursor-pointer ${
+                      onChange={(e) => {
+                        const newSchoolId = e.target.value;
+                        const nextOrder = getNextSortOrderForSchool(newSchoolId);
+                        setFormData({ ...formData, schoolId: newSchoolId, sortOrder: nextOrder });
+                      }}
+                      className={`w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-950 border ${
                         formErrors.schoolId ? 'border-rose-500' : 'border-slate-200 dark:border-slate-800'
-                      }`}
+                      } text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500`}
                     >
                       <option value="">Select Parent School...</option>
                       {schools.map((s) => (
@@ -928,7 +1135,7 @@ export default function BranchesPage() {
                           <button
                             type="button"
                             onClick={handleRemoveLogo}
-                            className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-rose-600 text-white text-[10px] flex items-center justify-center shadow hover:bg-rose-700"
+                            className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-rose-600 text-white text-[10px] flex items-center justify-center shadow hover:bg-rose-700 cursor-pointer"
                             title="Remove Logo"
                           >
                             ✕
@@ -960,7 +1167,7 @@ export default function BranchesPage() {
                             <button
                               type="button"
                               onClick={handleRemoveLogo}
-                              className="px-3 py-1.5 rounded-lg text-xs font-medium text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                              className="px-3 py-1.5 rounded-lg text-xs font-medium text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
                             >
                               Remove
                             </button>
@@ -975,7 +1182,7 @@ export default function BranchesPage() {
                 </div>
               )}
 
-              {/* TAB 2: BASIC INFORMATION */}
+              {/* TAB 2: BASIC INFORMATION & SORT ORDER */}
               {formTab === 'basic' && (
                 <div className="space-y-4 text-xs">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1002,14 +1209,11 @@ export default function BranchesPage() {
                       <input
                         type="text"
                         placeholder="e.g. BR_KHI_GUL"
-                        disabled={!!editingBranch}
                         value={formData.code}
                         onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
-                        className={`w-full px-3 py-2 rounded-lg font-mono bg-slate-50 dark:bg-slate-950 border ${
+                        className={`w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-950 border uppercase font-mono ${
                           formErrors.code ? 'border-rose-500' : 'border-slate-200 dark:border-slate-800'
-                        } text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 ${
-                          editingBranch ? 'opacity-60 cursor-not-allowed' : ''
-                        }`}
+                        } text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500`}
                       />
                       {formErrors.code && <p className="text-[11px] text-rose-500 mt-1">{formErrors.code}</p>}
                     </div>
@@ -1018,7 +1222,7 @@ export default function BranchesPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        Short Name / Campus Alias
+                        Short Name / Alias
                       </label>
                       <input
                         type="text"
@@ -1029,38 +1233,60 @@ export default function BranchesPage() {
                       />
                     </div>
 
-                    <div className="flex items-center justify-between pt-5">
-                      <div>
-                        <div className="font-semibold text-slate-700 dark:text-slate-300">Active Status</div>
-                        <div className="text-[10px] text-slate-400">Campus operational state</div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setFormData({ ...formData, status: !formData.status })}
-                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                          formData.status ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'
-                        }`}
-                      >
-                        <span
-                          className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
-                            formData.status ? 'translate-x-4' : 'translate-x-0'
-                          }`}
-                        />
-                      </button>
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Sort Order
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        placeholder="1"
+                        value={formData.sortOrder || 1}
+                        onChange={(e) =>
+                          setFormData({ ...formData, sortOrder: parseInt(e.target.value, 10) || 1 })
+                        }
+                        className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                      />
+                      <p className="text-[10px] text-slate-400 mt-1">
+                        Controls the display order of branches within this School.
+                      </p>
                     </div>
                   </div>
 
                   <div>
                     <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Description / Campus Remarks
+                      Description / Overview
                     </label>
                     <textarea
                       rows={2}
-                      placeholder="e.g. Main boys senior campus, grades 8-12 with science laboratories..."
+                      placeholder="Brief overview of this branch campus..."
                       value={formData.description || ''}
                       onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                       className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                     />
+                  </div>
+
+                  {/* Status Toggle */}
+                  <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800">
+                    <div>
+                      <div className="font-semibold text-slate-800 dark:text-slate-200">Active Status</div>
+                      <div className="text-[11px] text-slate-400">
+                        Active branches are operational and open for enrollment and staffing.
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, status: !formData.status })}
+                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                        formData.status ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                          formData.status ? 'translate-x-4' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
                   </div>
                 </div>
               )}
@@ -1071,7 +1297,7 @@ export default function BranchesPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        Campus Phone
+                        Primary Phone
                       </label>
                       <input
                         type="text"
@@ -1084,11 +1310,11 @@ export default function BranchesPage() {
 
                     <div>
                       <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        Alternate Phone / Hotline
+                        Alternate Phone
                       </label>
                       <input
                         type="text"
-                        placeholder="e.g. +92 21 34981123"
+                        placeholder="e.g. +92 300 1234567"
                         value={formData.alternatePhone || ''}
                         onChange={(e) => setFormData({ ...formData, alternatePhone: e.target.value })}
                         className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
@@ -1183,16 +1409,16 @@ export default function BranchesPage() {
                         placeholder="e.g. 75300"
                         value={formData.postalCode || ''}
                         onChange={(e) => setFormData({ ...formData, postalCode: e.target.value })}
-                        className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Physical Street Address</label>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Physical Address</label>
                     <textarea
                       rows={2}
-                      placeholder="Campus plot number, street, sector, or landmark..."
+                      placeholder="Plot/Street address of the campus..."
                       value={formData.address || ''}
                       onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                       className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
@@ -1240,14 +1466,14 @@ export default function BranchesPage() {
                           <button
                             type="button"
                             onClick={suggestUsername}
-                            className="text-[10px] font-semibold text-indigo-600 hover:underline"
+                            className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 hover:underline cursor-pointer flex items-center gap-1"
                           >
-                            Suggest Username
+                            <span>✨ Suggest Username</span>
                           </button>
                         </div>
                         <input
                           type="text"
-                          placeholder="e.g. admin.gulshan"
+                          placeholder="e.g. beacon.gulshan"
                           value={adminUsername}
                           onChange={(e) => setAdminUsername(e.target.value)}
                           className={`w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border font-mono ${
@@ -1291,9 +1517,9 @@ export default function BranchesPage() {
                             <button
                               type="button"
                               onClick={generateStrongPassword}
-                              className="text-[10px] font-semibold text-indigo-600 hover:underline"
+                              className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
                             >
-                              Generate Strong Password
+                              Generate Password
                             </button>
                           </div>
                           <div className="relative">
@@ -1309,7 +1535,7 @@ export default function BranchesPage() {
                             <button
                               type="button"
                               onClick={() => setShowPassword(!showPassword)}
-                              className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 text-xs"
+                              className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 text-xs cursor-pointer"
                             >
                               {showPassword ? '🙈' : '👁️'}
                             </button>
@@ -1329,7 +1555,9 @@ export default function BranchesPage() {
                             value={adminConfirmPassword}
                             onChange={(e) => setAdminConfirmPassword(e.target.value)}
                             className={`w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border font-mono ${
-                              formErrors.adminConfirmPassword ? 'border-rose-500' : 'border-slate-200 dark:border-slate-800'
+                              formErrors.adminConfirmPassword
+                                ? 'border-rose-500'
+                                : 'border-slate-200 dark:border-slate-800'
                             } text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500`}
                           />
                           {formErrors.adminConfirmPassword && (
@@ -1338,157 +1566,159 @@ export default function BranchesPage() {
                         </div>
                       </div>
 
-                      {/* Force Password Change on First Login */}
-                      <div className="flex items-center justify-between pt-2">
-                        <div>
-                          <span className="font-semibold text-slate-700 dark:text-slate-300">
-                            Force Password Change on First Login
-                          </span>
-                          <p className="text-[10px] text-slate-400">
-                            User will be prompted to set a new password on their initial sign-in.
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setForcePasswordChange(!forcePasswordChange)}
-                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                            forcePasswordChange ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'
-                          }`}
+                      {/* Force Password Change */}
+                      <div className="flex items-center gap-2 pt-1">
+                        <input
+                          type="checkbox"
+                          id="force-password-change"
+                          checked={forcePasswordChange}
+                          onChange={(e) => setForcePasswordChange(e.target.checked)}
+                          className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                        />
+                        <label
+                          htmlFor="force-password-change"
+                          className="text-xs text-slate-700 dark:text-slate-300 select-none cursor-pointer"
                         >
-                          <span
-                            className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
-                              forcePasswordChange ? 'translate-x-4' : 'translate-x-0'
-                            }`}
-                          />
-                        </button>
+                          Require administrator to change password on first login
+                        </label>
                       </div>
                     </div>
                   )}
                 </div>
               )}
 
-              {/* Modal Footer */}
-              <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-4 py-2 rounded-lg text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 shadow-sm transition-colors disabled:opacity-50"
-                >
-                  {isSubmitting ? 'Saving...' : editingBranch ? 'Update Branch' : 'Create Branch'}
-                </button>
+              {/* Modal Actions */}
+              <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800">
+                <div className="text-xs text-slate-400">
+                  {editingBranch ? 'Editing existing branch' : 'New branch record'}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsModalOpen(false)}
+                    className="px-3.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-sm transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    {isSubmitting ? 'Saving...' : editingBranch ? 'Update Branch' : 'Create Branch'}
+                  </button>
+                </div>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* ── 6. VIEW DETAILS MODAL ───────────────────────────────── */}
+      {/* ── 7. VIEW BRANCH MODAL ─────────────────────────────────── */}
       {isViewModalOpen && viewingBranch && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
-            {/* Header */}
-            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-800">
               <div className="flex items-center gap-3">
                 {viewingBranch.logoUrl ? (
                   <img
                     src={viewingBranch.logoUrl}
                     alt={viewingBranch.name}
-                    className="h-9 w-9 rounded-xl object-cover border border-slate-200 dark:border-slate-700"
+                    className="h-10 w-10 rounded-xl object-cover border border-slate-200 dark:border-slate-700"
                   />
                 ) : (
-                  <div className="h-9 w-9 rounded-xl bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-bold flex items-center justify-center text-sm border border-indigo-200 dark:border-indigo-800">
+                  <div className="h-10 w-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center font-bold text-sm">
                     {viewingBranch.name.charAt(0)}
                   </div>
                 )}
                 <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
-                      {viewingBranch.code}
-                    </span>
-                    <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
-                      {viewingBranch.name}
-                    </h3>
-                  </div>
-                  <div className="text-xs text-slate-400 mt-0.5">
-                    School: <span className="font-semibold text-slate-600 dark:text-slate-300">{viewingBranch.schoolName}</span>
-                  </div>
+                  <h3 className="font-bold text-slate-900 dark:text-slate-100 text-base">
+                    {viewingBranch.name}
+                  </h3>
+                  <p className="text-xs font-mono text-indigo-600 dark:text-indigo-400">
+                    {viewingBranch.code}
+                  </p>
                 </div>
               </div>
               <button
                 onClick={() => setIsViewModalOpen(false)}
-                className="h-8 w-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg"
               >
                 ✕
               </button>
             </div>
 
-            {/* Content */}
-            <div className="p-6 space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-4">
+            <div className="p-5 space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-4 p-3 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800">
                 <div>
-                  <span className="text-slate-400 block mb-1">Parent School</span>
-                  <div className="font-semibold text-slate-800 dark:text-slate-200">{viewingBranch.schoolName}</div>
-                  <div className="font-mono text-[10px] text-indigo-600">{viewingBranch.schoolCode}</div>
-                </div>
-                <div>
-                  <span className="text-slate-400 block mb-1">Status</span>
-                  <span
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                      viewingBranch.isActive
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                        : 'bg-rose-50 text-rose-700 border border-rose-200'
-                    }`}
-                  >
-                    <span className={`h-1.5 w-1.5 rounded-full ${viewingBranch.isActive ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                    {viewingBranch.isActive ? 'Active' : 'Inactive'}
-                  </span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 pt-3 border-t border-slate-100 dark:border-slate-800">
-                <div>
-                  <span className="text-slate-400 block mb-1">Branch Administrator</span>
-                  <div className="font-semibold text-slate-800 dark:text-slate-200 font-mono">
-                    {viewingBranch.adminUsername ? `👤 ${viewingBranch.adminUsername}` : 'Not Configured'}
+                  <div className="text-slate-400 font-medium">School</div>
+                  <div className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">
+                    {viewingBranch.schoolName}
                   </div>
-                  <div className="text-slate-500">{viewingBranch.adminEmail || '—'}</div>
                 </div>
                 <div>
-                  <span className="text-slate-400 block mb-1">Location</span>
-                  <div className="font-semibold text-slate-800 dark:text-slate-200">{viewingBranch.city || '—'}</div>
-                  <div className="text-slate-500">{[viewingBranch.province, viewingBranch.country].filter(Boolean).join(', ')}</div>
+                  <div className="text-slate-400 font-medium">Sort Order</div>
+                  <div className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5 font-mono">
+                    #{viewingBranch.sortOrder || 1}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-slate-400 font-medium">Status</div>
+                  <div className="mt-0.5">
+                    <span
+                      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                        viewingBranch.isActive
+                          ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400'
+                          : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                      }`}
+                    >
+                      {viewingBranch.isActive ? 'ACTIVE' : 'INACTIVE'}
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <div className="text-slate-400 font-medium">Location</div>
+                  <div className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">
+                    {[viewingBranch.city, viewingBranch.province].filter(Boolean).join(', ') || '—'}
+                  </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 pt-3 border-t border-slate-100 dark:border-slate-800">
-                <div>
-                  <span className="text-slate-400 block mb-1">Official Phone</span>
-                  <div className="font-semibold text-slate-800 dark:text-slate-200">{viewingBranch.phone || '—'}</div>
+              {/* Administrator Access */}
+              <div className="p-3 bg-indigo-50/40 dark:bg-indigo-950/30 rounded-xl border border-indigo-100 dark:border-indigo-900/40">
+                <div className="font-semibold text-slate-800 dark:text-slate-200 mb-1">
+                  Branch Administrator
                 </div>
-                <div>
-                  <span className="text-slate-400 block mb-1">Official Email</span>
-                  <div className="font-semibold text-slate-800 dark:text-slate-200">{viewingBranch.email || '—'}</div>
-                </div>
+                {viewingBranch.adminUsername ? (
+                  <div className="space-y-0.5">
+                    <div className="text-slate-700 dark:text-slate-300 font-mono">
+                      👤 {viewingBranch.adminUsername}
+                    </div>
+                    <div className="text-slate-500">{viewingBranch.adminEmail}</div>
+                  </div>
+                ) : (
+                  <div className="text-slate-400 italic">No administrator account configured.</div>
+                )}
               </div>
 
-              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-400 space-y-1">
-                <div>Created: {new Date(viewingBranch.createdAt).toLocaleDateString()}</div>
-                <div>Last Updated: {new Date(viewingBranch.updatedAt).toLocaleDateString()}</div>
+              {/* Contact Information */}
+              <div className="grid grid-cols-2 gap-3 text-slate-600 dark:text-slate-400">
+                <div>
+                  <span className="font-medium text-slate-500">Phone:</span>{' '}
+                  {viewingBranch.phone || '—'}
+                </div>
+                <div>
+                  <span className="font-medium text-slate-500">Email:</span>{' '}
+                  {viewingBranch.email || '—'}
+                </div>
               </div>
             </div>
 
-            {/* Footer */}
-            <div className="px-6 py-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex items-center justify-end">
+            <div className="flex items-center justify-end p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
               <button
+                type="button"
                 onClick={() => setIsViewModalOpen(false)}
-                className="px-4 py-1.5 rounded-lg text-xs font-medium bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 transition-colors"
+                className="px-4 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors"
               >
                 Close
               </button>

@@ -16,6 +16,7 @@ export interface CreateBranchDto {
   name: string;
   shortName?: string;
   description?: string;
+  sortOrder?: number;
   logoUrl?: string;
   phone?: string;
   alternatePhone?: string;
@@ -36,6 +37,7 @@ export interface UpdateBranchDto {
   name?: string;
   shortName?: string;
   description?: string;
+  sortOrder?: number;
   logoUrl?: string;
   phone?: string;
   alternatePhone?: string;
@@ -51,6 +53,17 @@ export interface UpdateBranchDto {
   isActive?: boolean;
 }
 
+export interface ReorderBranchesDto {
+  schoolId: string;
+  branchIds: string[]; // Ordered list of branch IDs
+}
+
+export interface SuggestUsernameResponseDto {
+  username: string;
+  isAvailable: boolean;
+  alternatives: string[];
+}
+
 export interface BranchListItemDto {
   id: string;
   organizationId: string;
@@ -61,6 +74,7 @@ export interface BranchListItemDto {
   code: string;
   name: string;
   shortName?: string | null;
+  sortOrder: number;
   logoUrl?: string | null;
   phone?: string | null;
   email?: string | null;

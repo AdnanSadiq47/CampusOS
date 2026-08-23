@@ -11,12 +11,16 @@ import {
   assignmentRoles,
   eq,
   and,
+  asc,
+  sql,
 } from '@campus-os/database';
 import {
   CreateBranchDto,
   UpdateBranchDto,
   BranchListItemDto,
   BranchDetailDto,
+  ReorderBranchesDto,
+  SuggestUsernameResponseDto,
 } from '@campus-os/types';
 import { PasswordService } from '../../core/iam/services/password.service.js';
 import { AuditService } from '../../core/audit/audit.service.js';
@@ -106,6 +110,21 @@ export class BranchesService {
         })
         .returning();
 
+      // Determine Sort Order (use provided or highest + 1)
+      let resolvedSortOrder = dto.sortOrder;
+      if (!resolvedSortOrder || resolvedSortOrder <= 0) {
+        const [maxSort] = await tx
+          .select({ maxOrder: sql<number>`COALESCE(MAX(${branches.sortOrder}), 0)` })
+          .from(branches)
+          .where(
+            and(
+              eq(branches.organizationId, tenantId),
+              eq(branches.schoolId, school.id)
+            )
+          );
+        resolvedSortOrder = (Number(maxSort?.maxOrder) || 0) + 1;
+      }
+
       // 6. Create branches record
       const [newBranch] = await tx
         .insert(branches)
@@ -117,6 +136,7 @@ export class BranchesService {
           name: cleanName,
           shortName: dto.shortName?.trim() || null,
           description: dto.description?.trim() || null,
+          sortOrder: resolvedSortOrder,
           logoUrl: dto.logoUrl?.trim() || null,
           phone: dto.phone?.trim() || null,
           alternatePhone: dto.alternatePhone?.trim() || null,
@@ -133,61 +153,84 @@ export class BranchesService {
         })
         .returning();
 
-      let createdAdminUser: { id: string; email: string } | null = null;
-
-      // 7. Optional Branch Administrator Provisioning
-      if (dto.adminUser && dto.adminUser.email && dto.adminUser.password) {
+      // 7. Optional Administrator Provisioning
+      let createdAdminUser = null;
+      if (dto.adminUser && dto.adminUser.email) {
         const adminEmail = dto.adminUser.email.trim().toLowerCase();
-        const username = dto.adminUser.username?.trim() || adminEmail;
+        const adminUsername = dto.adminUser.username.trim();
 
         // Check if identity user already exists
-        const [existingUser] = await tx
-          .select({ id: identityUsers.id })
+        const [existingIdentity] = await tx
+          .select()
           .from(identityUsers)
           .where(eq(identityUsers.email, adminEmail))
           .limit(1);
 
-        if (existingUser) {
-          throw new ConflictException(`An account with email '${adminEmail}' already exists.`);
+        let identityId: string;
+
+        if (existingIdentity) {
+          identityId = existingIdentity.id;
+          createdAdminUser = existingIdentity;
+        } else {
+          // Hash password securely with Argon2id
+          const rawPassword = dto.adminUser.password || 'CampusOS@Branch2026!';
+          const passwordHash = await this.passwordService.hash(rawPassword);
+
+          const [newIdentity] = await tx
+            .insert(identityUsers)
+            .values({
+              email: adminEmail,
+              passwordHash,
+              firstName: adminUsername || 'Branch',
+              lastName: 'Administrator',
+              phoneNumber: dto.phone || null,
+              isActive: true,
+            })
+            .returning();
+
+          identityId = newIdentity!.id;
+          createdAdminUser = newIdentity;
         }
 
-        // Hash password securely with Argon2id
-        const passwordHash = await this.passwordService.hash(dto.adminUser.password);
+        // Check or create organization membership
+        const [existingMembership] = await tx
+          .select()
+          .from(organizationMemberships)
+          .where(
+            and(
+              eq(organizationMemberships.organizationId, tenantId),
+              eq(organizationMemberships.identityUserId, identityId)
+            )
+          )
+          .limit(1);
 
-        const [newUser] = await tx
-          .insert(identityUsers)
-          .values({
-            email: adminEmail,
-            passwordHash,
-            firstName: username,
-            lastName: 'Administrator',
-            phoneNumber: dto.phone?.trim() || null,
-            isActive: true,
-          })
-          .returning();
+        let membershipId: string;
 
-        createdAdminUser = { id: newUser!.id, email: adminEmail };
+        if (existingMembership) {
+          membershipId = existingMembership.id;
+        } else {
+          const [newMembership] = await tx
+            .insert(organizationMemberships)
+            .values({
+              organizationId: tenantId,
+              identityUserId: identityId,
+              membershipType: 'STAFF',
+              status: 'ACTIVE',
+            })
+            .returning();
+          membershipId = newMembership!.id;
+        }
 
-        // Create organization membership
-        const [membership] = await tx
-          .insert(organizationMemberships)
-          .values({
-            organizationId: tenantId,
-            identityUserId: newUser!.id,
-            membershipType: 'STAFF',
-            status: 'ACTIVE',
-          })
-          .returning();
-
-        // Scope administrator to this specific Branch node
+        // Create node assignment scoped strictly to the newly created branch node
         const [assignment] = await tx
           .insert(membershipNodeAssignments)
           .values({
             organizationId: tenantId,
-            membershipId: membership!.id,
+            membershipId,
             hierarchyNodeId: node!.id,
             isPrimary: true,
             status: 'ACTIVE',
+            assignedBy: actorUserId ?? null,
           })
           .returning();
 
@@ -227,7 +270,7 @@ export class BranchesService {
   }
 
   // ─────────────────────────────────────────────────────────────────
-  //  LIST BRANCHES
+  //  LIST BRANCHES (Canonical Ordering: school.name, branch.sortOrder, branch.name)
   // ─────────────────────────────────────────────────────────────────
 
   async listBranches(
@@ -254,6 +297,7 @@ export class BranchesService {
           code: branches.code,
           name: branches.name,
           shortName: branches.shortName,
+          sortOrder: branches.sortOrder,
           logoUrl: branches.logoUrl,
           phone: branches.phone,
           email: branches.email,
@@ -267,7 +311,7 @@ export class BranchesService {
         .from(branches)
         .innerJoin(schools, eq(branches.schoolId, schools.id))
         .where(and(...conditions))
-        .orderBy(branches.name);
+        .orderBy(asc(schools.name), asc(branches.sortOrder), asc(branches.name));
 
       // Fetch primary administrator for each branch
       const results: BranchListItemDto[] = [];
@@ -276,6 +320,7 @@ export class BranchesService {
         const [adminInfo] = await tx
           .select({
             email: identityUsers.email,
+            firstName: identityUsers.firstName,
           })
           .from(membershipNodeAssignments)
           .innerJoin(
@@ -298,7 +343,7 @@ export class BranchesService {
         results.push({
           ...row,
           adminEmail: adminInfo?.email || null,
-          adminUsername: adminInfo?.email ? adminInfo.email.split('@')[0] : null,
+          adminUsername: adminInfo?.firstName || null,
         });
       }
 
@@ -307,12 +352,136 @@ export class BranchesService {
   }
 
   // ─────────────────────────────────────────────────────────────────
-  //  GET BY ID
+  //  NEXT SORT ORDER DETERMINATION (Per School)
   // ─────────────────────────────────────────────────────────────────
 
-  async getBranch(tenantId: string, id: string): Promise<BranchDetailDto> {
+  async getNextSortOrder(tenantId: string, schoolId: string): Promise<{ nextSortOrder: number }> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
-      const [branchRow] = await tx
+      const [maxSort] = await tx
+        .select({ maxOrder: sql<number>`COALESCE(MAX(${branches.sortOrder}), 0)` })
+        .from(branches)
+        .where(
+          and(
+            eq(branches.organizationId, tenantId),
+            eq(branches.schoolId, schoolId)
+          )
+        );
+      return { nextSortOrder: (Number(maxSort?.maxOrder) || 0) + 1 };
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  //  REORDER BRANCHES (Deterministic sequence persistence per School)
+  // ─────────────────────────────────────────────────────────────────
+
+  async reorderBranches(tenantId: string, dto: ReorderBranchesDto, actorUserId?: string) {
+    return this.txManager.runInTenantContext(tenantId, async (tx) => {
+      for (let i = 0; i < dto.branchIds.length; i++) {
+        const branchId = dto.branchIds[i];
+        if (!branchId) continue;
+        await tx
+          .update(branches)
+          .set({
+            sortOrder: i + 1,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(branches.organizationId, tenantId),
+              eq(branches.schoolId, dto.schoolId),
+              eq(branches.id, branchId)
+            )
+          );
+      }
+
+      await this.auditService.logEvent(
+        {
+          organizationId: tenantId,
+          actorId: actorUserId ?? null,
+          actorEmail: actorUserId ? 'admin@campus-os.local' : 'system@campus-os.local',
+          module: 'ORGANIZATION',
+          action: 'REORDER',
+          entityType: 'school_branches',
+          entityId: dto.schoolId,
+          afterState: { schoolId: dto.schoolId, branchOrder: dto.branchIds },
+        },
+        tx
+      );
+
+      return { success: true, count: dto.branchIds.length };
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  //  SUGGEST USERNAME ENGINE (Normalization + Availability Checking)
+  // ─────────────────────────────────────────────────────────────────
+
+  async suggestUsername(
+    tenantId: string,
+    schoolId?: string,
+    branchCode?: string,
+    branchName?: string
+  ): Promise<SuggestUsernameResponseDto> {
+    return this.txManager.runInTenantContext(tenantId, async (tx) => {
+      let schoolCode = 'school';
+      if (schoolId) {
+        const [sch] = await tx
+          .select({ code: schools.code })
+          .from(schools)
+          .where(and(eq(schools.organizationId, tenantId), eq(schools.id, schoolId)))
+          .limit(1);
+        if (sch?.code) {
+          schoolCode = sch.code.toLowerCase().replace(/[^a-z0-9]/g, '');
+        }
+      }
+
+      const rawBranchCode = (branchCode || 'branch').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const rawBranchName = (branchName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+      // Generate candidate usernames
+      const candidates: string[] = [];
+      if (rawBranchCode) {
+        candidates.push(`${rawBranchCode}.admin`);
+        candidates.push(`${schoolCode}.${rawBranchCode}`);
+        candidates.push(`${schoolCode}.${rawBranchCode}.admin`);
+      }
+      if (rawBranchName && rawBranchName !== rawBranchCode) {
+        candidates.push(`${rawBranchName}.admin`);
+      }
+      candidates.push(`${schoolCode}.admin`);
+
+      // Check availability against identity_users
+      const available: string[] = [];
+      for (const candidate of candidates) {
+        const [existing] = await tx
+          .select({ id: identityUsers.id })
+          .from(identityUsers)
+          .where(eq(identityUsers.email, candidate))
+          .limit(1);
+
+        if (!existing && !available.includes(candidate)) {
+          available.push(candidate);
+        }
+      }
+
+      const primary = available[0] || `${rawBranchCode || 'branch'}.admin.${Date.now().toString().slice(-4)}`;
+      const alternatives = available.slice(1);
+
+      return {
+        username: primary,
+        isAvailable: true,
+        alternatives,
+      };
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  //  GET SINGLE BRANCH
+  // ─────────────────────────────────────────────────────────────────
+
+  async getBranchById(tenantId: string, id: string): Promise<BranchDetailDto> {
+    return this.txManager.runInTenantContext(tenantId, async (tx) => {
+      const [row] = await tx
         .select({
           id: branches.id,
           organizationId: branches.organizationId,
@@ -324,6 +493,7 @@ export class BranchesService {
           name: branches.name,
           shortName: branches.shortName,
           description: branches.description,
+          sortOrder: branches.sortOrder,
           logoUrl: branches.logoUrl,
           phone: branches.phone,
           alternatePhone: branches.alternatePhone,
@@ -350,13 +520,15 @@ export class BranchesService {
         )
         .limit(1);
 
-      if (!branchRow) {
+      if (!row) {
         throw new NotFoundException(`Branch '${id}' not found in this organization.`);
       }
 
+      // Fetch primary administrator for this branch
       const [adminInfo] = await tx
         .select({
           email: identityUsers.email,
+          firstName: identityUsers.firstName,
         })
         .from(membershipNodeAssignments)
         .innerJoin(
@@ -370,16 +542,16 @@ export class BranchesService {
         .where(
           and(
             eq(membershipNodeAssignments.organizationId, tenantId),
-            eq(membershipNodeAssignments.hierarchyNodeId, branchRow.hierarchyNodeId),
+            eq(membershipNodeAssignments.hierarchyNodeId, row.hierarchyNodeId),
             eq(membershipNodeAssignments.isPrimary, true)
           )
         )
         .limit(1);
 
       return {
-        ...branchRow,
+        ...row,
         adminEmail: adminInfo?.email || null,
-        adminUsername: adminInfo?.email ? adminInfo.email.split('@')[0] : null,
+        adminUsername: adminInfo?.firstName || null,
       };
     });
   }
@@ -388,12 +560,7 @@ export class BranchesService {
   //  UPDATE BRANCH
   // ─────────────────────────────────────────────────────────────────
 
-  async updateBranch(
-    tenantId: string,
-    id: string,
-    dto: UpdateBranchDto,
-    actorUserId?: string
-  ) {
+  async updateBranch(tenantId: string, id: string, dto: UpdateBranchDto, actorUserId?: string) {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
       const [existing] = await tx
         .select()
@@ -417,6 +584,7 @@ export class BranchesService {
       if (dto.name !== undefined) patch.name = dto.name.trim();
       if (dto.shortName !== undefined) patch.shortName = dto.shortName?.trim() || null;
       if (dto.description !== undefined) patch.description = dto.description?.trim() || null;
+      if (dto.sortOrder !== undefined) patch.sortOrder = dto.sortOrder;
       if (dto.logoUrl !== undefined) patch.logoUrl = dto.logoUrl?.trim() || null;
       if (dto.phone !== undefined) patch.phone = dto.phone?.trim() || null;
       if (dto.alternatePhone !== undefined) patch.alternatePhone = dto.alternatePhone?.trim() || null;
@@ -442,7 +610,7 @@ export class BranchesService {
         )
         .returning();
 
-      // Sync name and isActive to hierarchy_nodes entry
+      // Sync name & active status to hierarchy_nodes entry
       if (dto.name || dto.isActive !== undefined) {
         await tx
           .update(hierarchyNodes)
@@ -499,7 +667,7 @@ export class BranchesService {
   }
 
   // ─────────────────────────────────────────────────────────────────
-  //  ELIGIBLE SCHOOLS (Parent Selection)
+  //  GET ELIGIBLE SCHOOLS FOR DROPDOWN
   // ─────────────────────────────────────────────────────────────────
 
   async getEligibleSchools(tenantId: string) {
@@ -510,7 +678,6 @@ export class BranchesService {
           code: schools.code,
           name: schools.name,
           city: schools.city,
-          schoolType: schools.schoolType,
           hierarchyNodeId: schools.hierarchyNodeId,
         })
         .from(schools)
@@ -524,7 +691,9 @@ export class BranchesService {
     });
   }
 
-  // ── PRIVATE HELPERS ──────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────
+  //  HELPERS
+  // ─────────────────────────────────────────────────────────────────
 
   private async ensureBranchNodeType(tx: any, tenantId: string) {
     const [existing] = await tx
@@ -556,10 +725,7 @@ export class BranchesService {
     return created!;
   }
 
-  private sanitizePath(code: string): string {
-    return code
-      .toLowerCase()
-      .replace(/[^a-z0-9_]/g, '_')
-      .replace(/^_+|_+$/g, '');
+  private sanitizePath(segment: string): string {
+    return segment.toLowerCase().replace(/[^a-z0-9_]/g, '_');
   }
 }

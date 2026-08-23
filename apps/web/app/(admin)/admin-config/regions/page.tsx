@@ -6,6 +6,7 @@ import {
   EligibleRegionParentNodeDto,
   CreateRegionDto,
 } from '@campus-os/types';
+import { AdminConfigPageHeader } from '../../../../components/AdminConfigPageHeader';
 
 /* ─── Status Badge ────────────────────────────────────────────── */
 function StatusBadge({ isActive }: { isActive: boolean }) {
@@ -456,31 +457,12 @@ export default function RegionsPage() {
     <div className="space-y-6">
 
       {/* ── PAGE HEADER ─────────────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-        <div>
-          <nav className="flex items-center gap-1.5 text-xs text-slate-400 mb-2">
-            <span>Administration Configuration</span>
-            <span>/</span>
-            <span className="text-slate-600 dark:text-slate-300 font-medium">Regional Offices</span>
-          </nav>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50 tracking-tight">
-            Regional Offices
-          </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 max-w-xl">
-            Manage intermediate regional tiers between Head Office and Schools.
-            Regions are optional — your hierarchy can go directly Head Office → School.
-          </p>
-        </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <button
-            onClick={openAddModal}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold shadow-sm transition-colors focus-visible:outline-2 focus-visible:outline-indigo-600 focus-visible:outline-offset-2"
-          >
-            <span className="text-base leading-none">+</span>
-            Add Regional Office
-          </button>
-        </div>
-      </div>
+      <AdminConfigPageHeader
+        title="Regional Offices"
+        description="Manage intermediate regional tiers between Head Office and Schools. Regions are optional — your hierarchy can go directly Head Office → School."
+        actionButtonText="Add Regional Office"
+        onAction={openAddModal}
+      />
 
       {/* ── KPI CARDS ──────────────────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

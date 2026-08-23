@@ -13,6 +13,7 @@ import { BranchesService } from './branches.service.js';
 import {
   CreateBranchDto,
   UpdateBranchDto,
+  ReorderBranchesDto,
 } from '@campus-os/types';
 
 // Default tenant for local preview before JWT middleware binds session
@@ -43,13 +44,42 @@ export class BranchesController {
     return this.branchesService.getEligibleSchools(orgId);
   }
 
+  @Get('next-sort-order')
+  async getNextSortOrder(
+    @Query('schoolId') schoolId: string,
+    @Query('tenantId') tenantId?: string
+  ) {
+    const orgId = tenantId || DEMO_TENANT_ID;
+    return this.branchesService.getNextSortOrder(orgId, schoolId);
+  }
+
+  @Get('suggest-username')
+  async suggestUsername(
+    @Query('schoolId') schoolId?: string,
+    @Query('branchCode') branchCode?: string,
+    @Query('branchName') branchName?: string,
+    @Query('tenantId') tenantId?: string
+  ) {
+    const orgId = tenantId || DEMO_TENANT_ID;
+    return this.branchesService.suggestUsername(orgId, schoolId, branchCode, branchName);
+  }
+
+  @Patch('reorder')
+  async reorderBranches(
+    @Body() dto: ReorderBranchesDto,
+    @Query('tenantId') tenantId?: string
+  ) {
+    const orgId = tenantId || DEMO_TENANT_ID;
+    return this.branchesService.reorderBranches(orgId, dto, DEMO_USER_ID);
+  }
+
   @Get(':id')
   async getBranch(
     @Param('id') id: string,
     @Query('tenantId') tenantId?: string
   ) {
     const orgId = tenantId || DEMO_TENANT_ID;
-    return this.branchesService.getBranch(orgId, id);
+    return this.branchesService.getBranchById(orgId, id);
   }
 
   @Post()

@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, boolean, timestamp, uniqueIndex, foreignKey } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, boolean, integer, timestamp, uniqueIndex, foreignKey } from 'drizzle-orm/pg-core';
 import { organizations } from './organizations.js';
 import { hierarchyNodes } from './hierarchy.js';
 import { schools } from './schools.js';
@@ -58,7 +58,8 @@ export const branches = pgTable(
     address: text('address'),
     postalCode: varchar('postal_code', { length: 32 }),
 
-    // ── Configuration ─────────────────────────────────────────────────
+    // ── Configuration & Display Sequence ─────────────────────────────
+    sortOrder: integer('sort_order').default(1).notNull(),
     notes: text('notes'),
 
     // ── Status ────────────────────────────────────────────────────────

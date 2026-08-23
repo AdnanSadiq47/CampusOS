@@ -4,6 +4,29 @@ All notable changes to the CampusOS architecture and platform specifications wil
 
 ---
 
+## [2026-08-23] - Combined Branch UX Fix, Sort Order & Organization Setup UI Consistency
+- **Branch UX & Username Engine**:
+  - Implemented working `Suggest Username` functionality generating normalized, collision-checked, available username candidates from School & Branch identity (`{branchCode}.admin`, `{schoolCode}.{branchCode}`, etc.).
+  - Auto-populates administrative user and matching school email in Branch modal.
+- **Branch / Campus Sort Order Architecture**:
+  - Added persistent `sort_order` integer column to `branches` database schema and DTOs.
+  - Implemented smart default sort order determination (`highest + 1` within each school, or `1` for the first branch).
+  - Enforced ERP-wide canonical branch ordering (`schools.name ASC, branches.sortOrder ASC, branches.name ASC`).
+  - Added `Reorder Branches` interactive sequence modal supporting reordering within a selected School.
+  - Added backend endpoints `GET /branches/next-sort-order`, `GET /branches/suggest-username`, and `PATCH /branches/reorder`.
+- **Standardized Organization Setup Breadcrumbs & Page Headers**:
+  - Created reusable `AdminConfigPageHeader` component (`apps/web/components/AdminConfigPageHeader.tsx`).
+  - Standardized all 5 Organization Setup management pages (`Head Offices`, `Regional Offices`, `School Types`, `Schools`, `Branches`) to the uniform pattern:
+    `Administration Configuration / Organization Setup / <Page Name>`.
+  - Audited and verified all interactive UI controls across all 5 pages (zero dead buttons/placeholders).
+- **Verification Suite**:
+  - Added new integration tests in `apps/api/test/branches.spec.ts` for sort order auto-increment, next sort order calculation, resequencing persistence with audit logging, and username suggestion.
+  - All 8 API test suites (67/67 tests) passed 100% green.
+  - Monorepo typechecking 100% clean (`tsc --noEmit` across all workspace projects).
+  - Next.js web application build 100% clean (20/20 static routes generated).
+
+---
+
 ## [2026-08-23] - Permanent Audit Logging & Safe Record Lifecycle Policy
 - **Enterprise Audit Architecture (`packages/database`, `packages/types`, `apps/api/src/core/audit`)**:
   - Enhanced `audit_logs` schema with `hierarchy_node_id` (node scope), `module`, `outcome`, `impersonator_id`, `metadata`, and 5 high-performance B-tree indexes for time-series and scope-aware queries.
