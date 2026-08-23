@@ -778,6 +778,7 @@ export class GeographyService {
           cityName: cities.name,
           name: areas.name,
           code: areas.code,
+          postalCode: areas.postalCode,
           sortOrder: areas.sortOrder,
           isActive: areas.isActive,
           createdAt: areas.createdAt,
@@ -798,6 +799,7 @@ export class GeographyService {
               ? or(
                   ilike(areas.name, `%${search}%`),
                   ilike(areas.code, `%${search}%`),
+                  ilike(areas.postalCode, `%${search}%`),
                   ilike(cities.name, `%${search}%`)
                 )
               : undefined
@@ -865,6 +867,7 @@ export class GeographyService {
           cityId: dto.cityId,
           name: dto.name.trim(),
           code: dto.code?.trim().toUpperCase() ?? null,
+          postalCode: dto.postalCode?.trim() ?? null,
           sortOrder: resolvedSortOrder,
           isActive: dto.isActive ?? true,
         })
@@ -923,6 +926,7 @@ export class GeographyService {
           cityId: targetCityId,
           name: dto.name ? dto.name.trim() : existing.name,
           code: dto.code !== undefined ? (dto.code ? dto.code.trim().toUpperCase() : null) : existing.code,
+          postalCode: dto.postalCode !== undefined ? (dto.postalCode ? dto.postalCode.trim() : null) : existing.postalCode,
           sortOrder: dto.sortOrder !== undefined ? dto.sortOrder : existing.sortOrder,
           isActive: dto.isActive !== undefined ? dto.isActive : existing.isActive,
           updatedAt: new Date(),

@@ -2,12 +2,14 @@
 
 import React, { useState, useMemo } from 'react';
 import { AreaListItemDto, CreateAreaDto } from '@campus-os/types';
-import { AdminConfigPageHeader } from '../../../../components/AdminConfigPageHeader';
+import { AdminConfigPageHeader, LOCATION_GEOGRAPHY_NAV } from '../../../../components/AdminConfigPageHeader';
 
 /* ─── Mock Hierarchy Datasets ─── */
 const MOCK_COUNTRIES = [
   { id: 'c1111111-1111-1111-1111-111111111111', name: 'Pakistan', iso2: 'PK' },
   { id: 'c2222222-2222-2222-2222-222222222222', name: 'United States', iso2: 'US' },
+  { id: 'c3333333-3333-3333-3333-333333333333', name: 'United Kingdom', iso2: 'GB' },
+  { id: 'c4444444-4444-4444-4444-444444444444', name: 'United Arab Emirates', iso2: 'AE' },
 ];
 
 const MOCK_STATES = [
@@ -35,6 +37,7 @@ const DEFAULT_AREAS: AreaListItemDto[] = [
     cityName: 'Karachi',
     name: 'Gulshan-e-Iqbal',
     code: 'GIQ',
+    postalCode: '75300',
     sortOrder: 1,
     isActive: true,
     createdAt: new Date('2026-01-01'),
@@ -51,6 +54,7 @@ const DEFAULT_AREAS: AreaListItemDto[] = [
     cityName: 'Karachi',
     name: 'Clifton & DHA',
     code: 'CLF',
+    postalCode: '75600',
     sortOrder: 2,
     isActive: true,
     createdAt: new Date('2026-01-01'),
@@ -67,6 +71,7 @@ const DEFAULT_AREAS: AreaListItemDto[] = [
     cityName: 'Lahore',
     name: 'Gulberg & Model Town',
     code: 'GLB',
+    postalCode: '54660',
     sortOrder: 1,
     isActive: true,
     createdAt: new Date('2026-01-01'),
@@ -83,6 +88,7 @@ const DEFAULT_AREAS: AreaListItemDto[] = [
     cityName: 'Los Angeles',
     name: 'Downtown & Civic Center',
     code: 'DTN',
+    postalCode: '90012',
     sortOrder: 1,
     isActive: true,
     createdAt: new Date('2026-01-01'),
@@ -118,6 +124,7 @@ export default function AreasPage() {
     cityId: '',
     name: '',
     code: '',
+    postalCode: '',
     sortOrder: 1,
     isActive: true,
   });
@@ -156,6 +163,7 @@ export default function AreasPage() {
     return citiesList.filter((c) => c.stateId === formData.stateId);
   }, [formData.stateId, citiesList]);
 
+  // Real-time Search: Searches Area Name, Code, Postal/ZIP Code, City, State, Country
   const filteredAreas = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     return areasList.filter((a) => {
@@ -170,6 +178,7 @@ export default function AreasPage() {
       return (
         a.name.toLowerCase().includes(query) ||
         (a.code && a.code.toLowerCase().includes(query)) ||
+        (a.postalCode && a.postalCode.toLowerCase().includes(query)) ||
         (a.cityName && a.cityName.toLowerCase().includes(query)) ||
         (a.stateName && a.stateName.toLowerCase().includes(query)) ||
         (a.countryName && a.countryName.toLowerCase().includes(query))
@@ -195,6 +204,7 @@ export default function AreasPage() {
       cityId: defaultCity,
       name: '',
       code: '',
+      postalCode: '',
       sortOrder: maxSort + 1,
       isActive: true,
     });
@@ -210,6 +220,7 @@ export default function AreasPage() {
       cityId: area.cityId,
       name: area.name,
       code: area.code || '',
+      postalCode: area.postalCode || '',
       sortOrder: area.sortOrder,
       isActive: area.isActive,
     });
@@ -299,6 +310,7 @@ export default function AreasPage() {
                   cityName: parentCity?.name || a.cityName,
                   name: formData.name.trim(),
                   code: formData.code?.trim().toUpperCase() || null,
+                  postalCode: formData.postalCode?.trim() || null,
                   sortOrder: Number(formData.sortOrder) || 1,
                   isActive: formData.isActive ?? true,
                   updatedAt: new Date(),
@@ -319,6 +331,7 @@ export default function AreasPage() {
           cityName: parentCity?.name,
           name: formData.name.trim(),
           code: formData.code?.trim().toUpperCase() || null,
+          postalCode: formData.postalCode?.trim() || null,
           sortOrder: Number(formData.sortOrder) || 1,
           isActive: formData.isActive ?? true,
           createdAt: new Date(),
@@ -341,12 +354,13 @@ export default function AreasPage() {
         </div>
       )}
 
-      {/* ── 1. Header ─────────────────────────────────────────────── */}
+      {/* ── 1. Header with Clickable Breadcrumb & Secondary Navigation ── */}
       <AdminConfigPageHeader
         section="Administration Configuration"
         group="Location & Geography"
         title="Areas / Zones"
-        description="Manage local neighborhood areas, educational school zoning sectors, and transport routing zones."
+        description="Manage local neighborhood areas, school zoning sectors, and postal/ZIP code coverage."
+        categoryNav={LOCATION_GEOGRAPHY_NAV}
         actionButtonText="+ Add Area / Zone"
         onAction={openCreateModal}
       />
@@ -358,7 +372,7 @@ export default function AreasPage() {
             📍
           </div>
           <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Areas/Zones</p>
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Areas / Zones</p>
             <p className="text-2xl font-bold text-slate-900 dark:text-white mt-0.5">{totalCount}</p>
           </div>
         </div>
@@ -392,7 +406,7 @@ export default function AreasPage() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by area name, code, city, province..."
+            placeholder="Search by area name, postal code (e.g. 75300), area code, city..."
             className="w-full pl-9 pr-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
           />
         </div>
@@ -467,8 +481,8 @@ export default function AreasPage() {
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/75 dark:bg-slate-950/75 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 <th className="py-3 px-4 w-16 text-center">Sort</th>
-                <th className="py-3 px-4">Area / Zone Name</th>
-                <th className="py-3 px-4">Code</th>
+                <th className="py-3 px-4">Area / Zone</th>
+                <th className="py-3 px-4">Postal / ZIP Code</th>
                 <th className="py-3 px-4">City</th>
                 <th className="py-3 px-4">State / Province</th>
                 <th className="py-3 px-4">Country</th>
@@ -485,11 +499,22 @@ export default function AreasPage() {
                         #{area.sortOrder}
                       </span>
                     </td>
-                    <td className="py-3 px-4 font-bold text-slate-900 dark:text-white">
-                      {area.name}
+                    <td className="py-3 px-4">
+                      <div className="font-bold text-slate-900 dark:text-white">
+                        {area.name}
+                      </div>
+                      {area.code && (
+                        <div className="text-[10px] font-mono text-slate-400">Code: {area.code}</div>
+                      )}
                     </td>
-                    <td className="py-3 px-4 font-mono font-bold text-indigo-600 dark:text-indigo-400">
-                      {area.code || '—'}
+                    <td className="py-3 px-4">
+                      {area.postalCode ? (
+                        <span className="font-mono font-bold text-xs px-2.5 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                          {area.postalCode}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 font-mono text-xs">—</span>
+                      )}
                     </td>
                     <td className="py-3 px-4 font-medium text-slate-800 dark:text-slate-200">
                       {area.cityName}
@@ -568,7 +593,7 @@ export default function AreasPage() {
                 <h3 className="text-base font-bold text-slate-900 dark:text-white">
                   {editingArea ? `Edit Area/Zone: ${editingArea.name}` : 'Add Area / Zone'}
                 </h3>
-                <p className="text-xs text-slate-500">Configure local neighborhood zone under a city.</p>
+                <p className="text-xs text-slate-500">Configure local neighborhood zone and postal code under a city.</p>
               </div>
               <button
                 type="button"
@@ -654,18 +679,34 @@ export default function AreasPage() {
                   {formErrors.name && <p className="text-rose-500 text-[10px]">{formErrors.name}</p>}
                 </div>
 
-                <div className="space-y-1">
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300">
-                    Area Code / Short Code
-                  </label>
-                  <input
-                    type="text"
-                    maxLength={10}
-                    value={formData.code || ''}
-                    onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
-                    placeholder="e.g. GIQ, CLF, DTN"
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono uppercase text-xs focus:ring-2 focus:ring-indigo-500/20"
-                  />
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                      Area Code
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={10}
+                      value={formData.code || ''}
+                      onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
+                      placeholder="e.g. GIQ, CLF"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono uppercase text-xs focus:ring-2 focus:ring-indigo-500/20"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                      Postal / ZIP Code
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={16}
+                      value={formData.postalCode || ''}
+                      onChange={(e) => setFormData({ ...formData, postalCode: e.target.value })}
+                      placeholder="e.g. 75300, 90012"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono text-xs focus:ring-2 focus:ring-indigo-500/20"
+                    />
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -726,9 +767,9 @@ export default function AreasPage() {
             <div className="flex items-start justify-between p-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50">
               <div>
                 <div className="flex items-center gap-2 mb-1">
-                  {viewingArea.code && (
-                    <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">
-                      {viewingArea.code}
+                  {viewingArea.postalCode && (
+                    <span className="font-mono text-xs font-bold px-2.5 py-0.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">
+                      📮 {viewingArea.postalCode}
                     </span>
                   )}
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
@@ -749,7 +790,7 @@ export default function AreasPage() {
             </div>
 
             <div className="p-5 space-y-3 overflow-y-auto max-h-[60vh] text-xs">
-              <div className="grid grid-cols-3 gap-2.5">
+              <div className="grid grid-cols-2 gap-2.5">
                 <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950/40 border border-slate-100 dark:border-slate-800">
                   <p className="text-[10px] font-semibold text-slate-400 uppercase">Country</p>
                   <p className="text-xs font-bold text-slate-800 dark:text-slate-200 mt-0.5">
@@ -766,6 +807,12 @@ export default function AreasPage() {
                   <p className="text-[10px] font-semibold text-slate-400 uppercase">City</p>
                   <p className="text-xs font-bold text-slate-800 dark:text-slate-200 mt-0.5">
                     {viewingArea.cityName}
+                  </p>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950/40 border border-slate-100 dark:border-slate-800">
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase">Postal / ZIP Code</p>
+                  <p className="text-xs font-bold font-mono text-indigo-700 dark:text-indigo-300 mt-0.5">
+                    {viewingArea.postalCode || '—'}
                   </p>
                 </div>
               </div>

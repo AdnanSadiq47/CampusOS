@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { CityListItemDto, CreateCityDto } from '@campus-os/types';
-import { AdminConfigPageHeader } from '../../../../components/AdminConfigPageHeader';
+import { AdminConfigPageHeader, LOCATION_GEOGRAPHY_NAV } from '../../../../components/AdminConfigPageHeader';
 
 /* ─── Mock datasets ─── */
 const MOCK_COUNTRIES = [
@@ -319,6 +319,7 @@ export default function CitiesPage() {
         group="Location & Geography"
         title="Cities"
         description="Manage municipal metropolitan cities and local educational operating territories."
+        categoryNav={LOCATION_GEOGRAPHY_NAV}
         actionButtonText="+ Add City"
         onAction={openCreateModal}
       />

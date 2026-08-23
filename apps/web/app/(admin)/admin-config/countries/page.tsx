@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { CountryListItemDto, CreateCountryDto } from '@campus-os/types';
-import { AdminConfigPageHeader } from '../../../../components/AdminConfigPageHeader';
+import { AdminConfigPageHeader, LOCATION_GEOGRAPHY_NAV } from '../../../../components/AdminConfigPageHeader';
 
 /* ─── Mock initial fallback dataset for offline/client preview ─── */
 const DEFAULT_COUNTRIES: CountryListItemDto[] = [
@@ -294,6 +294,7 @@ export default function CountriesPage() {
         group="Location & Geography"
         title="Countries"
         description="Manage international sovereign countries, ISO codes, dial codes, and currency standards."
+        categoryNav={LOCATION_GEOGRAPHY_NAV}
         actionButtonText="+ Add Country"
         onAction={openCreateModal}
       />

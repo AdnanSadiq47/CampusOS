@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { StateListItemDto, CreateStateDto } from '@campus-os/types';
-import { AdminConfigPageHeader } from '../../../../components/AdminConfigPageHeader';
+import { AdminConfigPageHeader, LOCATION_GEOGRAPHY_NAV } from '../../../../components/AdminConfigPageHeader';
 
 /* ─── Mock initial fallback dataset ─── */
 const MOCK_COUNTRIES: { id: string; name: string; iso2: string }[] = [
@@ -313,6 +313,7 @@ export default function StatesPage() {
         group="Location & Geography"
         title="States / Provinces"
         description="Manage regional subdivisions, federal states, provinces, emirates, and administrative territories."
+        categoryNav={LOCATION_GEOGRAPHY_NAV}
         actionButtonText="+ Add State / Province"
         onAction={openCreateModal}
       />

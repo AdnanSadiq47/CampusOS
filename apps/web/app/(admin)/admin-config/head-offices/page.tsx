@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { HeadOfficeListItemDto, CreateHeadOfficeDto } from '@campus-os/types';
-import { AdminConfigPageHeader } from '../../../../components/AdminConfigPageHeader';
+import { AdminConfigPageHeader, ORGANIZATION_SETUP_NAV } from '../../../../components/AdminConfigPageHeader';
 import { GeographyLocationFields } from '../../../../components/GeographySelectors';
 
 export default function HeadOfficesPage() {
@@ -323,8 +323,10 @@ export default function HeadOfficesPage() {
 
       {/* ── 1. PAGE HEADER ──────────────────────────────────────── */}
       <AdminConfigPageHeader
+        group="Organization Setup"
         title="Head Offices"
         description="Manage Head Offices and top-level administrative units for this organization."
+        categoryNav={ORGANIZATION_SETUP_NAV}
         actionButtonText="Add Head Office"
         onAction={handleOpenAddModal}
       />

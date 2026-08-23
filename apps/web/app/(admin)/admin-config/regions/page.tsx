@@ -6,7 +6,7 @@ import {
   EligibleRegionParentNodeDto,
   CreateRegionDto,
 } from '@campus-os/types';
-import { AdminConfigPageHeader } from '../../../../components/AdminConfigPageHeader';
+import { AdminConfigPageHeader, ORGANIZATION_SETUP_NAV } from '../../../../components/AdminConfigPageHeader';
 import { GeographyLocationFields } from '../../../../components/GeographySelectors';
 
 /* ─── Status Badge ────────────────────────────────────────────── */
@@ -460,8 +460,10 @@ export default function RegionsPage() {
 
       {/* ── PAGE HEADER ─────────────────────────────────────────── */}
       <AdminConfigPageHeader
+        group="Organization Setup"
         title="Regional Offices"
         description="Manage intermediate regional tiers between Head Office and Schools. Regions are optional — your hierarchy can go directly Head Office → School."
+        categoryNav={ORGANIZATION_SETUP_NAV}
         actionButtonText="Add Regional Office"
         onAction={openAddModal}
       />

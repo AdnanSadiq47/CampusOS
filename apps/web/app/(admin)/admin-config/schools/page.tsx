@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { SchoolListItemDto, EligibleParentNodeDto, CreateSchoolDto, SchoolTypeListItemDto } from '@campus-os/types';
-import { AdminConfigPageHeader } from '../../../../components/AdminConfigPageHeader';
+import { AdminConfigPageHeader, ORGANIZATION_SETUP_NAV } from '../../../../components/AdminConfigPageHeader';
 
 export default function SchoolsPage() {
   // State
@@ -423,8 +423,10 @@ export default function SchoolsPage() {
 
       {/* 1. Page Header */}
       <AdminConfigPageHeader
+        group="Organization Setup"
         title="Schools"
         description="Manage educational institutions, campus affiliations, and hierarchy nodes within your network."
+        categoryNav={ORGANIZATION_SETUP_NAV}
         actionButtonText="Add School"
         onAction={handleOpenAddModal}
       />

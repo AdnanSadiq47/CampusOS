@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { BranchListItemDto, CreateBranchDto } from '@campus-os/types';
-import { AdminConfigPageHeader } from '../../../../components/AdminConfigPageHeader';
+import { AdminConfigPageHeader, ORGANIZATION_SETUP_NAV } from '../../../../components/AdminConfigPageHeader';
 
 interface SchoolOption {
   id: string;
@@ -607,8 +607,10 @@ export default function BranchesPage() {
 
       {/* ── 1. PAGE HEADER ──────────────────────────────────────── */}
       <AdminConfigPageHeader
-        title="Branches"
+        group="Organization Setup"
+        title="Branches / Campuses"
         description="Manage school branches, physical campuses, centers, and localized administrative units."
+        categoryNav={ORGANIZATION_SETUP_NAV}
         actionButtonText="Add Branch"
         onAction={handleOpenAddModal}
         secondaryActionText="Reorder Branches"

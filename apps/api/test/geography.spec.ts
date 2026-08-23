@@ -93,6 +93,7 @@ describe('GeographyService & Location Shared Masters Integration Tests (PGlite)'
         city_id UUID NOT NULL REFERENCES cities(id) ON DELETE RESTRICT,
         name VARCHAR(255) NOT NULL,
         code VARCHAR(64),
+        postal_code VARCHAR(32),
         sort_order INTEGER DEFAULT 1 NOT NULL,
         is_active BOOLEAN DEFAULT TRUE NOT NULL,
         created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
@@ -321,7 +322,7 @@ describe('GeographyService & Location Shared Masters Integration Tests (PGlite)'
   });
 
   // ── 4. AREAS / ZONES TESTS ───────────────────────────────────────
-  it('9. should create areas/zones under city', async () => {
+  it('9. should create areas/zones under city with optional postal code', async () => {
     const gulshan = await geographyService.createArea(
       TENANT_A,
       {
@@ -330,12 +331,14 @@ describe('GeographyService & Location Shared Masters Integration Tests (PGlite)'
         cityId: khiCityId,
         name: 'Gulshan-e-Iqbal',
         code: 'GIQ',
+        postalCode: '75300',
       },
       USER_ID
     );
 
     expect(gulshan.id).toBeDefined();
     expect(gulshan.cityId).toBe(khiCityId);
+    expect(gulshan.postalCode).toBe('75300');
     expect(gulshan.sortOrder).toBe(1);
     gulshanAreaId = gulshan.id;
 
@@ -347,14 +350,29 @@ describe('GeographyService & Location Shared Masters Integration Tests (PGlite)'
         cityId: khiCityId,
         name: 'Clifton',
         code: 'CLF',
+        postalCode: '75600',
       },
       USER_ID
     );
 
     expect(clifton.sortOrder).toBe(2);
+    expect(clifton.postalCode).toBe('75600');
   });
 
-  it('10. should reject duplicate area name in same city', async () => {
+  it('10. should search and filter areas by postal code', async () => {
+    const searchResult = await geographyService.listAreas(
+      TENANT_A,
+      undefined,
+      undefined,
+      undefined,
+      '75300'
+    );
+    expect(searchResult.length).toBe(1);
+    expect(searchResult[0]!.name).toBe('Gulshan-e-Iqbal');
+    expect(searchResult[0]!.postalCode).toBe('75300');
+  });
+
+  it('11. should reject duplicate area name in same city', async () => {
     await expect(
       geographyService.createArea(
         TENANT_A,

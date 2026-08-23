@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { SchoolTypeListItemDto, CreateSchoolTypeDto } from '@campus-os/types';
-import { AdminConfigPageHeader } from '../../../../components/AdminConfigPageHeader';
+import { AdminConfigPageHeader, ORGANIZATION_SETUP_NAV } from '../../../../components/AdminConfigPageHeader';
 
 export default function SchoolTypesPage() {
   // State
@@ -286,8 +286,10 @@ export default function SchoolTypesPage() {
 
       {/* ── 1. PAGE HEADER ──────────────────────────────────────── */}
       <AdminConfigPageHeader
+        group="Organization Setup"
         title="School Types"
         description="Manage institution types used when creating schools and educational institutions."
+        categoryNav={ORGANIZATION_SETUP_NAV}
         actionButtonText="Add School Type"
         onAction={handleOpenAddModal}
       />

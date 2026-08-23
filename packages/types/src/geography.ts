@@ -132,6 +132,7 @@ export interface CreateAreaDto {
   cityId: string;
   name: string;
   code?: string;
+  postalCode?: string;
   sortOrder?: number;
   isActive?: boolean;
 }
@@ -142,6 +143,7 @@ export interface UpdateAreaDto {
   cityId?: string;
   name?: string;
   code?: string;
+  postalCode?: string;
   sortOrder?: number;
   isActive?: boolean;
 }
@@ -157,6 +159,7 @@ export interface AreaListItemDto {
   cityName?: string;
   name: string;
   code?: string | null;
+  postalCode?: string | null;
   sortOrder: number;
   isActive: boolean;
   createdAt: Date;

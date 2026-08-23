@@ -118,6 +118,7 @@ export const areas = pgTable(
       .references(() => cities.id, { onDelete: 'restrict' }),
     name: varchar('name', { length: 255 }).notNull(),
     code: varchar('code', { length: 64 }),
+    postalCode: varchar('postal_code', { length: 32 }),
     sortOrder: integer('sort_order').default(1).notNull(),
     isActive: boolean('is_active').default(true).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -127,6 +128,7 @@ export const areas = pgTable(
     uqAreaOrgCityName: uniqueIndex('uq_area_org_city_name').on(t.organizationId, t.cityId, t.name),
     uqAreaOrgId: uniqueIndex('uq_area_org_id').on(t.organizationId, t.id),
     idxAreaCity: index('idx_area_city').on(t.organizationId, t.cityId, t.sortOrder, t.name),
+    idxAreaPostalCode: index('idx_area_postal_code').on(t.organizationId, t.postalCode),
   })
 );
 

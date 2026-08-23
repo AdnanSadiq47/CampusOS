@@ -4,30 +4,20 @@ All notable changes to the CampusOS architecture and platform specifications wil
 
 ---
 
-## [2026-08-23] - Location & Geography Shared Masters Suite
-- **Location & Geography Data Architecture**:
-  - Implemented 5 shared reference master tables in `packages/database/src/schema/geography.ts`:
-    - `countries`: Sovereign country registry with ISO-2 (unique per tenant), ISO-3, numeric codes, dial codes, currency codes, currency symbols, nationalities, sort order, and active/inactive status.
-    - `states`: Regional subdivisions with parent country foreign key, subdivision types (`State`, `Province`, `Territory`, `Region`, `Emirate`, `Governorate`, `Other`), sort order, and unique name per country.
-    - `cities`: Municipal metropolitan city masters with cascading Country -> State foreign keys, city codes, sort order, and unique name per state.
-    - `areas`: Local neighborhood / school zoning sectors with cascading Country -> State -> City foreign keys, short codes, and sort order.
-    - `postal_codes`: Postal/ZIP code registries with cascading Country -> State -> City -> Area (optional) foreign keys, postal code strings, and coverage descriptions.
-  - Exported complete TypeScript DTOs and interfaces in `packages/types/src/geography.ts`.
-- **Backend Service & REST Endpoints (`apps/api/src/modules/geography`)**:
-  - Built `GeographyService` and `GeographyController` with full tenant-isolated CRUD, parent-filtered listings, duplicate validation, auto-increment sort order resolution, and structured audit logging.
-  - Implemented 13 new integration tests in `apps/api/test/geography.spec.ts` bringing total test suite to 80/80 passed tests across 9 suites.
-- **Frontend Management Suite (`apps/web`)**:
-  - Built 5 dedicated management pages matching the approved Administration Configuration reference pattern:
-    - `/admin-config/countries`: Sovereign country directory with ISO tags, dial codes, and currency badges.
-    - `/admin-config/states`: State / Province management with subdivision type tags and country filtering.
-    - `/admin-config/cities`: Municipal city management with cascading country/state filters.
-    - `/admin-config/areas`: Local zone and sector management with 3-level parent hierarchy filters.
-    - `/admin-config/postal-codes`: Postal/ZIP code registry with locality description and city/area links.
-  - Created reusable `GeographyLocationFields` component (`apps/web/components/GeographySelectors.tsx`) with cascading country/state/city selectors.
-  - Connected location dropdowns in Head Offices and Regional Offices forms to shared geography masters.
-  - Updated Administration Configuration Control Center registry (`apps/web/lib/admin-config-registry.ts`) to mark all 5 Location & Geography items as implemented with direct routing.
-- **Static Asset & Dev Server Verification**:
-  - Updated `verify-dev-assets.mjs` and verified 100% HTTP 200 on all HTML, CSS bundles (67KB Tailwind), and JS chunks across all 11 administrative pages.
+## [2026-08-23] - Location & Geography Shared Masters Suite & Postal Code Consolidation
+- **Location & Geography Structure & Postal Code Consolidation**:
+  - Consolidated Postal / ZIP Code management directly into **Areas / Zones** (`/admin-config/areas`), streamlining navigation to 4 canonical shared masters: **Countries**, **States / Provinces**, **Cities**, and **Areas / Zones**.
+  - Retained normalized multi-tenant `postal_codes` relational schema internally while storing primary `postal_code` on `areas` table for instant accessibility.
+  - Enhanced Area / Zone management table with `Postal / ZIP Code` column, dedicated postal code form inputs, and searchable postal indices (e.g. searching `75300` directly returns the matching Area / Zone).
+  - Retired standalone `/admin-config/postal-codes` page with automatic graceful redirection to `/admin-config/areas`.
+  - Updated Administration Configuration Registry (`apps/web/lib/admin-config-registry.ts`): removed `loc_postal_codes`, mapped `postal code`, `zip`, `zipcode`, `postcode` search queries directly to Areas / Zones.
+- **Context-Aware Secondary Navigation & Clickable Breadcrumbs**:
+  - Implemented interactive clickable breadcrumb trails linking back to `/admin-config` and category workspaces.
+  - Added persistent, context-aware secondary navigation strips (`Countries | States / Provinces | Cities | Areas / Zones` and `Head Offices | Regional Offices | School Types | Schools | Branches`) with active route highlighting across all administration configuration pages.
+  - Enhanced shared `GeographyLocationFields` selector with cascading Country $\rightarrow$ State $\rightarrow$ City $\rightarrow$ Area $\rightarrow$ Postal Code auto-population.
+- **Verification & Test Coverage**:
+  - Executed 14 geography integration tests in `apps/api/test/geography.spec.ts` (81/81 test suite passed).
+  - Verified static asset availability (`pnpm web:dev:check`) across all 11 administrative routes (100% HTTP 200).
 
 ---
 
