@@ -9,8 +9,9 @@ import { ResponsiveFilterToolbar } from '../../../../components/ResponsiveFilter
 import {
   FIELD_CATEGORIES_INFO,
   getMergedFieldCatalog,
-  savePersistedCustomField,
-  updatePersistedCustomField,
+  fetchMergedFieldCatalogApi,
+  createPersistedCustomFieldApi,
+  updatePersistedCustomFieldApi,
   checkDuplicateConcept,
 } from '../../../../lib/forms-catalog';
 import {
@@ -25,9 +26,14 @@ export default function FieldLibraryPage() {
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [originFilter, setOriginFilter] = useState('ALL');
 
-  // Load merged catalog on mount
+  // Load merged catalog on mount via real API
   useEffect(() => {
+    // Initial sync from cache
     setFields(getMergedFieldCatalog());
+    // Live API fetch
+    fetchMergedFieldCatalogApi().then((data) => {
+      if (data && data.length > 0) setFields(data);
+    });
   }, []);
 
   // Custom Field Modal
@@ -70,11 +76,11 @@ export default function FieldLibraryPage() {
     }
   };
 
-  const handleCreateCustomField = (e: React.FormEvent) => {
+  const handleCreateCustomField = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customName.trim()) return;
 
-    savePersistedCustomField({
+    await createPersistedCustomFieldApi({
       name: customName.trim(),
       category: customCategory,
       dataType: customDataType,
@@ -82,7 +88,8 @@ export default function FieldLibraryPage() {
       defaultPlaceholder: customPlaceholder.trim() || undefined,
     });
 
-    setFields(getMergedFieldCatalog());
+    const refreshed = await fetchMergedFieldCatalogApi();
+    setFields(refreshed);
     setShowCreateModal(false);
     setCustomName('');
     setCustomLabel('');
@@ -90,10 +97,11 @@ export default function FieldLibraryPage() {
     setDuplicateWarning(null);
   };
 
-  const handleToggleStatus = (field: FieldDefinitionDto) => {
+  const handleToggleStatus = async (field: FieldDefinitionDto) => {
     if (field.isSystemProtected) return;
-    updatePersistedCustomField(field.id, { isActive: !field.isActive });
-    setFields(getMergedFieldCatalog());
+    await updatePersistedCustomFieldApi(field.id, { isActive: !field.isActive });
+    const refreshed = await fetchMergedFieldCatalogApi();
+    setFields(refreshed);
   };
 
   return (

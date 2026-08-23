@@ -934,6 +934,11 @@ export class FormsService {
       const ownerId = dto.ownerId || null;
       const applyTo = dto.applyTo || 'ALL_CAMPUSES';
 
+      // Universal entire organization scope security check
+      if (applyTo === 'ALL_CAMPUSES' && userRole === 'CAMPUS_ADMIN') {
+        throw new ForbiddenException('Campus administrators cannot create or apply Universal Organization-wide forms.');
+      }
+
       // 1. Duplicate code/name check
       const [existing] = await tx
         .select()

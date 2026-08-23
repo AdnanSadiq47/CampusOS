@@ -7,6 +7,7 @@ import {
   FIELD_CATEGORIES_INFO,
   FieldCategoryInfo,
   getMergedFieldCatalog,
+  fetchMergedFieldCatalogApi,
 } from '../../../../../lib/forms-catalog';
 import { FormRuntimeRenderer } from '../../../../../components/FormRuntimeRenderer';
 import {
@@ -223,9 +224,19 @@ export default function FormBuilderEditorPage() {
     return false;
   };
 
+  const [catalogFields, setCatalogFields] = useState<FieldDefinitionDto[]>([]);
+
+  useEffect(() => {
+    setCatalogFields(getMergedFieldCatalog());
+    fetchMergedFieldCatalogApi().then((fields) => {
+      if (fields && fields.length > 0) setCatalogFields(fields);
+    });
+  }, []);
+
   // Filtered Field Library
   const filteredLibrary = useMemo(() => {
-    return getMergedFieldCatalog().filter((f: FieldDefinitionDto) => {
+    const list = catalogFields.length > 0 ? catalogFields : getMergedFieldCatalog();
+    return list.filter((f: FieldDefinitionDto) => {
       if (selectedLibraryCategory !== 'ALL' && f.category !== selectedLibraryCategory) return false;
       if (librarySearch.trim()) {
         const q = librarySearch.toLowerCase();
@@ -233,7 +244,7 @@ export default function FormBuilderEditorPage() {
       }
       return true;
     });
-  }, [selectedLibraryCategory, librarySearch]);
+  }, [catalogFields, selectedLibraryCategory, librarySearch]);
 
   // Currently selected field instance
   const selectedField = useMemo(() => {

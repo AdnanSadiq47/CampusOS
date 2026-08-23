@@ -782,6 +782,72 @@ export function updatePersistedCustomField(
   return modified;
 }
 
+export async function fetchMergedFieldCatalogApi(): Promise<FieldDefinitionDto[]> {
+  try {
+    const res = await fetch('/api/forms/fields');
+    if (res.ok) {
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data)) {
+        // Sync local storage as cache
+        const customOnly = json.data.filter((f: FieldDefinitionDto) => f.origin === 'CUSTOM');
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(customOnly));
+        }
+        return json.data;
+      }
+    }
+  } catch (err) {
+    console.warn('API fetch failed, using local persistent fallback:', err);
+  }
+  return getMergedFieldCatalog();
+}
+
+export async function createPersistedCustomFieldApi(
+  data: Partial<FieldDefinitionDto> & { name: string; category: FieldCategory; dataType: any }
+): Promise<FieldDefinitionDto> {
+  try {
+    const res = await fetch('/api/forms/fields', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (res.ok) {
+      const json = await res.json();
+      if (json.success && json.data) {
+        // Also update local cache
+        savePersistedCustomField(json.data);
+        return json.data;
+      }
+    }
+  } catch (err) {
+    console.warn('API creation failed, using local persistent fallback:', err);
+  }
+  return savePersistedCustomField(data);
+}
+
+export async function updatePersistedCustomFieldApi(
+  id: string,
+  updates: Partial<FieldDefinitionDto>
+): Promise<FieldDefinitionDto | null> {
+  try {
+    const res = await fetch('/api/forms/fields', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, ...updates }),
+    });
+    if (res.ok) {
+      const json = await res.json();
+      if (json.success && json.data) {
+        updatePersistedCustomField(id, updates);
+        return json.data;
+      }
+    }
+  } catch (err) {
+    console.warn('API update failed, using local persistent fallback:', err);
+  }
+  return updatePersistedCustomField(id, updates);
+}
+
 export function getMergedFieldCatalog(): FieldDefinitionDto[] {
   const customFields = getPersistedCustomFields();
   return [...CLIENT_MASTER_FIELD_CATALOG, ...customFields];

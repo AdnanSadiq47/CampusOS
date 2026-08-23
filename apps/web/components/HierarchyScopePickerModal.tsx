@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { ConfigScopeType } from '@campus-os/types';
 
 export type HierarchyNodeType = 'HEAD_OFFICE' | 'REGION' | 'SCHOOL' | 'CAMPUS';
@@ -92,24 +92,22 @@ export const SAMPLE_AUTHORIZED_HIERARCHY: HierarchyNodeItem[] = [
 ];
 
 // Helper to generate a human-friendly compact scope summary string
-export function getHierarchyScopeSummary(state: SelectedHierarchyState): string {
+export function getHierarchyScopeSummary(state?: SelectedHierarchyState | null): string {
+  if (!state) return 'No locations selected';
   if (state.isEntireOrg) {
     return 'Entire Organization (Universal)';
   }
 
   const parts: string[] = [];
-  if (state.selectedHeadOfficeIds.length > 0) {
-    parts.push(`${state.selectedHeadOfficeIds.length} Head Office${state.selectedHeadOfficeIds.length > 1 ? 's' : ''}`);
-  }
-  if (state.selectedRegionIds.length > 0) {
-    parts.push(`${state.selectedRegionIds.length} Region${state.selectedRegionIds.length > 1 ? 's' : ''}`);
-  }
-  if (state.selectedSchoolIds.length > 0) {
-    parts.push(`${state.selectedSchoolIds.length} School${state.selectedSchoolIds.length > 1 ? 's' : ''}`);
-  }
-  if (state.selectedCampusIds.length > 0) {
-    parts.push(`${state.selectedCampusIds.length} Campus${state.selectedCampusIds.length > 1 ? 'es' : ''}`);
-  }
+  const hoCount = state.selectedHeadOfficeIds?.length || 0;
+  const regCount = state.selectedRegionIds?.length || 0;
+  const schCount = state.selectedSchoolIds?.length || 0;
+  const campCount = state.selectedCampusIds?.length || 0;
+
+  if (hoCount > 0) parts.push(`${hoCount} Head Office${hoCount > 1 ? 's' : ''}`);
+  if (regCount > 0) parts.push(`${regCount} Region${regCount > 1 ? 's' : ''}`);
+  if (schCount > 0) parts.push(`${schCount} School${schCount > 1 ? 's' : ''}`);
+  if (campCount > 0) parts.push(`${campCount} Campus${campCount > 1 ? 'es' : ''}`);
 
   if (parts.length === 0) {
     return 'No locations selected';
@@ -119,30 +117,35 @@ export function getHierarchyScopeSummary(state: SelectedHierarchyState): string 
 }
 
 // Helper to resolve all effective descendant campus IDs from mixed selection
-export function resolveEffectiveBranchIds(state: SelectedHierarchyState): string[] {
-  if (state.isEntireOrg) return [];
+export function resolveEffectiveBranchIds(
+  state?: SelectedHierarchyState | null,
+  hierarchy: HierarchyNodeItem[] = SAMPLE_AUTHORIZED_HIERARCHY
+): string[] {
+  if (!state || state.isEntireOrg) return [];
 
   const branchSet = new Set<string>();
 
   // Add directly selected campuses
-  state.selectedCampusIds.forEach((id) => branchSet.add(id));
+  (state.selectedCampusIds || []).forEach((id) => branchSet.add(id));
 
   // Traverse tree to add descendant campuses of selected parents
   const collectCampuses = (node: HierarchyNodeItem) => {
+    if (!node) return;
     if (node.type === 'CAMPUS') {
       branchSet.add(node.id);
     }
-    if (node.children) {
+    if (node.children && Array.isArray(node.children)) {
       node.children.forEach(collectCampuses);
     }
   };
 
   const findAndCollect = (nodeId: string, node: HierarchyNodeItem) => {
+    if (!node) return false;
     if (node.id === nodeId) {
       collectCampuses(node);
       return true;
     }
-    if (node.children) {
+    if (node.children && Array.isArray(node.children)) {
       for (const child of node.children) {
         if (findAndCollect(nodeId, child)) return true;
       }
@@ -151,13 +154,13 @@ export function resolveEffectiveBranchIds(state: SelectedHierarchyState): string
   };
 
   const allParentIds = [
-    ...state.selectedHeadOfficeIds,
-    ...state.selectedRegionIds,
-    ...state.selectedSchoolIds,
+    ...(state.selectedHeadOfficeIds || []),
+    ...(state.selectedRegionIds || []),
+    ...(state.selectedSchoolIds || []),
   ];
 
   allParentIds.forEach((pId) => {
-    SAMPLE_AUTHORIZED_HIERARCHY.forEach((root) => findAndCollect(pId, root));
+    (hierarchy || []).forEach((root) => findAndCollect(pId, root));
   });
 
   return Array.from(branchSet);
@@ -168,6 +171,8 @@ interface HierarchyScopePickerModalProps {
   onClose: () => void;
   initialState: SelectedHierarchyState;
   onApply: (state: SelectedHierarchyState, scopeType: ConfigScopeType, resolvedBranchIds: string[]) => void;
+  authorizedHierarchy?: HierarchyNodeItem[];
+  userRole?: string;
 }
 
 export function HierarchyScopePickerModal({
@@ -175,7 +180,11 @@ export function HierarchyScopePickerModal({
   onClose,
   initialState,
   onApply,
+  authorizedHierarchy = SAMPLE_AUTHORIZED_HIERARCHY,
+  userRole = 'SCHOOL_ADMIN',
 }: HierarchyScopePickerModalProps) {
+  // ── ALL HOOKS MUST EXECUTE UNCONDITIONALLY AT COMPONENT TOP LEVEL ──
+
   const [scopeState, setScopeState] = useState<SelectedHierarchyState>(initialState);
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({
@@ -185,48 +194,77 @@ export function HierarchyScopePickerModal({
     sch_delta_direct: true,
   });
 
-  // Reset local state on open
-  React.useEffect(() => {
+  // Keep state synchronized when modal opens or initial state changes
+  useEffect(() => {
     if (isOpen) {
       setScopeState(initialState);
       setSearchTerm('');
     }
   }, [isOpen, initialState]);
 
-  if (!isOpen) return null;
+  // Safe hierarchy list
+  const safeHierarchy = useMemo(() => {
+    return Array.isArray(authorizedHierarchy) ? authorizedHierarchy : [];
+  }, [authorizedHierarchy]);
 
   // Flattened items lookup
   const flatLookup = useMemo(() => {
     const map = new Map<string, HierarchyNodeItem>();
     const traverse = (node: HierarchyNodeItem) => {
+      if (!node) return;
       map.set(node.id, node);
-      if (node.children) node.children.forEach(traverse);
+      if (node.children && Array.isArray(node.children)) {
+        node.children.forEach(traverse);
+      }
     };
-    SAMPLE_AUTHORIZED_HIERARCHY.forEach(traverse);
+    safeHierarchy.forEach(traverse);
     return map;
-  }, []);
+  }, [safeHierarchy]);
 
   // Check if a node is covered by an ancestor
-  const getCoveringAncestor = (nodeId: string): string | null => {
-    const node = flatLookup.get(nodeId);
-    if (!node || !node.parentId) return null;
+  const getCoveringAncestor = useCallback(
+    (nodeId: string): string | null => {
+      const node = flatLookup.get(nodeId);
+      if (!node || !node.parentId) return null;
 
-    let currentParentId: string | null | undefined = node.parentId;
-    while (currentParentId) {
-      if (
-        scopeState.selectedHeadOfficeIds.includes(currentParentId) ||
-        scopeState.selectedRegionIds.includes(currentParentId) ||
-        scopeState.selectedSchoolIds.includes(currentParentId)
-      ) {
-        return flatLookup.get(currentParentId)?.name || 'Parent Organization';
+      let currentParentId: string | null | undefined = node.parentId;
+      while (currentParentId) {
+        if (
+          scopeState.selectedHeadOfficeIds.includes(currentParentId) ||
+          scopeState.selectedRegionIds.includes(currentParentId) ||
+          scopeState.selectedSchoolIds.includes(currentParentId)
+        ) {
+          return flatLookup.get(currentParentId)?.name || 'Parent Organization';
+        }
+        const parentNode = flatLookup.get(currentParentId);
+        currentParentId = parentNode?.parentId;
       }
-      const parentNode = flatLookup.get(currentParentId);
-      currentParentId = parentNode?.parentId;
-    }
-    return null;
-  };
+      return null;
+    },
+    [flatLookup, scopeState]
+  );
+
+  // Search filter helper
+  const matchesSearch = useCallback(
+    (node: HierarchyNodeItem): boolean => {
+      if (!node) return false;
+      if (!searchTerm.trim()) return true;
+      const q = searchTerm.toLowerCase();
+      if (node.name?.toLowerCase().includes(q) || (node.code && node.code.toLowerCase().includes(q))) {
+        return true;
+      }
+      if (node.children && Array.isArray(node.children)) {
+        return node.children.some(matchesSearch);
+      }
+      return false;
+    },
+    [searchTerm]
+  );
+
+  const canApplyUniversal = userRole !== 'CAMPUS_ADMIN';
 
   const handleToggleEntireOrg = (checked: boolean) => {
+    if (!canApplyUniversal) return;
     if (checked) {
       setScopeState({
         isEntireOrg: true,
@@ -241,7 +279,7 @@ export function HierarchyScopePickerModal({
   };
 
   const handleToggleNode = (node: HierarchyNodeItem) => {
-    if (scopeState.isEntireOrg) return;
+    if (scopeState.isEntireOrg || !node) return;
 
     if (node.type === 'HEAD_OFFICE') {
       const isSelected = scopeState.selectedHeadOfficeIds.includes(node.id);
@@ -302,26 +340,20 @@ export function HierarchyScopePickerModal({
 
   const totalSelectedCount =
     (scopeState.isEntireOrg ? 1 : 0) +
-    scopeState.selectedHeadOfficeIds.length +
-    scopeState.selectedRegionIds.length +
-    scopeState.selectedSchoolIds.length +
-    scopeState.selectedCampusIds.length;
+    (scopeState.selectedHeadOfficeIds?.length || 0) +
+    (scopeState.selectedRegionIds?.length || 0) +
+    (scopeState.selectedSchoolIds?.length || 0) +
+    (scopeState.selectedCampusIds?.length || 0);
 
   const handleSave = () => {
     const scopeType: ConfigScopeType = scopeState.isEntireOrg ? 'ALL_CAMPUSES' : 'SELECTED_CAMPUSES';
-    const effectiveBranches = resolveEffectiveBranchIds(scopeState);
+    const effectiveBranches = resolveEffectiveBranchIds(scopeState, safeHierarchy);
     onApply(scopeState, scopeType, effectiveBranches);
     onClose();
   };
 
-  // Node matching search helper
-  const matchesSearch = (node: HierarchyNodeItem): boolean => {
-    if (!searchTerm.trim()) return true;
-    const q = searchTerm.toLowerCase();
-    if (node.name.toLowerCase().includes(q) || (node.code && node.code.toLowerCase().includes(q))) return true;
-    if (node.children) return node.children.some(matchesSearch);
-    return false;
-  };
+  // ── CONDITIONAL RENDER MUST HAPPEN ONLY AFTER ALL HOOKS ──
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
@@ -347,8 +379,10 @@ export function HierarchyScopePickerModal({
 
         {/* Entire Organization Quick Toggle */}
         <div
-          onClick={() => handleToggleEntireOrg(!scopeState.isEntireOrg)}
-          className={`p-3 rounded-2xl border cursor-pointer transition-all flex items-center justify-between ${
+          onClick={() => canApplyUniversal && handleToggleEntireOrg(!scopeState.isEntireOrg)}
+          className={`p-3 rounded-2xl border transition-all flex items-center justify-between ${
+            canApplyUniversal ? 'cursor-pointer' : 'opacity-60 cursor-not-allowed'
+          } ${
             scopeState.isEntireOrg
               ? 'border-emerald-500 bg-emerald-50/70 dark:bg-emerald-950/40 ring-2 ring-emerald-500/20'
               : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 hover:bg-slate-100'
@@ -358,8 +392,9 @@ export function HierarchyScopePickerModal({
             <input
               type="checkbox"
               checked={scopeState.isEntireOrg}
+              disabled={!canApplyUniversal}
               onChange={(e) => handleToggleEntireOrg(e.target.checked)}
-              className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 w-4 h-4"
+              className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 w-4 h-4 disabled:opacity-50"
             />
             <div>
               <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
@@ -367,7 +402,9 @@ export function HierarchyScopePickerModal({
                 <span>Entire Organization (Universal Scope)</span>
               </span>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                Automatically applies to all current schools and dynamically inherits to future branches.
+                {canApplyUniversal
+                  ? 'Automatically applies to all current schools and dynamically inherits to future branches.'
+                  : 'Universal organization scope requires Head Office or Platform Admin role.'}
               </p>
             </div>
           </div>
@@ -396,178 +433,196 @@ export function HierarchyScopePickerModal({
         {/* Unified Hierarchy Tree List */}
         {!scopeState.isEntireOrg ? (
           <div className="border border-slate-200 dark:border-slate-800 rounded-2xl p-3 bg-white dark:bg-slate-900/60 max-h-64 overflow-y-auto space-y-2.5">
-            {SAMPLE_AUTHORIZED_HIERARCHY.filter(matchesSearch).map((rootNode) => (
-              <div key={rootNode.id} className="space-y-1.5">
-                {/* Level 1: Head Office */}
-                <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setExpandedNodes((p) => ({ ...p, [rootNode.id]: !p[rootNode.id] }))
-                      }
-                      className="text-xs text-slate-400 hover:text-slate-600 p-0.5"
-                    >
-                      {expandedNodes[rootNode.id] ? '▼' : '▶'}
-                    </button>
-                    <input
-                      type="checkbox"
-                      checked={scopeState.selectedHeadOfficeIds.includes(rootNode.id)}
-                      onChange={() => handleToggleNode(rootNode)}
-                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
-                    />
-                    <span className="text-xs font-bold text-slate-900 dark:text-white">
-                      {rootNode.name}
+            {safeHierarchy.filter(matchesSearch).length === 0 ? (
+              <div className="text-center py-6 text-xs text-slate-400">
+                No matching locations found in authorized hierarchy.
+              </div>
+            ) : (
+              safeHierarchy.filter(matchesSearch).map((rootNode) => (
+                <div key={rootNode.id} className="space-y-1.5">
+                  {/* Level 1: Head Office / School */}
+                  <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+                    <div className="flex items-center gap-2">
+                      {rootNode.children && rootNode.children.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExpandedNodes((p) => ({ ...p, [rootNode.id]: !p[rootNode.id] }))
+                          }
+                          className="text-xs text-slate-400 hover:text-slate-600 p-0.5"
+                        >
+                          {expandedNodes[rootNode.id] ? '▼' : '▶'}
+                        </button>
+                      )}
+                      <input
+                        type="checkbox"
+                        checked={
+                          rootNode.type === 'HEAD_OFFICE'
+                            ? scopeState.selectedHeadOfficeIds.includes(rootNode.id)
+                            : scopeState.selectedSchoolIds.includes(rootNode.id)
+                        }
+                        onChange={() => handleToggleNode(rootNode)}
+                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
+                      />
+                      <span className="text-xs font-bold text-slate-900 dark:text-white">
+                        {rootNode.name}
+                      </span>
+                    </div>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded">
+                      {rootNode.type.replace('_', ' ')}
                     </span>
                   </div>
-                  <span className="text-[10px] uppercase font-bold text-slate-400 bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded">
-                    Head Office
-                  </span>
-                </div>
 
-                {/* Level 2: Regions / Schools */}
-                {expandedNodes[rootNode.id] && rootNode.children && (
-                  <div className="pl-5 sm:pl-6 space-y-1.5 border-l-2 border-slate-100 dark:border-slate-800 ml-3">
-                    {rootNode.children.filter(matchesSearch).map((childNode) => {
-                      const coveredByHO = getCoveringAncestor(childNode.id);
-                      const isRegionSelected =
-                        scopeState.selectedRegionIds.includes(childNode.id) || !!coveredByHO;
+                  {/* Level 2: Regions / Schools */}
+                  {expandedNodes[rootNode.id] && rootNode.children && rootNode.children.length > 0 && (
+                    <div className="pl-5 sm:pl-6 space-y-1.5 border-l-2 border-slate-100 dark:border-slate-800 ml-3">
+                      {rootNode.children.filter(matchesSearch).map((childNode) => {
+                        const coveredByParent = getCoveringAncestor(childNode.id);
+                        const isChildSelected =
+                          childNode.type === 'REGION'
+                            ? scopeState.selectedRegionIds.includes(childNode.id) || !!coveredByParent
+                            : scopeState.selectedSchoolIds.includes(childNode.id) || !!coveredByParent;
 
-                      return (
-                        <div key={childNode.id} className="space-y-1">
-                          <div className="flex items-center justify-between p-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                            <div className="flex items-center gap-2">
-                              {childNode.children && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setExpandedNodes((p) => ({ ...p, [childNode.id]: !p[childNode.id] }))
-                                  }
-                                  className="text-[11px] text-slate-400 hover:text-slate-600"
-                                >
-                                  {expandedNodes[childNode.id] ? '▼' : '▶'}
-                                </button>
-                              )}
-                              <input
-                                type="checkbox"
-                                checked={isRegionSelected}
-                                disabled={!!coveredByHO}
-                                onChange={() => handleToggleNode(childNode)}
-                                className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5 disabled:opacity-40"
-                              />
-                              <span className="text-xs font-medium text-slate-800 dark:text-slate-200">
-                                {childNode.name}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              {coveredByHO && (
-                                <span className="text-[10px] text-amber-600 dark:text-amber-400 italic">
-                                  Covered by {coveredByHO}
+                        return (
+                          <div key={childNode.id} className="space-y-1">
+                            <div className="flex items-center justify-between p-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                              <div className="flex items-center gap-2">
+                                {childNode.children && childNode.children.length > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setExpandedNodes((p) => ({ ...p, [childNode.id]: !p[childNode.id] }))
+                                    }
+                                    className="text-[11px] text-slate-400 hover:text-slate-600"
+                                  >
+                                    {expandedNodes[childNode.id] ? '▼' : '▶'}
+                                  </button>
+                                )}
+                                <input
+                                  type="checkbox"
+                                  checked={isChildSelected}
+                                  disabled={!!coveredByParent}
+                                  onChange={() => handleToggleNode(childNode)}
+                                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5 disabled:opacity-40"
+                                />
+                                <span className="text-xs font-medium text-slate-800 dark:text-slate-200">
+                                  {childNode.name}
                                 </span>
-                              )}
-                              <span className="text-[9px] uppercase text-slate-400 bg-slate-100 dark:bg-slate-800 px-1 py-0.2 rounded">
-                                {childNode.type}
-                              </span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                {coveredByParent && (
+                                  <span className="text-[10px] text-amber-600 dark:text-amber-400 italic">
+                                    Covered by {coveredByParent}
+                                  </span>
+                                )}
+                                <span className="text-[9px] uppercase text-slate-400 bg-slate-100 dark:bg-slate-800 px-1 py-0.2 rounded">
+                                  {childNode.type}
+                                </span>
+                              </div>
                             </div>
-                          </div>
 
-                          {/* Level 3: Schools & Campuses */}
-                          {expandedNodes[childNode.id] && childNode.children && (
-                            <div className="pl-5 space-y-1 border-l border-slate-100 dark:border-slate-800 ml-2">
-                              {childNode.children.filter(matchesSearch).map((grandChild) => {
-                                const coveredBy = getCoveringAncestor(grandChild.id);
-                                const isSchoolSelected =
-                                  scopeState.selectedSchoolIds.includes(grandChild.id) || !!coveredBy;
+                            {/* Level 3: Schools & Campuses */}
+                            {expandedNodes[childNode.id] && childNode.children && childNode.children.length > 0 && (
+                              <div className="pl-5 space-y-1 border-l border-slate-100 dark:border-slate-800 ml-2">
+                                {childNode.children.filter(matchesSearch).map((grandChild) => {
+                                  const coveredBy = getCoveringAncestor(grandChild.id);
+                                  const isSchoolSelected =
+                                    grandChild.type === 'SCHOOL'
+                                      ? scopeState.selectedSchoolIds.includes(grandChild.id) || !!coveredBy
+                                      : scopeState.selectedCampusIds.includes(grandChild.id) || !!coveredBy;
 
-                                return (
-                                  <div key={grandChild.id} className="space-y-1">
-                                    <div className="flex items-center justify-between p-1 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/40 text-xs">
-                                      <div className="flex items-center gap-2 truncate">
-                                        {grandChild.children && (
-                                          <button
-                                            type="button"
-                                            onClick={() =>
-                                              setExpandedNodes((p) => ({
-                                                ...p,
-                                                [grandChild.id]: !p[grandChild.id],
-                                              }))
-                                            }
-                                            className="text-[10px] text-slate-400"
-                                          >
-                                            {expandedNodes[grandChild.id] ? '▼' : '▶'}
-                                          </button>
-                                        )}
-                                        <input
-                                          type="checkbox"
-                                          checked={isSchoolSelected}
-                                          disabled={!!coveredBy}
-                                          onChange={() => handleToggleNode(grandChild)}
-                                          className="rounded border-slate-300 text-indigo-600 h-3.5 w-3.5 disabled:opacity-40"
-                                        />
-                                        <span className="truncate text-slate-700 dark:text-slate-300 font-medium">
-                                          {grandChild.name}
-                                        </span>
-                                      </div>
-                                      <div className="flex items-center gap-1">
-                                        {coveredBy && (
-                                          <span className="text-[10px] text-amber-600 dark:text-amber-400 italic">
-                                            Covered
-                                          </span>
-                                        )}
-                                        <span className="text-[9px] uppercase text-slate-400">
-                                          {grandChild.type}
-                                        </span>
-                                      </div>
-                                    </div>
-
-                                    {/* Level 4: Individual Campuses */}
-                                    {expandedNodes[grandChild.id] && grandChild.children && (
-                                      <div className="pl-5 space-y-1 border-l border-slate-100 dark:border-slate-800 ml-2">
-                                        {grandChild.children.filter(matchesSearch).map((campusNode) => {
-                                          const coveredCampus = getCoveringAncestor(campusNode.id);
-                                          const isCampusChecked =
-                                            scopeState.selectedCampusIds.includes(campusNode.id) ||
-                                            !!coveredCampus;
-
-                                          return (
-                                            <div
-                                              key={campusNode.id}
-                                              className="flex items-center justify-between p-1 rounded hover:bg-slate-50 dark:hover:bg-slate-800/40 text-xs"
+                                  return (
+                                    <div key={grandChild.id} className="space-y-1">
+                                      <div className="flex items-center justify-between p-1 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/40 text-xs">
+                                        <div className="flex items-center gap-2 truncate">
+                                          {grandChild.children && grandChild.children.length > 0 && (
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                setExpandedNodes((p) => ({
+                                                  ...p,
+                                                  [grandChild.id]: !p[grandChild.id],
+                                                }))
+                                              }
+                                              className="text-[10px] text-slate-400"
                                             >
-                                              <div className="flex items-center gap-2 truncate">
-                                                <input
-                                                  type="checkbox"
-                                                  checked={isCampusChecked}
-                                                  disabled={!!coveredCampus}
-                                                  onChange={() => handleToggleNode(campusNode)}
-                                                  className="rounded border-slate-300 text-indigo-600 h-3.5 w-3.5 disabled:opacity-40"
-                                                />
-                                                <span className="truncate text-slate-600 dark:text-slate-400">
-                                                  {campusNode.name}
-                                                </span>
-                                              </div>
-                                              {coveredCampus && (
-                                                <span className="text-[10px] text-amber-600 dark:text-amber-400 italic">
-                                                  Covered by {coveredCampus}
-                                                </span>
-                                              )}
-                                            </div>
-                                          );
-                                        })}
+                                              {expandedNodes[grandChild.id] ? '▼' : '▶'}
+                                            </button>
+                                          )}
+                                          <input
+                                            type="checkbox"
+                                            checked={isSchoolSelected}
+                                            disabled={!!coveredBy}
+                                            onChange={() => handleToggleNode(grandChild)}
+                                            className="rounded border-slate-300 text-indigo-600 h-3.5 w-3.5 disabled:opacity-40"
+                                          />
+                                          <span className="truncate text-slate-700 dark:text-slate-300 font-medium">
+                                            {grandChild.name}
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                          {coveredBy && (
+                                            <span className="text-[10px] text-amber-600 dark:text-amber-400 italic">
+                                              Covered
+                                            </span>
+                                          )}
+                                          <span className="text-[9px] uppercase text-slate-400">
+                                            {grandChild.type}
+                                          </span>
+                                        </div>
                                       </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            ))}
+
+                                      {/* Level 4: Individual Campuses */}
+                                      {expandedNodes[grandChild.id] &&
+                                        grandChild.children &&
+                                        grandChild.children.length > 0 && (
+                                          <div className="pl-5 space-y-1 border-l border-slate-100 dark:border-slate-800 ml-2">
+                                            {grandChild.children.filter(matchesSearch).map((campusNode) => {
+                                              const coveredCampus = getCoveringAncestor(campusNode.id);
+                                              const isCampusChecked =
+                                                scopeState.selectedCampusIds.includes(campusNode.id) ||
+                                                !!coveredCampus;
+
+                                              return (
+                                                <div
+                                                  key={campusNode.id}
+                                                  className="flex items-center justify-between p-1 rounded hover:bg-slate-50 dark:hover:bg-slate-800/40 text-xs"
+                                                >
+                                                  <div className="flex items-center gap-2 truncate">
+                                                    <input
+                                                      type="checkbox"
+                                                      checked={isCampusChecked}
+                                                      disabled={!!coveredCampus}
+                                                      onChange={() => handleToggleNode(campusNode)}
+                                                      className="rounded border-slate-300 text-indigo-600 h-3.5 w-3.5 disabled:opacity-40"
+                                                    />
+                                                    <span className="truncate text-slate-600 dark:text-slate-400">
+                                                      {campusNode.name}
+                                                    </span>
+                                                  </div>
+                                                  {coveredCampus && (
+                                                    <span className="text-[10px] text-amber-600 dark:text-amber-400 italic">
+                                                      Covered by {coveredCampus}
+                                                    </span>
+                                                  )}
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
           </div>
         ) : null}
 
@@ -579,7 +634,7 @@ export function HierarchyScopePickerModal({
               <button
                 type="button"
                 onClick={handleClearAll}
-                className="text-[11px] text-slate-400 hover:text-rose-500 font-medium"
+                className="text-[11px] text-slate-400 hover:text-rose-500 font-medium cursor-pointer"
               >
                 Clear All
               </button>
@@ -592,7 +647,7 @@ export function HierarchyScopePickerModal({
                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-semibold bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-200 border border-indigo-200 dark:border-indigo-800"
                 >
                   <span>🏛️ {flatLookup.get(id)?.name || id}</span>
-                  <button onClick={() => handleRemoveChip(id, 'HEAD_OFFICE')} className="text-xs">✕</button>
+                  <button onClick={() => handleRemoveChip(id, 'HEAD_OFFICE')} className="text-xs font-bold cursor-pointer">✕</button>
                 </span>
               ))}
               {scopeState.selectedRegionIds.map((id) => (
@@ -601,7 +656,7 @@ export function HierarchyScopePickerModal({
                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-semibold bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-200 border border-indigo-200 dark:border-indigo-800"
                 >
                   <span>🗺️ {flatLookup.get(id)?.name || id}</span>
-                  <button onClick={() => handleRemoveChip(id, 'REGION')} className="text-xs">✕</button>
+                  <button onClick={() => handleRemoveChip(id, 'REGION')} className="text-xs font-bold cursor-pointer">✕</button>
                 </span>
               ))}
               {scopeState.selectedSchoolIds.map((id) => (
@@ -610,7 +665,7 @@ export function HierarchyScopePickerModal({
                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-semibold bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-200 border border-indigo-200 dark:border-indigo-800"
                 >
                   <span>🏫 {flatLookup.get(id)?.name || id}</span>
-                  <button onClick={() => handleRemoveChip(id, 'SCHOOL')} className="text-xs">✕</button>
+                  <button onClick={() => handleRemoveChip(id, 'SCHOOL')} className="text-xs font-bold cursor-pointer">✕</button>
                 </span>
               ))}
               {scopeState.selectedCampusIds.map((id) => (
@@ -619,7 +674,7 @@ export function HierarchyScopePickerModal({
                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-semibold bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-200 border border-indigo-200 dark:border-indigo-800"
                 >
                   <span>📍 {flatLookup.get(id)?.name || id}</span>
-                  <button onClick={() => handleRemoveChip(id, 'CAMPUS')} className="text-xs">✕</button>
+                  <button onClick={() => handleRemoveChip(id, 'CAMPUS')} className="text-xs font-bold cursor-pointer">✕</button>
                 </span>
               ))}
             </div>
@@ -636,7 +691,7 @@ export function HierarchyScopePickerModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold hover:bg-slate-50"
+              className="px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold hover:bg-slate-50 cursor-pointer"
             >
               Cancel
             </button>
@@ -644,7 +699,7 @@ export function HierarchyScopePickerModal({
               type="button"
               onClick={handleSave}
               disabled={!scopeState.isEntireOrg && totalSelectedCount === 0}
-              className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white text-xs font-bold shadow-md shadow-indigo-500/20"
+              className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white text-xs font-bold shadow-md shadow-indigo-500/20 cursor-pointer transition-all"
             >
               Apply Scope
             </button>

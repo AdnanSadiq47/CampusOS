@@ -1441,4 +1441,58 @@ describe('CampusOS Dynamic Form Builder Platform Foundation & Governance (PGlite
     expect(loadedField.width).toBe('HALF');
     expect(loadedField.isRequired).toBe(true);
   });
+
+  it('TEST 48 — Campus administrator role cannot create Universal Entire Organization form', async () => {
+    await expect(
+      formsService.createFormDefinition(
+        TENANT_A,
+        {
+          name: 'Unauthorized Universal Form Attempt',
+          formPurpose: 'CUSTOM',
+          applyTo: 'ALL_CAMPUSES',
+        },
+        ACTOR_USER,
+        undefined,
+        'CAMPUS_ADMIN'
+      )
+    ).rejects.toThrow(/Campus administrators cannot create or apply Universal Organization-wide forms/);
+  });
+
+  it('TEST 49 — Head Office Administrator CAN create Universal Entire Organization form', async () => {
+    const form = await formsService.createFormDefinition(
+      TENANT_A,
+      {
+        name: 'Authorized HO Universal Form',
+        formPurpose: 'CUSTOM',
+        applyTo: 'ALL_CAMPUSES',
+      },
+      ACTOR_USER,
+      undefined,
+      'HEAD_OFFICE_ADMIN'
+    );
+
+    expect(form.id).toBeDefined();
+    expect(form.applyTo).toBe('ALL_CAMPUSES');
+  });
+
+  it('TEST 50 — Database-persisted custom field survives and loads with stable UUID in Field Library', async () => {
+    const custom = await formsService.createCustomField(
+      TENANT_A,
+      {
+        name: 'Sibling Alumni Roll Number',
+        category: 'SIBLINGS',
+        dataType: 'TEXT',
+        defaultLabel: 'Alumni Roll #',
+      },
+      ACTOR_USER
+    );
+
+    const library = await formsService.listFieldLibrary(TENANT_A);
+    const found = library.find((f) => f.id === custom.id);
+
+    expect(found).toBeDefined();
+    expect(found?.name).toBe('Sibling Alumni Roll Number');
+    expect(found?.origin).toBe('CUSTOM');
+    expect(found?.category).toBe('SIBLINGS');
+  });
 });
