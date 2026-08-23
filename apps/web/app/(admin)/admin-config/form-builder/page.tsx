@@ -15,6 +15,7 @@ import {
   SelectedHierarchyState,
   getHierarchyScopeSummary,
 } from '../../../../components/HierarchyScopePickerModal';
+import { AssignedToDetailsModal } from '../../../../components/AssignedToDetailsModal';
 import {
   FormDefinitionListItemDto,
   FormPurpose,
@@ -121,6 +122,7 @@ export default function FormBuilderPage() {
   const [selectedTemplateId, setSelectedTemplateId] = useState('tmpl_basic_prereg');
   const [copySourceFormId, setCopySourceFormId] = useState('');
   const [scopeValidationError, setScopeValidationError] = useState<string | null>(null);
+  const [selectedFormForAssignedModal, setSelectedFormForAssignedModal] = useState<FormDefinitionListItemDto | null>(null);
 
   // Live Preview Modal state
   const [previewForm, setPreviewForm] = useState<FormDefinitionListItemDto | null>(null);
@@ -261,10 +263,10 @@ export default function FormBuilderPage() {
           },
           {
             id: 'governance',
-            label: 'Governance Scope',
+            label: 'Assigned To',
             value: governanceFilter,
             options: [
-              { label: 'All Scopes', value: 'ALL' },
+              { label: 'All Assignments', value: 'ALL' },
               { label: 'School-wide (Universal)', value: 'SCHOOL' },
               { label: 'Campus Overrides', value: 'CAMPUS' },
             ],
@@ -292,7 +294,7 @@ export default function FormBuilderPage() {
               <tr>
                 <th className="py-3.5 px-4 sm:px-6">Form Name & Code</th>
                 <th className="py-3.5 px-4">Purpose</th>
-                <th className="py-3.5 px-4">Governance & Scope</th>
+                <th className="py-3.5 px-4">Assigned To</th>
                 <th className="py-3.5 px-4">Version & Lifecycle</th>
                 <th className="py-3.5 px-4">Status</th>
                 <th className="py-3.5 px-4 sm:px-6 text-right">Actions</th>
@@ -354,15 +356,20 @@ export default function FormBuilderPage() {
                           {form.ownerType === 'CAMPUS' ? 'Local Campus Override' : 'School Level'}
                         </span>
                         <div>
-                          <Link
-                            href={`/admin-config/form-builder/${form.id}/applicability`}
-                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
-                            title="View full applicability and inheritance hierarchy"
+                          <button
+                            type="button"
+                            onClick={() => setSelectedFormForAssignedModal(form)}
+                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                            title="See where this form is assigned"
                           >
                             <span>📍</span>
-                            <span>{form.applyTo === 'ALL_CAMPUSES' ? 'Entire Organization' : '67 Campuses'}</span>
+                            <span>
+                              {form.applyTo === 'ALL_CAMPUSES'
+                                ? 'Entire Organization'
+                                : '2 Regions · 3 Schools · 18 Campuses'}
+                            </span>
                             <span className="text-[10px] text-slate-400">›</span>
-                          </Link>
+                          </button>
                         </div>
                       </div>
                     </td>
@@ -756,6 +763,13 @@ export default function FormBuilderPage() {
           setNewFormBranchIds(branches);
           setScopeValidationError(null);
         }}
+      />
+
+      {/* School-Friendly Assigned To Details Modal Popup */}
+      <AssignedToDetailsModal
+        isOpen={!!selectedFormForAssignedModal}
+        onClose={() => setSelectedFormForAssignedModal(null)}
+        formName={selectedFormForAssignedModal?.name || ''}
       />
     </div>
   );

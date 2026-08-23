@@ -15,6 +15,7 @@ import {
   SelectedHierarchyState,
   getHierarchyScopeSummary,
 } from '../../../../../components/HierarchyScopePickerModal';
+import { AssignedToDetailsModal } from '../../../../../components/AssignedToDetailsModal';
 import {
   FormFieldInstance,
   FormSectionInstance,
@@ -48,6 +49,7 @@ export default function FormBuilderEditorPage() {
   const [versionStatus, setVersionStatus] = useState<'DRAFT' | 'PUBLISHED'>('DRAFT');
   const [isSaved, setIsSaved] = useState(true);
   const [showScopePickerModal, setShowScopePickerModal] = useState(false);
+  const [showAssignedModal, setShowAssignedModal] = useState(false);
   const [hierarchyScopeState, setHierarchyScopeState] = useState<SelectedHierarchyState>({
     isEntireOrg: true,
     selectedHeadOfficeIds: [],
@@ -703,16 +705,21 @@ export default function FormBuilderEditorPage() {
               <span>{isSaved ? '✓ Saved' : '● Unsaved changes'}</span>
               <span>•</span>
               <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium">
-                <span>Scope:</span>
-                <span className="font-semibold text-slate-900 dark:text-white truncate max-w-xs sm:max-w-sm">
+                <span>Assigned To:</span>
+                <button
+                  type="button"
+                  onClick={() => setShowAssignedModal(true)}
+                  className="font-semibold text-slate-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 underline truncate max-w-xs sm:max-w-sm cursor-pointer"
+                  title="See where this form is assigned"
+                >
                   {getHierarchyScopeSummary(hierarchyScopeState)}
-                </span>
+                </button>
                 <button
                   type="button"
                   onClick={() => setShowScopePickerModal(true)}
-                  className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline ml-1"
+                  className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline ml-1 cursor-pointer"
                 >
-                  Manage
+                  Change
                 </button>
               </span>
             </div>
@@ -1442,9 +1449,17 @@ export default function FormBuilderEditorPage() {
           setIsSaved(false);
           setToast({
             id: `toast_${Date.now()}`,
-            text: `Scope updated to "${getHierarchyScopeSummary(newState)}"`,
+            text: `Assignment updated to "${getHierarchyScopeSummary(newState)}"`,
           });
         }}
+      />
+
+      {/* School-Friendly Assigned To Details Modal Popup */}
+      <AssignedToDetailsModal
+        isOpen={showAssignedModal}
+        onClose={() => setShowAssignedModal(false)}
+        formName={formName}
+        scopeState={hierarchyScopeState}
       />
     </div>
   );
