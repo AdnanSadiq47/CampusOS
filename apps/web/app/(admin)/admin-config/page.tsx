@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import {
   CONFIG_CATEGORIES,
@@ -8,96 +8,66 @@ import {
   ConfigCategoryMeta,
   ConfigItem,
 } from '../../../lib/admin-config-registry';
-
-const FAVORITES_STORAGE_KEY = 'campusos_admin_config_favorites';
-const RECENTS_STORAGE_KEY = 'campusos_admin_config_recents';
-const QUICK_ACTIONS_STORAGE_KEY = 'campusos_admin_config_quick_actions';
+import { useAdminPreferences, RECENTS_STORAGE_KEY } from '../../../lib/use-admin-preferences';
 
 export default function AdminConfigHomePage() {
-
-  // State
+  // Search & Navigation State
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [activeCategoryDetail, setActiveCategoryDetail] = useState<ConfigCategoryMeta | null>(null);
-
-  // User Preferences State
-  const [favorites, setFavorites] = useState<string[]>([]);
-  const [recents, setRecents] = useState<string[]>([]);
-  const [quickActions, setQuickActions] = useState<string[]>([
-    'org_schools',
-    'org_branches',
-    'org_regions',
-    'org_head_offices',
-    'org_school_types',
-  ]);
   const [isCustomizeQuickActionsOpen, setIsCustomizeQuickActionsOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Load User Preferences on Mount
-  useEffect(() => {
-    try {
-      const savedFavs = localStorage.getItem(FAVORITES_STORAGE_KEY);
-      if (savedFavs) setFavorites(JSON.parse(savedFavs));
-
-      const savedRecents = localStorage.getItem(RECENTS_STORAGE_KEY);
-      if (savedRecents) setRecents(JSON.parse(savedRecents));
-
-      const savedQuick = localStorage.getItem(QUICK_ACTIONS_STORAGE_KEY);
-      if (savedQuick) setQuickActions(JSON.parse(savedQuick));
-    } catch {
-      // Ignore localStorage errors
-    }
-  }, []);
+  // Shared User Preferences
+  const {
+    favorites,
+    quickActions,
+    authorizedFavorites,
+    authorizedQuickActions,
+    authorizedRecents,
+    toggleFavorite,
+    toggleQuickAction,
+    reorderQuickActions,
+    recordRecent,
+    hasPermissionForItem,
+  } = useAdminPreferences();
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 2500);
   };
 
-  // Toggle Favorite
-  const toggleFavorite = (itemId: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    setFavorites((prev) => {
-      let updated: string[];
-      if (prev.includes(itemId)) {
-        updated = prev.filter((id) => id !== itemId);
-        showToast('Removed from favorites');
-      } else {
-        updated = [...prev, itemId];
-        showToast('Added to favorites');
-      }
-      try {
-        localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(updated));
-      } catch {}
-      return updated;
-    });
-  };
-
-  // Record Recent Navigation
   const handleItemClick = (item: ConfigItem) => {
     if (!item.isImplemented) return;
-    setRecents((prev) => {
-      const filtered = prev.filter((id) => id !== item.id);
-      const updated = [item.id, ...filtered].slice(0, 6);
-      try {
-        localStorage.setItem(RECENTS_STORAGE_KEY, JSON.stringify(updated));
-      } catch {}
-      return updated;
-    });
+    recordRecent(item.id);
   };
 
-  // Save Quick Actions
-  const handleToggleQuickAction = (itemId: string) => {
-    setQuickActions((prev) => {
-      const updated = prev.includes(itemId)
-        ? prev.filter((id) => id !== itemId)
-        : [...prev, itemId];
-      try {
-        localStorage.setItem(QUICK_ACTIONS_STORAGE_KEY, JSON.stringify(updated));
-      } catch {}
-      return updated;
-    });
+  const handleToggleFavWithToast = (itemId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const isNowFav = toggleFavorite(itemId);
+    const item = CONFIG_REGISTRY.find((i) => i.id === itemId);
+    showToast(isNowFav ? `★ Added ${item?.name || 'item'} to Favorites` : `Removed ${item?.name || 'item'} from Favorites`);
+  };
+
+  // Move Quick Action Up
+  const handleMoveQuickActionUp = (index: number) => {
+    if (index <= 0) return;
+    const updated = [...quickActions];
+    const temp = updated[index - 1]!;
+    updated[index - 1] = updated[index]!;
+    updated[index] = temp;
+    reorderQuickActions(updated);
+  };
+
+  // Move Quick Action Down
+  const handleMoveQuickActionDown = (index: number) => {
+    if (index >= quickActions.length - 1) return;
+    const updated = [...quickActions];
+    const temp = updated[index + 1]!;
+    updated[index + 1] = updated[index]!;
+    updated[index] = temp;
+    reorderQuickActions(updated);
   };
 
   // Filtered Items based on Search and Category
@@ -130,25 +100,6 @@ export default function AdminConfigHomePage() {
     }).filter((cat) => cat.items.length > 0);
   }, [filteredItems]);
 
-  // Favorite Items list
-  const favoriteItems = useMemo(() => {
-    return CONFIG_REGISTRY.filter((item) => favorites.includes(item.id));
-  }, [favorites]);
-
-  // Recent Items list
-  const recentItems = useMemo(() => {
-    return recents
-      .map((id) => CONFIG_REGISTRY.find((item) => item.id === id))
-      .filter(Boolean) as ConfigItem[];
-  }, [recents]);
-
-  // Quick Action Items list
-  const quickActionItems = useMemo(() => {
-    return quickActions
-      .map((id) => CONFIG_REGISTRY.find((item) => item.id === id))
-      .filter(Boolean) as ConfigItem[];
-  }, [quickActions]);
-
   // Global KPIs
   const totalSettingsCount = CONFIG_REGISTRY.length;
   const implementedCount = CONFIG_REGISTRY.filter((i) => i.isImplemented).length;
@@ -174,7 +125,7 @@ export default function AdminConfigHomePage() {
             Administration Configuration
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 max-w-2xl">
-            Manage organization structure, master data, access settings and system configuration from one place.
+            Manage organization structure, master data, access settings and system configuration from one central workspace.
           </p>
         </div>
 
@@ -195,13 +146,13 @@ export default function AdminConfigHomePage() {
         </div>
       </div>
 
-      {/* ── 2. Quick Actions & Customizable Shortcuts Bar ──────────── */}
+      {/* ── 2. Quick Shortcuts Bar ─────────────────────────────────── */}
       <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="text-sm">⚡</span>
             <h2 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
-              Quick Shortcuts
+              Quick Shortcuts ({authorizedQuickActions.length})
             </h2>
           </div>
           <button
@@ -213,9 +164,9 @@ export default function AdminConfigHomePage() {
           </button>
         </div>
 
-        {quickActionItems.length > 0 ? (
+        {authorizedQuickActions.length > 0 ? (
           <div className="flex flex-wrap items-center gap-2">
-            {quickActionItems.map((item) => (
+            {authorizedQuickActions.map((item) => (
               <Link
                 key={item.id}
                 href={item.route}
@@ -244,7 +195,7 @@ export default function AdminConfigHomePage() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search configuration settings, e.g. Schools, Branches, Fee Types, Departments, Biometric..."
+            placeholder="Search configuration settings, e.g. Schools, Branches, Countries, Areas, Postal Codes, Security..."
             className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm"
           />
           {searchQuery && (
@@ -303,19 +254,19 @@ export default function AdminConfigHomePage() {
         </div>
       </div>
 
-      {/* ── 4. Favorites & Recents Section (If Present) ─────────────── */}
+      {/* ── 4. Favorites & Recents Section ─────────────────────────── */}
       {!searchQuery && selectedCategory === 'ALL' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Favorites */}
           <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-2.5">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
               <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5 uppercase tracking-wider">
-                ⭐ Starred Favorites ({favoriteItems.length})
+                ⭐ Starred Favorites ({authorizedFavorites.length})
               </span>
             </div>
-            {favoriteItems.length > 0 ? (
+            {authorizedFavorites.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {favoriteItems.map((item) => (
+                {authorizedFavorites.map((item) => (
                   <div
                     key={item.id}
                     className="flex items-center justify-between p-2.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 hover:border-indigo-200 transition-colors"
@@ -336,7 +287,7 @@ export default function AdminConfigHomePage() {
                     </div>
                     <button
                       type="button"
-                      onClick={(e) => toggleFavorite(item.id, e)}
+                      onClick={(e) => handleToggleFavWithToast(item.id, e)}
                       className="text-amber-500 hover:opacity-75 text-sm cursor-pointer ml-1"
                       title="Remove from favorites"
                     >
@@ -346,9 +297,11 @@ export default function AdminConfigHomePage() {
                 ))}
               </div>
             ) : (
-              <p className="text-xs text-slate-400 py-3 text-center">
-                No favorites starred yet. Click the star icon next to any setting to pin it here.
-              </p>
+              <div className="py-4 text-center">
+                <p className="text-xs text-slate-400">
+                  You have no starred favorites yet. Click the ☆ icon on any page header or list item to pin it here.
+                </p>
+              </div>
             )}
           </div>
 
@@ -356,24 +309,26 @@ export default function AdminConfigHomePage() {
           <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-2.5">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
               <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5 uppercase tracking-wider">
-                🕒 Recently Visited
+                🕒 Recently Visited ({authorizedRecents.length})
               </span>
-              {recentItems.length > 0 && (
+              {authorizedRecents.length > 0 && (
                 <button
                   type="button"
                   onClick={() => {
-                    setRecents([]);
-                    localStorage.removeItem(RECENTS_STORAGE_KEY);
+                    try {
+                      localStorage.removeItem(RECENTS_STORAGE_KEY);
+                    } catch {}
+                    window.location.reload();
                   }}
                   className="text-[10px] text-slate-400 hover:text-rose-500 cursor-pointer"
                 >
-                  Clear
+                  Clear History
                 </button>
               )}
             </div>
-            {recentItems.length > 0 ? (
+            {authorizedRecents.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {recentItems.map((item) => (
+                {authorizedRecents.map((item) => (
                   <Link
                     key={item.id}
                     href={item.route}
@@ -391,9 +346,11 @@ export default function AdminConfigHomePage() {
                 ))}
               </div>
             ) : (
-              <p className="text-xs text-slate-400 py-3 text-center">
-                Your recently visited configuration pages will appear here automatically.
-              </p>
+              <div className="py-4 text-center">
+                <p className="text-xs text-slate-400">
+                  No recently visited configuration pages yet. Pages you visit will appear here automatically.
+                </p>
+              </div>
             )}
           </div>
         </div>
@@ -443,7 +400,7 @@ export default function AdminConfigHomePage() {
                       <div className="flex items-center gap-2 overflow-hidden pr-2">
                         <button
                           type="button"
-                          onClick={(e) => toggleFavorite(item.id, e)}
+                          onClick={(e) => handleToggleFavWithToast(item.id, e)}
                           className={`text-xs cursor-pointer ${
                             favorites.includes(item.id) ? 'text-amber-500' : 'text-slate-300 dark:text-slate-600 hover:text-amber-400'
                           }`}
@@ -451,18 +408,17 @@ export default function AdminConfigHomePage() {
                         >
                           ★
                         </button>
+                        <span>{item.icon}</span>
                         {item.isImplemented ? (
                           <Link
                             href={item.route}
                             onClick={() => handleItemClick(item)}
-                            className="font-medium text-slate-700 dark:text-slate-300 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 truncate"
+                            className="text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 font-medium truncate"
                           >
                             {item.name}
                           </Link>
                         ) : (
-                          <span className="font-normal text-slate-500 dark:text-slate-500 truncate">
-                            {item.name}
-                          </span>
+                          <span className="text-slate-400 truncate">{item.name}</span>
                         )}
                       </div>
 
@@ -470,12 +426,12 @@ export default function AdminConfigHomePage() {
                         <Link
                           href={item.route}
                           onClick={() => handleItemClick(item)}
-                          className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="opacity-0 group-hover:opacity-100 text-indigo-600 dark:text-indigo-400 font-semibold text-[10px] transition-opacity"
                         >
                           Open →
                         </Link>
                       ) : (
-                        <span className="text-[9px] font-medium text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-400">
                           Soon
                         </span>
                       )}
@@ -484,15 +440,14 @@ export default function AdminConfigHomePage() {
                 </div>
               </div>
 
-              {/* Card Footer Button */}
-              <div className="p-3 bg-slate-50/70 dark:bg-slate-950/40 border-t border-slate-100 dark:border-slate-800">
+              {/* Card Footer */}
+              <div className="p-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50 flex items-center justify-between">
                 <button
                   type="button"
                   onClick={() => setActiveCategoryDetail(cat)}
-                  className="w-full py-1.5 rounded-lg text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                  className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
                 >
-                  <span>Explore All ({cat.totalCount})</span>
-                  <span>→</span>
+                  View All {cat.totalCount} Settings →
                 </button>
               </div>
             </div>
@@ -526,7 +481,7 @@ export default function AdminConfigHomePage() {
                       <td className="py-3 px-4 text-center">
                         <button
                           type="button"
-                          onClick={() => toggleFavorite(item.id)}
+                          onClick={(e) => handleToggleFavWithToast(item.id, e)}
                           className={`text-sm cursor-pointer ${isFav ? 'text-amber-500' : 'text-slate-300 dark:text-slate-600 hover:text-amber-400'}`}
                           title="Toggle favorite"
                         >
@@ -623,7 +578,7 @@ export default function AdminConfigHomePage() {
                     <div className="flex items-start gap-3">
                       <button
                         type="button"
-                        onClick={() => toggleFavorite(item.id)}
+                        onClick={(e) => handleToggleFavWithToast(item.id, e)}
                         className={`text-base cursor-pointer mt-0.5 ${
                           isFav ? 'text-amber-500' : 'text-slate-300 dark:text-slate-600 hover:text-amber-400'
                         }`}
@@ -682,57 +637,120 @@ export default function AdminConfigHomePage() {
         </div>
       )}
 
-      {/* ── 7. Customize Quick Actions Modal ───────────────────────── */}
+      {/* ── 7. Customize Quick Actions Modal (Reorder, Add, Remove) ─── */}
       {isCustomizeQuickActionsOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="relative z-10 w-full max-w-lg bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[80vh]">
-            <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+          <div className="relative z-10 w-full max-w-xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-950/50">
               <div>
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white">Customize Quick Shortcuts</h3>
-                <p className="text-xs text-slate-500">Select which pages you want pinned to your shortcuts bar.</p>
+                <p className="text-xs text-slate-500">Add, remove, and reorder shortcuts pinned to your top navigation bar.</p>
               </div>
               <button
                 type="button"
                 onClick={() => setIsCustomizeQuickActionsOpen(false)}
-                className="p-1 text-slate-400 hover:text-slate-700"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
-            <div className="p-5 space-y-2 overflow-y-auto max-h-[50vh]">
-              {CONFIG_REGISTRY.filter((i) => i.isImplemented).map((item) => {
-                const isChecked = quickActions.includes(item.id);
-                return (
-                  <label
-                    key={item.id}
-                    className="flex items-center justify-between p-3 rounded-xl border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <span>{item.icon}</span>
-                      <div>
-                        <p className="text-xs font-bold text-slate-800 dark:text-slate-200">{item.name}</p>
-                        <p className="text-[10px] text-slate-400">{item.description}</p>
+            <div className="p-5 space-y-5 overflow-y-auto max-h-[60vh] text-xs">
+              {/* Section 1: Active Shortcuts with Reordering */}
+              <div className="space-y-2">
+                <h4 className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                  <span>📌 Active Pinned Shortcuts ({authorizedQuickActions.length})</span>
+                </h4>
+                <p className="text-[11px] text-slate-500">
+                  Use the ↑ / ↓ buttons to rearrange order on your shortcuts bar.
+                </p>
+
+                <div className="space-y-1.5 pt-1">
+                  {authorizedQuickActions.map((item, idx) => (
+                    <div
+                      key={item.id}
+                      className="flex items-center justify-between p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <span className="font-mono text-[10px] font-bold text-slate-400 w-4">{idx + 1}.</span>
+                        <span className="text-base">{item.icon}</span>
+                        <div>
+                          <p className="font-bold text-slate-900 dark:text-white">{item.name}</p>
+                          <p className="text-[10px] text-slate-400">{item.description}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          disabled={idx === 0}
+                          onClick={() => handleMoveQuickActionUp(idx)}
+                          className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed font-bold"
+                          title="Move up"
+                        >
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          disabled={idx === authorizedQuickActions.length - 1}
+                          onClick={() => handleMoveQuickActionDown(idx)}
+                          className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed font-bold"
+                          title="Move down"
+                        >
+                          ↓
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => toggleQuickAction(item.id)}
+                          className="px-2 py-1 rounded-lg border border-rose-200 dark:border-rose-900/60 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs ml-1"
+                          title="Remove shortcut"
+                        >
+                          ✕
+                        </button>
                       </div>
                     </div>
-                    <input
-                      type="checkbox"
-                      checked={isChecked}
-                      onChange={() => handleToggleQuickAction(item.id)}
-                      className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                    />
-                  </label>
-                );
-              })}
+                  ))}
+                </div>
+              </div>
+
+              {/* Section 2: Available Settings to Add */}
+              <div className="space-y-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <h4 className="font-bold text-slate-900 dark:text-white">
+                  ➕ Available Pages to Pin
+                </h4>
+                <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
+                  {CONFIG_REGISTRY.filter((i) => i.isImplemented && !quickActions.includes(i.id) && hasPermissionForItem(i)).map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex items-center justify-between p-2 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/30 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span>{item.icon}</span>
+                        <div>
+                          <p className="font-semibold text-slate-800 dark:text-slate-200">{item.name}</p>
+                          <p className="text-[10px] text-slate-400">{item.description}</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => toggleQuickAction(item.id)}
+                        className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 text-xs font-semibold cursor-pointer border border-indigo-200 dark:border-indigo-800"
+                      >
+                        + Pin
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
 
             <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex justify-end">
               <button
                 type="button"
                 onClick={() => setIsCustomizeQuickActionsOpen(false)}
-                className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-sm transition-colors cursor-pointer"
+                className="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-sm transition-colors cursor-pointer"
               >
-                Done
+                Save & Close
               </button>
             </div>
           </div>

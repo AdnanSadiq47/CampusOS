@@ -1,7 +1,10 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { useAdminPreferences, findConfigItemByRoute } from '../lib/use-admin-preferences';
+import { CONFIG_REGISTRY, ConfigItem } from '../lib/admin-config-registry';
 
 export interface CategoryNavItem {
   label: string;
@@ -16,11 +19,13 @@ interface AdminConfigPageHeaderProps {
   groupHref?: string;
   title: string;
   description: string;
+  configItemId?: string;
   categoryNav?: CategoryNavItem[];
   actionButtonText?: string;
   onAction?: () => void;
   secondaryActionText?: string;
   onSecondaryAction?: () => void;
+  showPersonalization?: boolean;
   children?: React.ReactNode;
 }
 
@@ -65,13 +70,68 @@ export function AdminConfigPageHeader({
   groupHref,
   title,
   description,
+  configItemId,
   categoryNav,
   actionButtonText,
   onAction,
   secondaryActionText,
   onSecondaryAction,
+  showPersonalization = true,
   children,
 }: AdminConfigPageHeaderProps) {
+  const pathname = usePathname();
+  const {
+    favorites,
+    quickActions,
+    toggleFavorite,
+    toggleQuickAction,
+    recordRecent,
+  } = useAdminPreferences();
+
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(null), 2500);
+  };
+
+  // Find matching ConfigItem from Registry
+  const configItem: ConfigItem | undefined = useMemo(() => {
+    if (configItemId) {
+      return CONFIG_REGISTRY.find((item) => item.id === configItemId);
+    }
+    if (pathname) {
+      const match = findConfigItemByRoute(pathname);
+      if (match) return match;
+    }
+    // Fallback match by name
+    return CONFIG_REGISTRY.find(
+      (item) => item.name.toLowerCase() === title.toLowerCase()
+    );
+  }, [configItemId, pathname, title]);
+
+  // Record visit in Recently Used automatically
+  useEffect(() => {
+    if (configItem) {
+      recordRecent(configItem.id);
+    }
+  }, [configItem, recordRecent]);
+
+  const isFavorited = configItem ? favorites.includes(configItem.id) : false;
+  const isInQuickActions = configItem ? quickActions.includes(configItem.id) : false;
+
+  const handleFavoriteClick = () => {
+    if (!configItem) return;
+    const nextState = toggleFavorite(configItem.id);
+    showToast(nextState ? `★ Added ${configItem.name} to Favorites` : `Removed ${configItem.name} from Favorites`);
+  };
+
+  const handleQuickActionClick = () => {
+    if (!configItem) return;
+    const nextState = toggleQuickAction(configItem.id);
+    showToast(nextState ? `⚡ Added ${configItem.name} to Quick Actions` : `Removed ${configItem.name} from Quick Actions`);
+  };
+
   const resolvedGroupHref =
     groupHref ||
     (GROUP_TO_CATEGORY_KEY[group]
@@ -80,6 +140,13 @@ export function AdminConfigPageHeader({
 
   return (
     <div className="space-y-4 border-b border-slate-200 dark:border-slate-800 pb-5">
+      {/* Toast popup */}
+      {toastMsg && (
+        <div className="fixed bottom-6 right-6 z-50 px-4 py-2.5 rounded-xl shadow-xl bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-xs font-semibold flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2">
+          <span>{toastMsg}</span>
+        </div>
+      )}
+
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           {/* Clickable Breadcrumbs */}
@@ -101,9 +168,49 @@ export function AdminConfigPageHeader({
             <span className="text-slate-900 dark:text-slate-100 font-bold">{title}</span>
           </nav>
 
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
-            {title}
-          </h1>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+              {title}
+            </h1>
+
+            {/* Personalization Badges (Favorites & Quick Actions) */}
+            {showPersonalization && configItem && (
+              <div className="flex items-center gap-1.5 pt-0.5">
+                {/* Favorite Toggle Button */}
+                <button
+                  type="button"
+                  onClick={handleFavoriteClick}
+                  title={isFavorited ? 'Remove from Favorites' : 'Add to Favorites'}
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer border ${
+                    isFavorited
+                      ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800 hover:bg-amber-100 shadow-sm'
+                      : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:text-amber-600 hover:border-amber-300 dark:hover:border-amber-700'
+                  }`}
+                >
+                  <span className={isFavorited ? 'text-amber-500' : 'text-slate-400'}>
+                    {isFavorited ? '★' : '☆'}
+                  </span>
+                  <span>{isFavorited ? 'Favorited' : 'Add to Favorites'}</span>
+                </button>
+
+                {/* Quick Action Toggle Button */}
+                <button
+                  type="button"
+                  onClick={handleQuickActionClick}
+                  title={isInQuickActions ? 'Remove from Quick Actions' : 'Add to Quick Actions'}
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer border ${
+                    isInQuickActions
+                      ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 shadow-sm'
+                      : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:text-indigo-600 hover:border-indigo-300 dark:hover:border-indigo-700'
+                  }`}
+                >
+                  <span className={isInQuickActions ? 'text-indigo-500' : 'text-slate-400'}>⚡</span>
+                  <span>{isInQuickActions ? 'In Quick Actions' : 'Add to Quick Actions'}</span>
+                </button>
+              </div>
+            )}
+          </div>
+
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
             {description}
           </p>
@@ -140,7 +247,11 @@ export function AdminConfigPageHeader({
         <div className="pt-2">
           <div className="inline-flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-x-auto max-w-full">
             {categoryNav.map((item) => {
-              const isActive = item.active ?? (item.label.toLowerCase() === title.toLowerCase());
+              const isActive =
+                item.active ??
+                (pathname
+                  ? pathname.replace(/\/$/, '') === item.href.replace(/\/$/, '')
+                  : item.label.toLowerCase() === title.toLowerCase());
               return (
                 <Link
                   key={item.href}
