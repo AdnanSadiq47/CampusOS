@@ -97,6 +97,8 @@ Agents must search for and reject these patterns when found in new or modified c
 | Hard delete without `SYSTEM_HARD_DELETE` permission and audit | ❌ FORBIDDEN |
 | Storing raw password, hash, or token in audit log | ❌ FORBIDDEN (Must redact) |
 | Mutation endpoint without structured audit log emission | ❌ FORBIDDEN |
+| Running `next build` while `next dev` is running | ❌ FORBIDDEN (Corrupts .next cache) |
+| Declaring UI readiness based only on HTML HTTP 200 | ❌ FORBIDDEN (Must verify CSS/JS via `dev:check`) |
 
 ---
 

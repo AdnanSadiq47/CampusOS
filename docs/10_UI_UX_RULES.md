@@ -311,3 +311,11 @@ Administration Configuration forms must consume master data from their authorita
 * **Clear State Indicators**: Inactive records are clearly distinguished with neutral/gray badges and reduced visual emphasis, never discarded from view unless explicitly filtered out.
 * **Explicit Lifecycle Terminology**: Use domain-appropriate lifecycle terms: `Deactivate`, `Archive`, `Cancel`, `Reverse`, `Revoke`.
 
+---
+
+## 16. Development Server Static Asset Verification Invariant
+
+* **Zero Unstyled HTML Standard**: The development UI must never be left in a broken or raw unstyled HTML state.
+* **No Dev/Build Cache Collision**: Never run `next build` while `next dev` is actively running on the same directory.
+* **Mandatory Static Asset Verification (`pnpm web:dev:check`)**: Verify that both the HTML document and all referenced CSS stylesheet bundles and JavaScript chunks return HTTP 200 before claiming the UI is ready for review.
+

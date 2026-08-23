@@ -16,6 +16,7 @@
     "test": "turbo run test",
     "test:security": "turbo run test:security",
     "typecheck": "turbo run typecheck",
+    "web:dev:check": "pnpm --filter @campus-os/web dev:check",
     "clean": "turbo run clean && rm -rf node_modules",
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\""
   },

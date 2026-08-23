@@ -125,4 +125,12 @@
 - RULE 20: Navigation visibility and backend authorization must derive from the same permission model.
 - RULE 21: Frontend filters are never security boundaries.
 - RULE 22: Dashboards, reports, exports, and background jobs must respect the same scope as interactive pages.
+- RULE 23: Never run `next build` while `next dev` is running on the same `.next` directory. Always verify CSS/JS chunk HTTP 200 availability with `pnpm web:dev:check` before confirming UI readiness.
+
+---
+
+## 11. Next.js Dev Server Lifecycle & Static Asset Verification Invariant
+
+43. **No Concurrent Dev/Build State Corruption**: Running `next build` while `next dev` is running overwrites development static manifests, corrupting the in-memory dev server and causing all stylesheet/chunk requests to 404. If a production build is executed, the dev server must be stopped, `.next` reinitialized/cleaned, `next dev` restarted, and static assets verified.
+44. **Mandatory Asset Verification (`pnpm web:dev:check`)**: Never declare UI readiness based solely on page-level HTTP 200 responses. Agents must execute the static asset verification script (`pnpm web:dev:check`) to confirm that all CSS bundles (>10KB) and JS chunks return HTTP 200.
 
