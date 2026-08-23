@@ -1,4 +1,27 @@
-export type ConfigScopeType = 'ALL_CAMPUSES' | 'SELECTED_CAMPUSES';
+export type ConfigScopeType = 'ALL_CAMPUSES' | 'SELECTED_CAMPUSES' | 'LOCAL_SCOPE';
+export type ConfigOwnerType = 'PLATFORM' | 'HEAD_OFFICE' | 'REGION' | 'SCHOOL' | 'CAMPUS';
+export type ConfigSourceOrigin = 'INHERITED' | 'LOCAL' | 'PLATFORM_DEFAULT';
+export type VisibilityPolicy = 'FULL_DETAIL' | 'SUMMARY_ONLY' | 'HIDDEN';
+
+export interface EffectiveGovernanceMetadata {
+  ownerType: ConfigOwnerType;
+  ownerId?: string | null;
+  ownerName?: string | null;
+  applyTo: ConfigScopeType;
+  sourceOrigin: ConfigSourceOrigin;
+  isInherited: boolean;
+  canEdit: boolean;
+  canToggleStatus: boolean;
+  canAssign: boolean;
+}
+
+export interface EffectiveConfigQueryDto {
+  campusId?: string;
+  includeInactive?: boolean;
+  searchQuery?: string;
+  ownerType?: ConfigOwnerType;
+  sourceOrigin?: ConfigSourceOrigin;
+}
 
 // ── 1. ACADEMIC YEARS ────────────────────────────────────────────────────────
 export interface CreateAcademicYearDto {
@@ -9,6 +32,8 @@ export interface CreateAcademicYearDto {
   isCurrent?: boolean;
   sortOrder?: number;
   description?: string;
+  ownerType?: ConfigOwnerType;
+  ownerId?: string;
   applyTo: ConfigScopeType;
   branchIds?: string[];
   isActive?: boolean;
@@ -22,12 +47,14 @@ export interface UpdateAcademicYearDto {
   isCurrent?: boolean;
   sortOrder?: number;
   description?: string;
+  ownerType?: ConfigOwnerType;
+  ownerId?: string;
   applyTo?: ConfigScopeType;
   branchIds?: string[];
   isActive?: boolean;
 }
 
-export interface AcademicYearListItemDto {
+export interface AcademicYearListItemDto extends Partial<EffectiveGovernanceMetadata> {
   id: string;
   organizationId: string;
   name: string;
@@ -37,9 +64,17 @@ export interface AcademicYearListItemDto {
   isCurrent: boolean;
   sortOrder: number;
   description?: string | null;
+  ownerType?: ConfigOwnerType;
+  ownerId?: string | null;
+  ownerName?: string | null;
   applyTo: ConfigScopeType;
   branchIds?: string[];
   branchNames?: string[];
+  sourceOrigin?: ConfigSourceOrigin;
+  isInherited?: boolean;
+  canEdit?: boolean;
+  canToggleStatus?: boolean;
+  canAssign?: boolean;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -52,6 +87,8 @@ export interface CreateBoardDto {
   code?: string;
   sortOrder?: number;
   description?: string;
+  ownerType?: ConfigOwnerType;
+  ownerId?: string;
   applyTo: ConfigScopeType;
   branchIds?: string[];
   isActive?: boolean;
@@ -63,12 +100,14 @@ export interface UpdateBoardDto {
   code?: string;
   sortOrder?: number;
   description?: string;
+  ownerType?: ConfigOwnerType;
+  ownerId?: string;
   applyTo?: ConfigScopeType;
   branchIds?: string[];
   isActive?: boolean;
 }
 
-export interface BoardListItemDto {
+export interface BoardListItemDto extends Partial<EffectiveGovernanceMetadata> {
   id: string;
   organizationId: string;
   name: string;
@@ -76,9 +115,17 @@ export interface BoardListItemDto {
   code?: string | null;
   sortOrder: number;
   description?: string | null;
+  ownerType?: ConfigOwnerType;
+  ownerId?: string | null;
+  ownerName?: string | null;
   applyTo: ConfigScopeType;
   branchIds?: string[];
   branchNames?: string[];
+  sourceOrigin?: ConfigSourceOrigin;
+  isInherited?: boolean;
+  canEdit?: boolean;
+  canToggleStatus?: boolean;
+  canAssign?: boolean;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -90,6 +137,8 @@ export interface CreateAcademicLevelDto {
   shortName?: string;
   sortOrder?: number;
   description?: string;
+  ownerType?: ConfigOwnerType;
+  ownerId?: string;
   applyTo: ConfigScopeType;
   branchIds?: string[];
   isActive?: boolean;
@@ -100,22 +149,32 @@ export interface UpdateAcademicLevelDto {
   shortName?: string;
   sortOrder?: number;
   description?: string;
+  ownerType?: ConfigOwnerType;
+  ownerId?: string;
   applyTo?: ConfigScopeType;
   branchIds?: string[];
   isActive?: boolean;
 }
 
-export interface AcademicLevelListItemDto {
+export interface AcademicLevelListItemDto extends Partial<EffectiveGovernanceMetadata> {
   id: string;
   organizationId: string;
   name: string;
   shortName?: string | null;
   sortOrder: number;
   description?: string | null;
+  ownerType?: ConfigOwnerType;
+  ownerId?: string | null;
+  ownerName?: string | null;
   applyTo: ConfigScopeType;
   branchIds?: string[];
   branchNames?: string[];
   classCount?: number;
+  sourceOrigin?: ConfigSourceOrigin;
+  isInherited?: boolean;
+  canEdit?: boolean;
+  canToggleStatus?: boolean;
+  canAssign?: boolean;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -138,6 +197,8 @@ export interface CreateSubjectDto {
   creditWeight?: number;
   sortOrder?: number;
   description?: string;
+  ownerType?: ConfigOwnerType;
+  ownerId?: string;
   applyTo: ConfigScopeType;
   branchIds?: string[];
   isActive?: boolean;
@@ -156,12 +217,14 @@ export interface UpdateSubjectDto {
   creditWeight?: number;
   sortOrder?: number;
   description?: string;
+  ownerType?: ConfigOwnerType;
+  ownerId?: string;
   applyTo?: ConfigScopeType;
   branchIds?: string[];
   isActive?: boolean;
 }
 
-export interface SubjectListItemDto {
+export interface SubjectListItemDto extends Partial<EffectiveGovernanceMetadata> {
   id: string;
   organizationId: string;
   name: string;
@@ -176,9 +239,17 @@ export interface SubjectListItemDto {
   creditWeight?: number | null;
   sortOrder: number;
   description?: string | null;
+  ownerType?: ConfigOwnerType;
+  ownerId?: string | null;
+  ownerName?: string | null;
   applyTo: ConfigScopeType;
   branchIds?: string[];
   branchNames?: string[];
+  sourceOrigin?: ConfigSourceOrigin;
+  isInherited?: boolean;
+  canEdit?: boolean;
+  canToggleStatus?: boolean;
+  canAssign?: boolean;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -202,6 +273,8 @@ export interface CreateClassDto {
   optionalSubjectIds?: string[];
   sortOrder?: number;
   description?: string;
+  ownerType?: ConfigOwnerType;
+  ownerId?: string;
   applyTo: ConfigScopeType;
   branchIds?: string[];
   isActive?: boolean;
@@ -218,12 +291,14 @@ export interface UpdateClassDto {
   optionalSubjectIds?: string[];
   sortOrder?: number;
   description?: string;
+  ownerType?: ConfigOwnerType;
+  ownerId?: string;
   applyTo?: ConfigScopeType;
   branchIds?: string[];
   isActive?: boolean;
 }
 
-export interface ClassListItemDto {
+export interface ClassListItemDto extends Partial<EffectiveGovernanceMetadata> {
   id: string;
   organizationId: string;
   levelId: string;
@@ -240,9 +315,17 @@ export interface ClassListItemDto {
   totalSubjectsCount?: number;
   sortOrder: number;
   description?: string | null;
+  ownerType?: ConfigOwnerType;
+  ownerId?: string | null;
+  ownerName?: string | null;
   applyTo: ConfigScopeType;
   branchIds?: string[];
   branchNames?: string[];
+  sourceOrigin?: ConfigSourceOrigin;
+  isInherited?: boolean;
+  canEdit?: boolean;
+  canToggleStatus?: boolean;
+  canAssign?: boolean;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -253,6 +336,8 @@ export interface CreateSectionDto {
   name: string;
   sortOrder?: number;
   description?: string;
+  ownerType?: ConfigOwnerType;
+  ownerId?: string;
   applyTo: ConfigScopeType;
   branchIds?: string[];
   isActive?: boolean;
@@ -262,20 +347,30 @@ export interface UpdateSectionDto {
   name?: string;
   sortOrder?: number;
   description?: string;
+  ownerType?: ConfigOwnerType;
+  ownerId?: string;
   applyTo?: ConfigScopeType;
   branchIds?: string[];
   isActive?: boolean;
 }
 
-export interface SectionListItemDto {
+export interface SectionListItemDto extends Partial<EffectiveGovernanceMetadata> {
   id: string;
   organizationId: string;
   name: string;
   sortOrder: number;
   description?: string | null;
+  ownerType?: ConfigOwnerType;
+  ownerId?: string | null;
+  ownerName?: string | null;
   applyTo: ConfigScopeType;
   branchIds?: string[];
   branchNames?: string[];
+  sourceOrigin?: ConfigSourceOrigin;
+  isInherited?: boolean;
+  canEdit?: boolean;
+  canToggleStatus?: boolean;
+  canAssign?: boolean;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -287,6 +382,8 @@ export interface CreateLanguageDto {
   code?: string;
   sortOrder?: number;
   description?: string;
+  ownerType?: ConfigOwnerType;
+  ownerId?: string;
   applyTo: ConfigScopeType;
   branchIds?: string[];
   isActive?: boolean;
@@ -297,21 +394,31 @@ export interface UpdateLanguageDto {
   code?: string;
   sortOrder?: number;
   description?: string;
+  ownerType?: ConfigOwnerType;
+  ownerId?: string;
   applyTo?: ConfigScopeType;
   branchIds?: string[];
   isActive?: boolean;
 }
 
-export interface LanguageListItemDto {
+export interface LanguageListItemDto extends Partial<EffectiveGovernanceMetadata> {
   id: string;
   organizationId: string;
   name: string;
   code?: string | null;
   sortOrder: number;
   description?: string | null;
+  ownerType?: ConfigOwnerType;
+  ownerId?: string | null;
+  ownerName?: string | null;
   applyTo: ConfigScopeType;
   branchIds?: string[];
   branchNames?: string[];
+  sourceOrigin?: ConfigSourceOrigin;
+  isInherited?: boolean;
+  canEdit?: boolean;
+  canToggleStatus?: boolean;
+  canAssign?: boolean;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;

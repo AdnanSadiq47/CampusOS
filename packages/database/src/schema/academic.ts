@@ -44,7 +44,9 @@ export const academicYears = pgTable(
     isCurrent: boolean('is_current').default(false).notNull(),
     sortOrder: integer('sort_order').default(1).notNull(),
     description: text('description'),
-    applyTo: varchar('apply_to', { length: 32 }).default('ALL_CAMPUSES').notNull(), // 'ALL_CAMPUSES' | 'SELECTED_CAMPUSES'
+    ownerType: varchar('owner_type', { length: 32 }).default('SCHOOL').notNull(), // 'PLATFORM' | 'HEAD_OFFICE' | 'REGION' | 'SCHOOL' | 'CAMPUS'
+    ownerId: uuid('owner_id'),
+    applyTo: varchar('apply_to', { length: 32 }).default('ALL_CAMPUSES').notNull(), // 'ALL_CAMPUSES' | 'SELECTED_CAMPUSES' | 'LOCAL_SCOPE'
     isActive: boolean('is_active').default(true).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
@@ -52,6 +54,7 @@ export const academicYears = pgTable(
   (t) => ({
     uqAcademicYearOrgCode: uniqueIndex('uq_academic_year_org_code').on(t.organizationId, t.code),
     idxAcademicYearOrgOrder: index('idx_academic_year_org_order').on(t.organizationId, t.sortOrder, t.name),
+    idxAcademicYearGovernance: index('idx_academic_year_gov').on(t.organizationId, t.ownerType, t.applyTo),
   })
 );
 
@@ -68,6 +71,8 @@ export const boards = pgTable(
     code: varchar('code', { length: 64 }),
     sortOrder: integer('sort_order').default(1).notNull(),
     description: text('description'),
+    ownerType: varchar('owner_type', { length: 32 }).default('SCHOOL').notNull(),
+    ownerId: uuid('owner_id'),
     applyTo: varchar('apply_to', { length: 32 }).default('ALL_CAMPUSES').notNull(),
     isActive: boolean('is_active').default(true).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -76,6 +81,7 @@ export const boards = pgTable(
   (t) => ({
     uqBoardOrgName: uniqueIndex('uq_board_org_name').on(t.organizationId, t.name),
     idxBoardOrgOrder: index('idx_board_org_order').on(t.organizationId, t.sortOrder, t.name),
+    idxBoardGovernance: index('idx_board_gov').on(t.organizationId, t.ownerType, t.applyTo),
   })
 );
 
@@ -91,6 +97,8 @@ export const academicLevels = pgTable(
     shortName: varchar('short_name', { length: 64 }),
     sortOrder: integer('sort_order').default(1).notNull(),
     description: text('description'),
+    ownerType: varchar('owner_type', { length: 32 }).default('SCHOOL').notNull(),
+    ownerId: uuid('owner_id'),
     applyTo: varchar('apply_to', { length: 32 }).default('ALL_CAMPUSES').notNull(),
     isActive: boolean('is_active').default(true).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -99,6 +107,7 @@ export const academicLevels = pgTable(
   (t) => ({
     uqAcademicLevelOrgName: uniqueIndex('uq_academic_level_org_name').on(t.organizationId, t.name),
     idxAcademicLevelOrgOrder: index('idx_academic_level_org_order').on(t.organizationId, t.sortOrder, t.name),
+    idxAcademicLevelGovernance: index('idx_academic_level_gov').on(t.organizationId, t.ownerType, t.applyTo),
   })
 );
 
@@ -122,6 +131,8 @@ export const subjects = pgTable(
     creditWeight: numeric('credit_weight', { precision: 4, scale: 2 }),
     sortOrder: integer('sort_order').default(1).notNull(),
     description: text('description'),
+    ownerType: varchar('owner_type', { length: 32 }).default('SCHOOL').notNull(),
+    ownerId: uuid('owner_id'),
     applyTo: varchar('apply_to', { length: 32 }).default('ALL_CAMPUSES').notNull(),
     isActive: boolean('is_active').default(true).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -130,6 +141,7 @@ export const subjects = pgTable(
   (t) => ({
     uqSubjectOrgName: uniqueIndex('uq_subject_org_name').on(t.organizationId, t.name),
     idxSubjectOrgOrder: index('idx_subject_org_order').on(t.organizationId, t.sortOrder, t.name),
+    idxSubjectGovernance: index('idx_subject_gov').on(t.organizationId, t.ownerType, t.applyTo),
   })
 );
 
@@ -151,6 +163,8 @@ export const classes = pgTable(
     toAge: numeric('to_age', { precision: 4, scale: 1 }),
     sortOrder: integer('sort_order').default(1).notNull(),
     description: text('description'),
+    ownerType: varchar('owner_type', { length: 32 }).default('SCHOOL').notNull(),
+    ownerId: uuid('owner_id'),
     applyTo: varchar('apply_to', { length: 32 }).default('ALL_CAMPUSES').notNull(),
     isActive: boolean('is_active').default(true).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -159,6 +173,7 @@ export const classes = pgTable(
   (t) => ({
     uqClassOrgName: uniqueIndex('uq_class_org_name').on(t.organizationId, t.name),
     idxClassOrgLevel: index('idx_class_org_level').on(t.organizationId, t.levelId, t.sortOrder, t.name),
+    idxClassGovernance: index('idx_class_gov').on(t.organizationId, t.ownerType, t.applyTo),
   })
 );
 
@@ -196,6 +211,8 @@ export const sections = pgTable(
     name: varchar('name', { length: 64 }).notNull(),
     sortOrder: integer('sort_order').default(1).notNull(),
     description: text('description'),
+    ownerType: varchar('owner_type', { length: 32 }).default('SCHOOL').notNull(),
+    ownerId: uuid('owner_id'),
     applyTo: varchar('apply_to', { length: 32 }).default('ALL_CAMPUSES').notNull(),
     isActive: boolean('is_active').default(true).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -204,6 +221,7 @@ export const sections = pgTable(
   (t) => ({
     uqSectionOrgName: uniqueIndex('uq_section_org_name').on(t.organizationId, t.name),
     idxSectionOrgOrder: index('idx_section_org_order').on(t.organizationId, t.sortOrder, t.name),
+    idxSectionGovernance: index('idx_section_gov').on(t.organizationId, t.ownerType, t.applyTo),
   })
 );
 
@@ -219,6 +237,8 @@ export const languages = pgTable(
     code: varchar('code', { length: 64 }),
     sortOrder: integer('sort_order').default(1).notNull(),
     description: text('description'),
+    ownerType: varchar('owner_type', { length: 32 }).default('SCHOOL').notNull(),
+    ownerId: uuid('owner_id'),
     applyTo: varchar('apply_to', { length: 32 }).default('ALL_CAMPUSES').notNull(),
     isActive: boolean('is_active').default(true).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -227,5 +247,6 @@ export const languages = pgTable(
   (t) => ({
     uqLanguageOrgName: uniqueIndex('uq_language_org_name').on(t.organizationId, t.name),
     idxLanguageOrgOrder: index('idx_language_org_order').on(t.organizationId, t.sortOrder, t.name),
+    idxLanguageGovernance: index('idx_language_gov').on(t.organizationId, t.ownerType, t.applyTo),
   })
 );

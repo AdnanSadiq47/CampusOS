@@ -134,3 +134,20 @@
 43. **No Concurrent Dev/Build State Corruption**: Running `next build` while `next dev` is running overwrites development static manifests, corrupting the in-memory dev server and causing all stylesheet/chunk requests to 404. If a production build is executed, the dev server must be stopped, `.next` reinitialized/cleaned, `next dev` restarted, and static assets verified.
 44. **Mandatory Asset Verification (`pnpm web:dev:check`)**: Never declare UI readiness based solely on page-level HTTP 200 responses. Agents must execute the static asset verification script (`pnpm web:dev:check`) to confirm that all CSS bundles (>10KB) and JS chunks return HTTP 200.
 
+---
+
+## 12. Permanent Enterprise Configuration Governance Model
+
+45. **Multi-Tier Scope & Ownership Model**: Configuration records across shared masters and operational modules operate under a universal 8-dimension Governance Engine:
+    - **Ownership (`ownerType` + `ownerId`)**: `PLATFORM` | `HEAD_OFFICE` | `REGION` | `SCHOOL` | `CAMPUS`. Record ownership never shifts on assignment.
+    - **Applicability (`applyTo`)**: `ALL_CAMPUSES` | `SELECTED_CAMPUSES` | `LOCAL_SCOPE`. `ALL_CAMPUSES` dynamically applies to all existing and future branches under the owner.
+    - **Assignment (`config_scope_branches`)**: Explicit junction records mapping specific branches when `SELECTED_CAMPUSES` is configured.
+    - **Inheritance (`sourceOrigin` = `INHERITED` | `LOCAL`)**: Campuses dynamically inherit configurations without cloning or physical duplication.
+    - **Delegated Creation**: Campuses may define local records (`ownerType = 'CAMPUS'`) when allowed by organizational policy.
+    - **Management Rights (`canEdit`, `canToggleStatus`, `canAssign`)**: Inherited records are strictly view-only for campus-only admins; status toggles and modifications require author/owner authority or explicit delegated permissions.
+    - **Effective Configuration Resolution**: Runtime configuration evaluates `(Authorized Inherited + Authorized Local) - Deactivated`.
+    - **3-Tier Server-Side Duplicate Prevention**:
+      1. Reject local creation if matching config is effectively available through parent inheritance (`"...already exists and is available to this Campus through School configuration"`).
+      2. Reject local creation if parent owns the record but has not assigned it to the campus (`"...already exists at School level but is not currently assigned to this Campus"`).
+      3. Reject duplicate local creation within the campus.
+

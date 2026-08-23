@@ -42,6 +42,8 @@ import {
   UpdateLanguageDto,
   LanguageListItemDto,
   ConfigScopeType,
+  ConfigOwnerType,
+  ConfigSourceOrigin,
 } from '@campus-os/types';
 import { AuditService } from '../../core/audit/audit.service.js';
 
@@ -53,7 +55,7 @@ export class AcademicService {
   ) {}
 
   // ═════════════════════════════════════════════════════════════════
-  // CENTRAL SCOPE / INHERITANCE HELPER
+  // CENTRAL GOVERNANCE & SCOPE ENGINE HELPERS
   // ═════════════════════════════════════════════════════════════════
 
   private async syncScopeBranches(
@@ -65,7 +67,6 @@ export class AcademicService {
     branchIds: string[] = [],
     authorizedBranchIds?: string[]
   ) {
-    // Delete existing branch mappings
     await tx
       .delete(configScopeBranches)
       .where(
@@ -77,7 +78,6 @@ export class AcademicService {
       );
 
     if (applyTo === 'SELECTED_CAMPUSES' && branchIds.length > 0) {
-      // Validate requested branches belong to tenant
       const validBranches = await tx
         .select({ id: branches.id })
         .from(branches)
@@ -93,7 +93,6 @@ export class AcademicService {
         throw new BadRequestException('One or more selected branches are invalid for this organization.');
       }
 
-      // Validate authorization if restricted
       if (authorizedBranchIds && !authorizedBranchIds.includes('*')) {
         for (const bid of branchIds) {
           if (!authorizedBranchIds.includes(bid)) {
@@ -102,7 +101,6 @@ export class AcademicService {
         }
       }
 
-      // Insert new mappings
       for (const branchId of branchIds) {
         await tx.insert(configScopeBranches).values({
           organizationId: tenantId,
@@ -151,6 +149,113 @@ export class AcademicService {
     return map;
   }
 
+  /**
+   * Enterprise Duplicate Prevention and Parent Conflict Detection Engine.
+   * Prevents duplicate effective configs and guides users when matching parent records exist.
+   */
+  private async validateDuplicateAndParentConflict(
+    tx: any,
+    tenantId: string,
+    table: any,
+    name: string,
+    code: string | null | undefined,
+    targetOwnerType: ConfigOwnerType = 'SCHOOL',
+    targetOwnerId?: string | null,
+    entityLabel: string = 'Configuration record',
+    _entityType: string = '',
+    excludeId?: string
+  ) {
+    const normalizedName = name.trim().toLowerCase();
+    const normalizedCode = code ? code.trim().toUpperCase() : null;
+
+    const existingRecords = await tx
+      .select()
+      .from(table)
+      .where(
+        and(
+          eq(table.organizationId, tenantId),
+          excludeId ? sql`${table.id} != ${excludeId}` : undefined
+        )
+      );
+
+    const matching = existingRecords.find((r: any) => {
+      const sameName = r.name && r.name.trim().toLowerCase() === normalizedName;
+      const sameCode = normalizedCode && r.code && r.code.trim().toUpperCase() === normalizedCode;
+      return sameName || sameCode;
+    });
+
+    if (!matching) return;
+
+    if (targetOwnerType === 'CAMPUS' && targetOwnerId) {
+      if (matching.ownerType !== 'CAMPUS') {
+        if (matching.applyTo === 'ALL_CAMPUSES') {
+          throw new ConflictException(
+            `${entityLabel} '${name}' already exists and is available to this Campus through School configuration.`
+          );
+        } else if (matching.applyTo === 'SELECTED_CAMPUSES') {
+          const [assigned] = await tx
+            .select()
+            .from(configScopeBranches)
+            .where(
+              and(
+                eq(configScopeBranches.organizationId, tenantId),
+                eq(configScopeBranches.entityId, matching.id),
+                eq(configScopeBranches.branchId, targetOwnerId)
+              )
+            );
+          if (assigned) {
+            throw new ConflictException(
+              `${entityLabel} '${name}' already exists and is available to this Campus through School configuration.`
+            );
+          } else {
+            throw new ConflictException(
+              `${entityLabel} '${name}' already exists at School level but is not currently assigned to this Campus.`
+            );
+          }
+        }
+      } else if (matching.ownerId === targetOwnerId) {
+        throw new ConflictException(
+          `${entityLabel} '${name}' already exists locally in this Campus.`
+        );
+      }
+    } else {
+      if (matching.ownerType !== 'CAMPUS') {
+        throw new ConflictException(
+          `${entityLabel} '${name}' already exists in this organization.`
+        );
+      }
+    }
+  }
+
+  private tagEffectiveGovernance<T extends { ownerType?: string; ownerId?: string | null; applyTo?: string }>(
+    record: T,
+    userRole: string = 'SCHOOL_ADMIN',
+    _targetCampusId?: string
+  ) {
+    const isLocal = record.ownerType === 'CAMPUS';
+    const sourceOrigin: ConfigSourceOrigin = isLocal ? 'LOCAL' : 'INHERITED';
+    const isInherited = !isLocal;
+
+    const isOrgAdmin =
+      userRole === 'SUPER_ADMIN' ||
+      userRole === 'HEAD_OFFICE_ADMIN' ||
+      userRole === 'SCHOOL_ADMIN' ||
+      userRole === 'ADMIN';
+
+    const canEdit = isOrgAdmin || (isLocal && userRole === 'CAMPUS_ADMIN');
+    const canToggleStatus = canEdit;
+    const canAssign = isOrgAdmin;
+
+    return {
+      ownerType: (record.ownerType as ConfigOwnerType) || 'SCHOOL',
+      sourceOrigin,
+      isInherited,
+      canEdit,
+      canToggleStatus,
+      canAssign,
+    };
+  }
+
   // ═════════════════════════════════════════════════════════════════
   // 1. ACADEMIC YEARS MASTER
   // ═════════════════════════════════════════════════════════════════
@@ -159,10 +264,11 @@ export class AcademicService {
     tenantId: string,
     campusId?: string,
     search?: string,
-    status?: string
+    status?: string,
+    userRole: string = 'SCHOOL_ADMIN'
   ): Promise<AcademicYearListItemDto[]> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
-      let query = tx
+      const rows = await tx
         .select()
         .from(academicYears)
         .where(
@@ -179,12 +285,12 @@ export class AcademicService {
         )
         .orderBy(asc(academicYears.sortOrder), asc(academicYears.startDate));
 
-      const rows = await query;
       const entityIds = rows.map((r: any) => r.id);
       const branchMap = await this.loadScopeBranchInfo(tx, tenantId, 'academic_year', entityIds);
 
       let result: AcademicYearListItemDto[] = rows.map((r: any) => {
         const scope = branchMap.get(r.id);
+        const gov = this.tagEffectiveGovernance(r, userRole, campusId);
         return {
           id: r.id,
           organizationId: r.organizationId,
@@ -195,18 +301,25 @@ export class AcademicService {
           isCurrent: r.isCurrent,
           sortOrder: r.sortOrder,
           description: r.description,
+          ownerType: (r.ownerType as ConfigOwnerType) || 'SCHOOL',
+          ownerId: r.ownerId,
           applyTo: r.applyTo as ConfigScopeType,
           branchIds: scope?.branchIds || [],
           branchNames: scope?.branchNames || [],
+          sourceOrigin: gov.sourceOrigin,
+          isInherited: gov.isInherited,
+          canEdit: gov.canEdit,
+          canToggleStatus: gov.canToggleStatus,
+          canAssign: gov.canAssign,
           isActive: r.isActive,
           createdAt: r.createdAt,
           updatedAt: r.updatedAt,
         };
       });
 
-      // Filter by campus if requested
       if (campusId && campusId !== 'ALL') {
         result = result.filter((ay) => {
+          if (ay.ownerType === 'CAMPUS' && ay.ownerId === campusId) return true;
           if (ay.applyTo === 'ALL_CAMPUSES') return true;
           return ay.branchIds?.includes(campusId);
         });
@@ -220,31 +333,30 @@ export class AcademicService {
     tenantId: string,
     dto: CreateAcademicYearDto,
     actorUserId?: string,
-    authorizedBranchIds?: string[]
+    authorizedBranchIds?: string[],
+    userRole: string = 'SCHOOL_ADMIN'
   ): Promise<AcademicYearListItemDto> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
-      // Validate dates
       if (new Date(dto.startDate) >= new Date(dto.endDate)) {
         throw new BadRequestException('Start Date must be earlier than End Date.');
       }
 
       const cleanCode = dto.code.trim().toUpperCase();
       const cleanName = dto.name.trim();
+      const ownerType: ConfigOwnerType = dto.ownerType || 'SCHOOL';
+      const ownerId = dto.ownerId || null;
 
-      // Duplicate code check
-      const [existing] = await tx
-        .select({ id: academicYears.id })
-        .from(academicYears)
-        .where(
-          and(
-            eq(academicYears.organizationId, tenantId),
-            eq(academicYears.code, cleanCode)
-          )
-        );
-
-      if (existing) {
-        throw new ConflictException(`Academic Year with code '${cleanCode}' already exists.`);
-      }
+      await this.validateDuplicateAndParentConflict(
+        tx,
+        tenantId,
+        academicYears,
+        cleanName,
+        cleanCode,
+        ownerType,
+        ownerId,
+        'Academic Year',
+        'academic_year'
+      );
 
       let resolvedSortOrder = dto.sortOrder;
       if (!resolvedSortOrder || resolvedSortOrder <= 0) {
@@ -255,7 +367,6 @@ export class AcademicService {
         resolvedSortOrder = (Number(maxSort?.maxOrder) || 0) + 1;
       }
 
-      // If set as current, reset previous current year for overlapping scope
       if (dto.isCurrent) {
         await tx
           .update(academicYears)
@@ -274,6 +385,8 @@ export class AcademicService {
           isCurrent: dto.isCurrent ?? false,
           sortOrder: resolvedSortOrder,
           description: dto.description?.trim() || null,
+          ownerType,
+          ownerId,
           applyTo: dto.applyTo || 'ALL_CAMPUSES',
           isActive: dto.isActive ?? true,
         })
@@ -305,12 +418,14 @@ export class AcademicService {
 
       const branchMap = await this.loadScopeBranchInfo(tx, tenantId, 'academic_year', [created!.id]);
       const scope = branchMap.get(created!.id);
+      const gov = this.tagEffectiveGovernance(created!, userRole);
 
       return {
         ...created!,
         applyTo: created!.applyTo as ConfigScopeType,
         branchIds: scope?.branchIds || [],
         branchNames: scope?.branchNames || [],
+        ...gov,
       };
     });
   }
@@ -320,7 +435,8 @@ export class AcademicService {
     id: string,
     dto: UpdateAcademicYearDto,
     actorUserId?: string,
-    authorizedBranchIds?: string[]
+    authorizedBranchIds?: string[],
+    userRole: string = 'SCHOOL_ADMIN'
   ): Promise<AcademicYearListItemDto> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
       const [existing] = await tx
@@ -330,25 +446,30 @@ export class AcademicService {
 
       if (!existing) throw new NotFoundException(`Academic Year with ID '${id}' not found.`);
 
+      const gov = this.tagEffectiveGovernance(existing, userRole);
+      if (!gov.canEdit) {
+        throw new ForbiddenException('You do not have permission to edit this inherited configuration.');
+      }
+
       const startDate = dto.startDate || existing.startDate;
       const endDate = dto.endDate || existing.endDate;
       if (new Date(startDate) >= new Date(endDate)) {
         throw new BadRequestException('Start Date must be earlier than End Date.');
       }
 
-      if (dto.code && dto.code.trim().toUpperCase() !== existing.code) {
-        const [duplicate] = await tx
-          .select({ id: academicYears.id })
-          .from(academicYears)
-          .where(
-            and(
-              eq(academicYears.organizationId, tenantId),
-              eq(academicYears.code, dto.code.trim().toUpperCase())
-            )
-          );
-        if (duplicate) {
-          throw new ConflictException(`Academic Year with code '${dto.code}' already exists.`);
-        }
+      if (dto.name || dto.code) {
+        await this.validateDuplicateAndParentConflict(
+          tx,
+          tenantId,
+          academicYears,
+          dto.name || existing.name,
+          dto.code || existing.code,
+          existing.ownerType as ConfigOwnerType,
+          existing.ownerId,
+          'Academic Year',
+          'academic_year',
+          id
+        );
       }
 
       if (dto.isCurrent) {
@@ -412,6 +533,7 @@ export class AcademicService {
         applyTo: updated!.applyTo as ConfigScopeType,
         branchIds: scope?.branchIds || [],
         branchNames: scope?.branchNames || [],
+        ...gov,
       };
     });
   }
@@ -420,7 +542,8 @@ export class AcademicService {
     tenantId: string,
     id: string,
     isActive: boolean,
-    actorUserId?: string
+    actorUserId?: string,
+    userRole: string = 'SCHOOL_ADMIN'
   ): Promise<AcademicYearListItemDto> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
       const [existing] = await tx
@@ -429,6 +552,11 @@ export class AcademicService {
         .where(and(eq(academicYears.organizationId, tenantId), eq(academicYears.id, id)));
 
       if (!existing) throw new NotFoundException(`Academic Year with ID '${id}' not found.`);
+
+      const gov = this.tagEffectiveGovernance(existing, userRole);
+      if (!gov.canToggleStatus) {
+        throw new ForbiddenException('You do not have permission to toggle status for this inherited configuration.');
+      }
 
       const [updated] = await tx
         .update(academicYears)
@@ -459,6 +587,7 @@ export class AcademicService {
         applyTo: updated!.applyTo as ConfigScopeType,
         branchIds: scope?.branchIds || [],
         branchNames: scope?.branchNames || [],
+        ...gov,
       };
     });
   }
@@ -471,7 +600,8 @@ export class AcademicService {
     tenantId: string,
     campusId?: string,
     search?: string,
-    status?: string
+    status?: string,
+    userRole: string = 'SCHOOL_ADMIN'
   ): Promise<BoardListItemDto[]> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
       const rows = await tx
@@ -497,6 +627,7 @@ export class AcademicService {
 
       let result: BoardListItemDto[] = rows.map((r: any) => {
         const scope = branchMap.get(r.id);
+        const gov = this.tagEffectiveGovernance(r, userRole, campusId);
         return {
           id: r.id,
           organizationId: r.organizationId,
@@ -505,9 +636,11 @@ export class AcademicService {
           code: r.code,
           sortOrder: r.sortOrder,
           description: r.description,
+          ownerId: r.ownerId,
           applyTo: r.applyTo as ConfigScopeType,
           branchIds: scope?.branchIds || [],
           branchNames: scope?.branchNames || [],
+          ...gov,
           isActive: r.isActive,
           createdAt: r.createdAt,
           updatedAt: r.updatedAt,
@@ -515,7 +648,11 @@ export class AcademicService {
       });
 
       if (campusId && campusId !== 'ALL') {
-        result = result.filter((b) => b.applyTo === 'ALL_CAMPUSES' || b.branchIds?.includes(campusId));
+        result = result.filter((b) => {
+          if (b.ownerType === 'CAMPUS' && b.ownerId === campusId) return true;
+          if (b.applyTo === 'ALL_CAMPUSES') return true;
+          return b.branchIds?.includes(campusId);
+        });
       }
 
       return result;
@@ -526,24 +663,25 @@ export class AcademicService {
     tenantId: string,
     dto: CreateBoardDto,
     actorUserId?: string,
-    authorizedBranchIds?: string[]
+    authorizedBranchIds?: string[],
+    userRole: string = 'SCHOOL_ADMIN'
   ): Promise<BoardListItemDto> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
       const cleanName = dto.name.trim();
+      const ownerType: ConfigOwnerType = dto.ownerType || 'SCHOOL';
+      const ownerId = dto.ownerId || null;
 
-      const [existing] = await tx
-        .select({ id: boards.id })
-        .from(boards)
-        .where(
-          and(
-            eq(boards.organizationId, tenantId),
-            ilike(boards.name, cleanName)
-          )
-        );
-
-      if (existing) {
-        throw new ConflictException(`Board '${cleanName}' already exists.`);
-      }
+      await this.validateDuplicateAndParentConflict(
+        tx,
+        tenantId,
+        boards,
+        cleanName,
+        dto.code,
+        ownerType,
+        ownerId,
+        'Board',
+        'board'
+      );
 
       let resolvedSortOrder = dto.sortOrder;
       if (!resolvedSortOrder || resolvedSortOrder <= 0) {
@@ -563,6 +701,8 @@ export class AcademicService {
           code: dto.code?.trim().toUpperCase() || null,
           sortOrder: resolvedSortOrder,
           description: dto.description?.trim() || null,
+          ownerType,
+          ownerId,
           applyTo: dto.applyTo || 'ALL_CAMPUSES',
           isActive: dto.isActive ?? true,
         })
@@ -594,12 +734,14 @@ export class AcademicService {
 
       const branchMap = await this.loadScopeBranchInfo(tx, tenantId, 'board', [created!.id]);
       const scope = branchMap.get(created!.id);
+      const gov = this.tagEffectiveGovernance(created!, userRole);
 
       return {
         ...created!,
         applyTo: created!.applyTo as ConfigScopeType,
         branchIds: scope?.branchIds || [],
         branchNames: scope?.branchNames || [],
+        ...gov,
       };
     });
   }
@@ -609,7 +751,8 @@ export class AcademicService {
     id: string,
     dto: UpdateBoardDto,
     actorUserId?: string,
-    authorizedBranchIds?: string[]
+    authorizedBranchIds?: string[],
+    userRole: string = 'SCHOOL_ADMIN'
   ): Promise<BoardListItemDto> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
       const [existing] = await tx
@@ -618,6 +761,26 @@ export class AcademicService {
         .where(and(eq(boards.organizationId, tenantId), eq(boards.id, id)));
 
       if (!existing) throw new NotFoundException(`Board with ID '${id}' not found.`);
+
+      const gov = this.tagEffectiveGovernance(existing, userRole);
+      if (!gov.canEdit) {
+        throw new ForbiddenException('You do not have permission to edit this inherited configuration.');
+      }
+
+      if (dto.name || dto.code) {
+        await this.validateDuplicateAndParentConflict(
+          tx,
+          tenantId,
+          boards,
+          dto.name || existing.name,
+          dto.code || existing.code,
+          existing.ownerType as ConfigOwnerType,
+          existing.ownerId,
+          'Board',
+          'board',
+          id
+        );
+      }
 
       const applyTo = dto.applyTo || (existing.applyTo as ConfigScopeType);
 
@@ -671,6 +834,7 @@ export class AcademicService {
         applyTo: updated!.applyTo as ConfigScopeType,
         branchIds: scope?.branchIds || [],
         branchNames: scope?.branchNames || [],
+        ...gov,
       };
     });
   }
@@ -679,7 +843,8 @@ export class AcademicService {
     tenantId: string,
     id: string,
     isActive: boolean,
-    actorUserId?: string
+    actorUserId?: string,
+    userRole: string = 'SCHOOL_ADMIN'
   ): Promise<BoardListItemDto> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
       const [existing] = await tx
@@ -688,6 +853,11 @@ export class AcademicService {
         .where(and(eq(boards.organizationId, tenantId), eq(boards.id, id)));
 
       if (!existing) throw new NotFoundException(`Board with ID '${id}' not found.`);
+
+      const gov = this.tagEffectiveGovernance(existing, userRole);
+      if (!gov.canToggleStatus) {
+        throw new ForbiddenException('You do not have permission to toggle status for this inherited configuration.');
+      }
 
       const [updated] = await tx
         .update(boards)
@@ -718,6 +888,7 @@ export class AcademicService {
         applyTo: updated!.applyTo as ConfigScopeType,
         branchIds: scope?.branchIds || [],
         branchNames: scope?.branchNames || [],
+        ...gov,
       };
     });
   }
@@ -730,7 +901,8 @@ export class AcademicService {
     tenantId: string,
     campusId?: string,
     search?: string,
-    status?: string
+    status?: string,
+    userRole: string = 'SCHOOL_ADMIN'
   ): Promise<AcademicLevelListItemDto[]> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
       const rows = await tx
@@ -753,7 +925,6 @@ export class AcademicService {
       const entityIds = rows.map((r: any) => r.id);
       const branchMap = await this.loadScopeBranchInfo(tx, tenantId, 'academic_level', entityIds);
 
-      // Class count per level
       const classCounts = await tx
         .select({
           levelId: classes.levelId,
@@ -768,6 +939,7 @@ export class AcademicService {
 
       let result: AcademicLevelListItemDto[] = rows.map((r: any) => {
         const scope = branchMap.get(r.id);
+        const gov = this.tagEffectiveGovernance(r, userRole, campusId);
         return {
           id: r.id,
           organizationId: r.organizationId,
@@ -775,10 +947,12 @@ export class AcademicService {
           shortName: r.shortName,
           sortOrder: r.sortOrder,
           description: r.description,
+          ownerId: r.ownerId,
           applyTo: r.applyTo as ConfigScopeType,
           branchIds: scope?.branchIds || [],
           branchNames: scope?.branchNames || [],
           classCount: countMap.get(r.id) || 0,
+          ...gov,
           isActive: r.isActive,
           createdAt: r.createdAt,
           updatedAt: r.updatedAt,
@@ -786,7 +960,11 @@ export class AcademicService {
       });
 
       if (campusId && campusId !== 'ALL') {
-        result = result.filter((l) => l.applyTo === 'ALL_CAMPUSES' || l.branchIds?.includes(campusId));
+        result = result.filter((l) => {
+          if (l.ownerType === 'CAMPUS' && l.ownerId === campusId) return true;
+          if (l.applyTo === 'ALL_CAMPUSES') return true;
+          return l.branchIds?.includes(campusId);
+        });
       }
 
       return result;
@@ -797,24 +975,25 @@ export class AcademicService {
     tenantId: string,
     dto: CreateAcademicLevelDto,
     actorUserId?: string,
-    authorizedBranchIds?: string[]
+    authorizedBranchIds?: string[],
+    userRole: string = 'SCHOOL_ADMIN'
   ): Promise<AcademicLevelListItemDto> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
       const cleanName = dto.name.trim();
+      const ownerType: ConfigOwnerType = dto.ownerType || 'SCHOOL';
+      const ownerId = dto.ownerId || null;
 
-      const [existing] = await tx
-        .select({ id: academicLevels.id })
-        .from(academicLevels)
-        .where(
-          and(
-            eq(academicLevels.organizationId, tenantId),
-            ilike(academicLevels.name, cleanName)
-          )
-        );
-
-      if (existing) {
-        throw new ConflictException(`Academic Level / Stage '${cleanName}' already exists.`);
-      }
+      await this.validateDuplicateAndParentConflict(
+        tx,
+        tenantId,
+        academicLevels,
+        cleanName,
+        dto.shortName,
+        ownerType,
+        ownerId,
+        'Academic Level',
+        'academic_level'
+      );
 
       let resolvedSortOrder = dto.sortOrder;
       if (!resolvedSortOrder || resolvedSortOrder <= 0) {
@@ -833,6 +1012,8 @@ export class AcademicService {
           shortName: dto.shortName?.trim() || null,
           sortOrder: resolvedSortOrder,
           description: dto.description?.trim() || null,
+          ownerType,
+          ownerId,
           applyTo: dto.applyTo || 'ALL_CAMPUSES',
           isActive: dto.isActive ?? true,
         })
@@ -864,6 +1045,7 @@ export class AcademicService {
 
       const branchMap = await this.loadScopeBranchInfo(tx, tenantId, 'academic_level', [created!.id]);
       const scope = branchMap.get(created!.id);
+      const gov = this.tagEffectiveGovernance(created!, userRole);
 
       return {
         ...created!,
@@ -871,6 +1053,7 @@ export class AcademicService {
         branchIds: scope?.branchIds || [],
         branchNames: scope?.branchNames || [],
         classCount: 0,
+        ...gov,
       };
     });
   }
@@ -880,7 +1063,8 @@ export class AcademicService {
     id: string,
     dto: UpdateAcademicLevelDto,
     actorUserId?: string,
-    authorizedBranchIds?: string[]
+    authorizedBranchIds?: string[],
+    userRole: string = 'SCHOOL_ADMIN'
   ): Promise<AcademicLevelListItemDto> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
       const [existing] = await tx
@@ -889,6 +1073,26 @@ export class AcademicService {
         .where(and(eq(academicLevels.organizationId, tenantId), eq(academicLevels.id, id)));
 
       if (!existing) throw new NotFoundException(`Academic Level with ID '${id}' not found.`);
+
+      const gov = this.tagEffectiveGovernance(existing, userRole);
+      if (!gov.canEdit) {
+        throw new ForbiddenException('You do not have permission to edit this inherited configuration.');
+      }
+
+      if (dto.name) {
+        await this.validateDuplicateAndParentConflict(
+          tx,
+          tenantId,
+          academicLevels,
+          dto.name,
+          dto.shortName,
+          existing.ownerType as ConfigOwnerType,
+          existing.ownerId,
+          'Academic Level',
+          'academic_level',
+          id
+        );
+      }
 
       const applyTo = dto.applyTo || (existing.applyTo as ConfigScopeType);
 
@@ -941,6 +1145,7 @@ export class AcademicService {
         applyTo: updated!.applyTo as ConfigScopeType,
         branchIds: scope?.branchIds || [],
         branchNames: scope?.branchNames || [],
+        ...gov,
       };
     });
   }
@@ -949,7 +1154,8 @@ export class AcademicService {
     tenantId: string,
     id: string,
     isActive: boolean,
-    actorUserId?: string
+    actorUserId?: string,
+    userRole: string = 'SCHOOL_ADMIN'
   ): Promise<AcademicLevelListItemDto> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
       const [existing] = await tx
@@ -958,6 +1164,11 @@ export class AcademicService {
         .where(and(eq(academicLevels.organizationId, tenantId), eq(academicLevels.id, id)));
 
       if (!existing) throw new NotFoundException(`Academic Level with ID '${id}' not found.`);
+
+      const gov = this.tagEffectiveGovernance(existing, userRole);
+      if (!gov.canToggleStatus) {
+        throw new ForbiddenException('You do not have permission to toggle status for this inherited configuration.');
+      }
 
       const [updated] = await tx
         .update(academicLevels)
@@ -988,6 +1199,7 @@ export class AcademicService {
         applyTo: updated!.applyTo as ConfigScopeType,
         branchIds: scope?.branchIds || [],
         branchNames: scope?.branchNames || [],
+        ...gov,
       };
     });
   }
@@ -999,10 +1211,11 @@ export class AcademicService {
   async listSubjects(
     tenantId: string,
     campusId?: string,
+    search?: string,
+    status?: string,
     type?: string,
     category?: string,
-    search?: string,
-    status?: string
+    userRole: string = 'SCHOOL_ADMIN'
   ): Promise<SubjectListItemDto[]> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
       const rows = await tx
@@ -1011,9 +1224,9 @@ export class AcademicService {
         .where(
           and(
             eq(subjects.organizationId, tenantId),
+            status && status !== 'ALL' ? eq(subjects.isActive, status === 'ACTIVE') : undefined,
             type && type !== 'ALL' ? eq(subjects.type, type) : undefined,
             category && category !== 'ALL' ? eq(subjects.category, category) : undefined,
-            status && status !== 'ALL' ? eq(subjects.isActive, status === 'ACTIVE') : undefined,
             search
               ? or(
                   ilike(subjects.name, `%${search}%`),
@@ -1030,6 +1243,7 @@ export class AcademicService {
 
       let result: SubjectListItemDto[] = rows.map((r: any) => {
         const scope = branchMap.get(r.id);
+        const gov = this.tagEffectiveGovernance(r, userRole, campusId);
         return {
           id: r.id,
           organizationId: r.organizationId,
@@ -1045,9 +1259,11 @@ export class AcademicService {
           creditWeight: r.creditWeight ? Number(r.creditWeight) : null,
           sortOrder: r.sortOrder,
           description: r.description,
+          ownerId: r.ownerId,
           applyTo: r.applyTo as ConfigScopeType,
           branchIds: scope?.branchIds || [],
           branchNames: scope?.branchNames || [],
+          ...gov,
           isActive: r.isActive,
           createdAt: r.createdAt,
           updatedAt: r.updatedAt,
@@ -1055,7 +1271,11 @@ export class AcademicService {
       });
 
       if (campusId && campusId !== 'ALL') {
-        result = result.filter((s) => s.applyTo === 'ALL_CAMPUSES' || s.branchIds?.includes(campusId));
+        result = result.filter((s) => {
+          if (s.ownerType === 'CAMPUS' && s.ownerId === campusId) return true;
+          if (s.applyTo === 'ALL_CAMPUSES') return true;
+          return s.branchIds?.includes(campusId);
+        });
       }
 
       return result;
@@ -1066,24 +1286,28 @@ export class AcademicService {
     tenantId: string,
     dto: CreateSubjectDto,
     actorUserId?: string,
-    authorizedBranchIds?: string[]
+    authorizedBranchIds?: string[],
+    userRole: string = 'SCHOOL_ADMIN'
   ): Promise<SubjectListItemDto> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
       const cleanName = dto.name.trim();
+      const ownerType: ConfigOwnerType = dto.ownerType || 'SCHOOL';
+      const ownerId = dto.ownerId || null;
 
-      const [existing] = await tx
-        .select({ id: subjects.id })
-        .from(subjects)
-        .where(
-          and(
-            eq(subjects.organizationId, tenantId),
-            ilike(subjects.name, cleanName)
-          )
-        );
+      await this.validateDuplicateAndParentConflict(
+        tx,
+        tenantId,
+        subjects,
+        cleanName,
+        dto.code,
+        ownerType,
+        ownerId,
+        'Subject',
+        'subject'
+      );
 
-      if (existing) {
-        throw new ConflictException(`Subject '${cleanName}' already exists.`);
-      }
+      const hasPractical = dto.hasPractical ?? false;
+      const practicalMaxMarks = hasPractical && dto.practicalMaxMarks ? String(dto.practicalMaxMarks) : null;
 
       let resolvedSortOrder = dto.sortOrder;
       if (!resolvedSortOrder || resolvedSortOrder <= 0) {
@@ -1093,9 +1317,6 @@ export class AcademicService {
           .where(eq(subjects.organizationId, tenantId));
         resolvedSortOrder = (Number(maxSort?.maxOrder) || 0) + 1;
       }
-
-      const hasPractical = dto.hasPractical ?? false;
-      const practicalMaxMarks = hasPractical ? (dto.practicalMaxMarks ?? null) : null;
 
       const [created] = await tx
         .insert(subjects)
@@ -1109,10 +1330,12 @@ export class AcademicService {
           defaultMaxMarks: dto.defaultMaxMarks !== undefined ? String(dto.defaultMaxMarks) : null,
           defaultPassingMarks: dto.defaultPassingMarks !== undefined ? String(dto.defaultPassingMarks) : null,
           hasPractical,
-          practicalMaxMarks: practicalMaxMarks !== null ? String(practicalMaxMarks) : null,
+          practicalMaxMarks,
           creditWeight: dto.creditWeight !== undefined ? String(dto.creditWeight) : null,
           sortOrder: resolvedSortOrder,
           description: dto.description?.trim() || null,
+          ownerType,
+          ownerId,
           applyTo: dto.applyTo || 'ALL_CAMPUSES',
           isActive: dto.isActive ?? true,
         })
@@ -1144,28 +1367,20 @@ export class AcademicService {
 
       const branchMap = await this.loadScopeBranchInfo(tx, tenantId, 'subject', [created!.id]);
       const scope = branchMap.get(created!.id);
+      const gov = this.tagEffectiveGovernance(created!, userRole);
 
       return {
-        id: created!.id,
-        organizationId: created!.organizationId,
-        name: created!.name,
-        shortName: created!.shortName,
-        code: created!.code,
+        ...created!,
         type: created!.type as any,
         category: created!.category as any,
         defaultMaxMarks: created!.defaultMaxMarks ? Number(created!.defaultMaxMarks) : null,
         defaultPassingMarks: created!.defaultPassingMarks ? Number(created!.defaultPassingMarks) : null,
-        hasPractical: created!.hasPractical,
         practicalMaxMarks: created!.practicalMaxMarks ? Number(created!.practicalMaxMarks) : null,
         creditWeight: created!.creditWeight ? Number(created!.creditWeight) : null,
-        sortOrder: created!.sortOrder,
-        description: created!.description,
         applyTo: created!.applyTo as ConfigScopeType,
         branchIds: scope?.branchIds || [],
         branchNames: scope?.branchNames || [],
-        isActive: created!.isActive,
-        createdAt: created!.createdAt,
-        updatedAt: created!.updatedAt,
+        ...gov,
       };
     });
   }
@@ -1175,7 +1390,8 @@ export class AcademicService {
     id: string,
     dto: UpdateSubjectDto,
     actorUserId?: string,
-    authorizedBranchIds?: string[]
+    authorizedBranchIds?: string[],
+    userRole: string = 'SCHOOL_ADMIN'
   ): Promise<SubjectListItemDto> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
       const [existing] = await tx
@@ -1185,13 +1401,32 @@ export class AcademicService {
 
       if (!existing) throw new NotFoundException(`Subject with ID '${id}' not found.`);
 
-      const applyTo = dto.applyTo || (existing.applyTo as ConfigScopeType);
+      const gov = this.tagEffectiveGovernance(existing, userRole);
+      if (!gov.canEdit) {
+        throw new ForbiddenException('You do not have permission to edit this inherited configuration.');
+      }
+
+      if (dto.name || dto.code) {
+        await this.validateDuplicateAndParentConflict(
+          tx,
+          tenantId,
+          subjects,
+          dto.name || existing.name,
+          dto.code || existing.code,
+          existing.ownerType as ConfigOwnerType,
+          existing.ownerId,
+          'Subject',
+          'subject',
+          id
+        );
+      }
+
       const hasPractical = dto.hasPractical !== undefined ? dto.hasPractical : existing.hasPractical;
       const practicalMaxMarks = hasPractical
-        ? dto.practicalMaxMarks !== undefined
-          ? dto.practicalMaxMarks
-          : existing.practicalMaxMarks
+        ? (dto.practicalMaxMarks !== undefined ? (dto.practicalMaxMarks ? String(dto.practicalMaxMarks) : null) : existing.practicalMaxMarks)
         : null;
+
+      const applyTo = dto.applyTo || (existing.applyTo as ConfigScopeType);
 
       const [updated] = await tx
         .update(subjects)
@@ -1204,7 +1439,7 @@ export class AcademicService {
           defaultMaxMarks: dto.defaultMaxMarks !== undefined ? (dto.defaultMaxMarks ? String(dto.defaultMaxMarks) : null) : existing.defaultMaxMarks,
           defaultPassingMarks: dto.defaultPassingMarks !== undefined ? (dto.defaultPassingMarks ? String(dto.defaultPassingMarks) : null) : existing.defaultPassingMarks,
           hasPractical,
-          practicalMaxMarks: practicalMaxMarks ? String(practicalMaxMarks) : null,
+          practicalMaxMarks,
           creditWeight: dto.creditWeight !== undefined ? (dto.creditWeight ? String(dto.creditWeight) : null) : existing.creditWeight,
           sortOrder: dto.sortOrder !== undefined ? dto.sortOrder : existing.sortOrder,
           description: dto.description !== undefined ? (dto.description ? dto.description.trim() : null) : existing.description,
@@ -1246,26 +1481,17 @@ export class AcademicService {
       const scope = branchMap.get(id);
 
       return {
-        id: updated!.id,
-        organizationId: updated!.organizationId,
-        name: updated!.name,
-        shortName: updated!.shortName,
-        code: updated!.code,
+        ...updated!,
         type: updated!.type as any,
         category: updated!.category as any,
         defaultMaxMarks: updated!.defaultMaxMarks ? Number(updated!.defaultMaxMarks) : null,
         defaultPassingMarks: updated!.defaultPassingMarks ? Number(updated!.defaultPassingMarks) : null,
-        hasPractical: updated!.hasPractical,
         practicalMaxMarks: updated!.practicalMaxMarks ? Number(updated!.practicalMaxMarks) : null,
         creditWeight: updated!.creditWeight ? Number(updated!.creditWeight) : null,
-        sortOrder: updated!.sortOrder,
-        description: updated!.description,
         applyTo: updated!.applyTo as ConfigScopeType,
         branchIds: scope?.branchIds || [],
         branchNames: scope?.branchNames || [],
-        isActive: updated!.isActive,
-        createdAt: updated!.createdAt,
-        updatedAt: updated!.updatedAt,
+        ...gov,
       };
     });
   }
@@ -1274,7 +1500,8 @@ export class AcademicService {
     tenantId: string,
     id: string,
     isActive: boolean,
-    actorUserId?: string
+    actorUserId?: string,
+    userRole: string = 'SCHOOL_ADMIN'
   ): Promise<SubjectListItemDto> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
       const [existing] = await tx
@@ -1283,6 +1510,11 @@ export class AcademicService {
         .where(and(eq(subjects.organizationId, tenantId), eq(subjects.id, id)));
 
       if (!existing) throw new NotFoundException(`Subject with ID '${id}' not found.`);
+
+      const gov = this.tagEffectiveGovernance(existing, userRole);
+      if (!gov.canToggleStatus) {
+        throw new ForbiddenException('You do not have permission to toggle status for this inherited configuration.');
+      }
 
       const [updated] = await tx
         .update(subjects)
@@ -1309,26 +1541,17 @@ export class AcademicService {
       const scope = branchMap.get(id);
 
       return {
-        id: updated!.id,
-        organizationId: updated!.organizationId,
-        name: updated!.name,
-        shortName: updated!.shortName,
-        code: updated!.code,
+        ...updated!,
         type: updated!.type as any,
         category: updated!.category as any,
         defaultMaxMarks: updated!.defaultMaxMarks ? Number(updated!.defaultMaxMarks) : null,
         defaultPassingMarks: updated!.defaultPassingMarks ? Number(updated!.defaultPassingMarks) : null,
-        hasPractical: updated!.hasPractical,
         practicalMaxMarks: updated!.practicalMaxMarks ? Number(updated!.practicalMaxMarks) : null,
         creditWeight: updated!.creditWeight ? Number(updated!.creditWeight) : null,
-        sortOrder: updated!.sortOrder,
-        description: updated!.description,
         applyTo: updated!.applyTo as ConfigScopeType,
         branchIds: scope?.branchIds || [],
         branchNames: scope?.branchNames || [],
-        isActive: updated!.isActive,
-        createdAt: updated!.createdAt,
-        updatedAt: updated!.updatedAt,
+        ...gov,
       };
     });
   }
@@ -1337,12 +1560,135 @@ export class AcademicService {
   // 5. CLASSES / GRADES MASTER
   // ═════════════════════════════════════════════════════════════════
 
+  private async syncClassSubjects(
+    tx: any,
+    tenantId: string,
+    classId: string,
+    compulsoryIds: string[] = [],
+    optionalIds: string[] = []
+  ) {
+    const overlapping = compulsoryIds.filter((id) => optionalIds.includes(id));
+    if (overlapping.length > 0) {
+      throw new BadRequestException('A subject cannot be mapped as both Compulsory and Optional for the same class.');
+    }
+
+    const allSubjectIds = [...compulsoryIds, ...optionalIds];
+    if (allSubjectIds.length > 0) {
+      const validSubjects = await tx
+        .select({ id: subjects.id })
+        .from(subjects)
+        .where(
+          and(
+            eq(subjects.organizationId, tenantId),
+            inArray(subjects.id, allSubjectIds)
+          )
+        );
+
+      if (validSubjects.length !== allSubjectIds.length) {
+        throw new BadRequestException('One or more selected subjects do not exist in this organization.');
+      }
+    }
+
+    await tx
+      .delete(classSubjectMappings)
+      .where(
+        and(
+          eq(classSubjectMappings.organizationId, tenantId),
+          eq(classSubjectMappings.classId, classId)
+        )
+      );
+
+    for (const subId of compulsoryIds) {
+      await tx.insert(classSubjectMappings).values({
+        organizationId: tenantId,
+        classId,
+        subjectId: subId,
+        isCompulsory: true,
+      });
+    }
+
+    for (const subId of optionalIds) {
+      await tx.insert(classSubjectMappings).values({
+        organizationId: tenantId,
+        classId,
+        subjectId: subId,
+        isCompulsory: false,
+      });
+    }
+  }
+
+  private async loadClassSubjects(
+    tx: any,
+    tenantId: string,
+    classIds: string[]
+  ): Promise<
+    Map<
+      string,
+      {
+        compulsoryIds: string[];
+        compulsoryNames: string[];
+        optionalIds: string[];
+        optionalNames: string[];
+      }
+    >
+  > {
+    const map = new Map<
+      string,
+      {
+        compulsoryIds: string[];
+        compulsoryNames: string[];
+        optionalIds: string[];
+        optionalNames: string[];
+      }
+    >();
+
+    if (classIds.length === 0) return map;
+
+    const rows = await tx
+      .select({
+        classId: classSubjectMappings.classId,
+        subjectId: classSubjectMappings.subjectId,
+        subjectName: subjects.name,
+        isCompulsory: classSubjectMappings.isCompulsory,
+      })
+      .from(classSubjectMappings)
+      .innerJoin(subjects, eq(classSubjectMappings.subjectId, subjects.id))
+      .where(
+        and(
+          eq(classSubjectMappings.organizationId, tenantId),
+          inArray(classSubjectMappings.classId, classIds)
+        )
+      );
+
+    for (const row of rows) {
+      if (!map.has(row.classId)) {
+        map.set(row.classId, {
+          compulsoryIds: [],
+          compulsoryNames: [],
+          optionalIds: [],
+          optionalNames: [],
+        });
+      }
+      const entry = map.get(row.classId)!;
+      if (row.isCompulsory) {
+        entry.compulsoryIds.push(row.subjectId);
+        entry.compulsoryNames.push(row.subjectName);
+      } else {
+        entry.optionalIds.push(row.subjectId);
+        entry.optionalNames.push(row.subjectName);
+      }
+    }
+
+    return map;
+  }
+
   async listClasses(
     tenantId: string,
-    levelId?: string,
     campusId?: string,
     search?: string,
-    status?: string
+    status?: string,
+    levelId?: string,
+    userRole: string = 'SCHOOL_ADMIN'
   ): Promise<ClassListItemDto[]> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
       const rows = await tx
@@ -1358,6 +1704,8 @@ export class AcademicService {
           toAge: classes.toAge,
           sortOrder: classes.sortOrder,
           description: classes.description,
+          ownerType: classes.ownerType,
+          ownerId: classes.ownerId,
           applyTo: classes.applyTo,
           isActive: classes.isActive,
           createdAt: classes.createdAt,
@@ -1368,75 +1716,28 @@ export class AcademicService {
         .where(
           and(
             eq(classes.organizationId, tenantId),
-            levelId && levelId !== 'ALL' ? eq(classes.levelId, levelId) : undefined,
             status && status !== 'ALL' ? eq(classes.isActive, status === 'ACTIVE') : undefined,
+            levelId && levelId !== 'ALL' ? eq(classes.levelId, levelId) : undefined,
             search
               ? or(
                   ilike(classes.name, `%${search}%`),
                   ilike(classes.shortName, `%${search}%`),
-                  ilike(classes.code, `%${search}%`)
+                  ilike(classes.code, `%${search}%`),
+                  ilike(academicLevels.name, `%${search}%`)
                 )
               : undefined
           )
         )
-        .orderBy(asc(academicLevels.sortOrder), asc(classes.sortOrder), asc(classes.name));
+        .orderBy(asc(classes.sortOrder), asc(classes.name));
 
       const classIds = rows.map((r: any) => r.id);
       const branchMap = await this.loadScopeBranchInfo(tx, tenantId, 'class', classIds);
-
-      // Load subject mappings
-      const subjectMappings = classIds.length > 0
-        ? await tx
-            .select({
-              classId: classSubjectMappings.classId,
-              subjectId: classSubjectMappings.subjectId,
-              subjectName: subjects.name,
-              isCompulsory: classSubjectMappings.isCompulsory,
-            })
-            .from(classSubjectMappings)
-            .innerJoin(subjects, eq(classSubjectMappings.subjectId, subjects.id))
-            .where(
-              and(
-                eq(classSubjectMappings.organizationId, tenantId),
-                inArray(classSubjectMappings.classId, classIds)
-              )
-            )
-        : [];
-
-      const subjectsMap = new Map<
-        string,
-        {
-          compulsoryIds: string[];
-          compulsoryNames: string[];
-          optionalIds: string[];
-          optionalNames: string[];
-        }
-      >();
-
-      for (const m of subjectMappings) {
-        if (!subjectsMap.has(m.classId)) {
-          subjectsMap.set(m.classId, {
-            compulsoryIds: [],
-            compulsoryNames: [],
-            optionalIds: [],
-            optionalNames: [],
-          });
-        }
-        const entry = subjectsMap.get(m.classId)!;
-        if (m.isCompulsory) {
-          entry.compulsoryIds.push(m.subjectId);
-          entry.compulsoryNames.push(m.subjectName);
-        } else {
-          entry.optionalIds.push(m.subjectId);
-          entry.optionalNames.push(m.subjectName);
-        }
-      }
+      const subjectMap = await this.loadClassSubjects(tx, tenantId, classIds);
 
       let result: ClassListItemDto[] = rows.map((r: any) => {
         const scope = branchMap.get(r.id);
-        const sub = subjectsMap.get(r.id);
-        const compCount = sub?.compulsoryIds.length || 0;
-        const optCount = sub?.optionalIds.length || 0;
+        const subData = subjectMap.get(r.id);
+        const gov = this.tagEffectiveGovernance(r, userRole, campusId);
         return {
           id: r.id,
           organizationId: r.organizationId,
@@ -1447,16 +1748,18 @@ export class AcademicService {
           code: r.code,
           fromAge: r.fromAge ? Number(r.fromAge) : null,
           toAge: r.toAge ? Number(r.toAge) : null,
-          compulsorySubjectIds: sub?.compulsoryIds || [],
-          compulsorySubjectNames: sub?.compulsoryNames || [],
-          optionalSubjectIds: sub?.optionalIds || [],
-          optionalSubjectNames: sub?.optionalNames || [],
-          totalSubjectsCount: compCount + optCount,
+          compulsorySubjectIds: subData?.compulsoryIds || [],
+          compulsorySubjectNames: subData?.compulsoryNames || [],
+          optionalSubjectIds: subData?.optionalIds || [],
+          optionalSubjectNames: subData?.optionalNames || [],
+          totalSubjectsCount: (subData?.compulsoryIds.length || 0) + (subData?.optionalIds.length || 0),
           sortOrder: r.sortOrder,
           description: r.description,
+          ownerId: r.ownerId,
           applyTo: r.applyTo as ConfigScopeType,
           branchIds: scope?.branchIds || [],
           branchNames: scope?.branchNames || [],
+          ...gov,
           isActive: r.isActive,
           createdAt: r.createdAt,
           updatedAt: r.updatedAt,
@@ -1464,7 +1767,11 @@ export class AcademicService {
       });
 
       if (campusId && campusId !== 'ALL') {
-        result = result.filter((c) => c.applyTo === 'ALL_CAMPUSES' || c.branchIds?.includes(campusId));
+        result = result.filter((c) => {
+          if (c.ownerType === 'CAMPUS' && c.ownerId === campusId) return true;
+          if (c.applyTo === 'ALL_CAMPUSES') return true;
+          return c.branchIds?.includes(campusId);
+        });
       }
 
       return result;
@@ -1475,47 +1782,44 @@ export class AcademicService {
     tenantId: string,
     dto: CreateClassDto,
     actorUserId?: string,
-    authorizedBranchIds?: string[]
+    authorizedBranchIds?: string[],
+    userRole: string = 'SCHOOL_ADMIN'
   ): Promise<ClassListItemDto> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
-      // 1. Validate parent Level
+      const cleanName = dto.name.trim();
+      const ownerType: ConfigOwnerType = dto.ownerType || 'SCHOOL';
+      const ownerId = dto.ownerId || null;
+
+      await this.validateDuplicateAndParentConflict(
+        tx,
+        tenantId,
+        classes,
+        cleanName,
+        dto.code,
+        ownerType,
+        ownerId,
+        'Class / Grade',
+        'class'
+      );
+
       const [level] = await tx
         .select()
         .from(academicLevels)
-        .where(and(eq(academicLevels.organizationId, tenantId), eq(academicLevels.id, dto.levelId)));
-
-      if (!level) throw new NotFoundException(`Academic Level '${dto.levelId}' not found.`);
-
-      // 2. Validate Age range
-      if (dto.fromAge !== undefined && dto.toAge !== undefined) {
-        if (dto.fromAge > dto.toAge) {
-          throw new BadRequestException('From Age must be less than or equal to To Age.');
-        }
-      }
-
-      // 3. Validate Compulsory vs Optional Subject intersection
-      const compIds = dto.compulsorySubjectIds || [];
-      const optIds = dto.optionalSubjectIds || [];
-      for (const cid of compIds) {
-        if (optIds.includes(cid)) {
-          throw new BadRequestException(`Subject ID '${cid}' cannot be mapped as both Compulsory and Optional for the same class.`);
-        }
-      }
-
-      const cleanName = dto.name.trim();
-
-      const [existing] = await tx
-        .select({ id: classes.id })
-        .from(classes)
         .where(
           and(
-            eq(classes.organizationId, tenantId),
-            ilike(classes.name, cleanName)
+            eq(academicLevels.organizationId, tenantId),
+            eq(academicLevels.id, dto.levelId)
           )
         );
 
-      if (existing) {
-        throw new ConflictException(`Class / Grade '${cleanName}' already exists.`);
+      if (!level) {
+        throw new BadRequestException(`Academic Level / Stage with ID '${dto.levelId}' does not exist.`);
+      }
+
+      if (dto.fromAge !== undefined && dto.toAge !== undefined && dto.fromAge !== null && dto.toAge !== null) {
+        if (dto.fromAge > dto.toAge) {
+          throw new BadRequestException('From Age must be less than or equal to To Age.');
+        }
       }
 
       let resolvedSortOrder = dto.sortOrder;
@@ -1523,7 +1827,7 @@ export class AcademicService {
         const [maxSort] = await tx
           .select({ maxOrder: sql<number>`COALESCE(MAX(${classes.sortOrder}), 0)` })
           .from(classes)
-          .where(and(eq(classes.organizationId, tenantId), eq(classes.levelId, dto.levelId)));
+          .where(eq(classes.organizationId, tenantId));
         resolvedSortOrder = (Number(maxSort?.maxOrder) || 0) + 1;
       }
 
@@ -1535,32 +1839,16 @@ export class AcademicService {
           name: cleanName,
           shortName: dto.shortName?.trim() || null,
           code: dto.code?.trim().toUpperCase() || null,
-          fromAge: dto.fromAge !== undefined ? String(dto.fromAge) : null,
-          toAge: dto.toAge !== undefined ? String(dto.toAge) : null,
+          fromAge: dto.fromAge !== undefined ? (dto.fromAge !== null ? String(dto.fromAge) : null) : null,
+          toAge: dto.toAge !== undefined ? (dto.toAge !== null ? String(dto.toAge) : null) : null,
           sortOrder: resolvedSortOrder,
           description: dto.description?.trim() || null,
+          ownerType,
+          ownerId,
           applyTo: dto.applyTo || 'ALL_CAMPUSES',
           isActive: dto.isActive ?? true,
         })
         .returning();
-
-      // Insert subject mappings
-      for (const sid of compIds) {
-        await tx.insert(classSubjectMappings).values({
-          organizationId: tenantId,
-          classId: created!.id,
-          subjectId: sid,
-          isCompulsory: true,
-        });
-      }
-      for (const sid of optIds) {
-        await tx.insert(classSubjectMappings).values({
-          organizationId: tenantId,
-          classId: created!.id,
-          subjectId: sid,
-          isCompulsory: false,
-        });
-      }
 
       await this.syncScopeBranches(
         tx,
@@ -1571,6 +1859,16 @@ export class AcademicService {
         dto.branchIds || [],
         authorizedBranchIds
       );
+
+      if (dto.compulsorySubjectIds || dto.optionalSubjectIds) {
+        await this.syncClassSubjects(
+          tx,
+          tenantId,
+          created!.id,
+          dto.compulsorySubjectIds || [],
+          dto.optionalSubjectIds || []
+        );
+      }
 
       await this.auditService.logEvent(
         {
@@ -1587,7 +1885,10 @@ export class AcademicService {
       );
 
       const branchMap = await this.loadScopeBranchInfo(tx, tenantId, 'class', [created!.id]);
+      const subjectMap = await this.loadClassSubjects(tx, tenantId, [created!.id]);
       const scope = branchMap.get(created!.id);
+      const subData = subjectMap.get(created!.id);
+      const gov = this.tagEffectiveGovernance(created!, userRole);
 
       return {
         id: created!.id,
@@ -1599,14 +1900,18 @@ export class AcademicService {
         code: created!.code,
         fromAge: created!.fromAge ? Number(created!.fromAge) : null,
         toAge: created!.toAge ? Number(created!.toAge) : null,
-        compulsorySubjectIds: compIds,
-        optionalSubjectIds: optIds,
-        totalSubjectsCount: compIds.length + optIds.length,
+        compulsorySubjectIds: subData?.compulsoryIds || [],
+        compulsorySubjectNames: subData?.compulsoryNames || [],
+        optionalSubjectIds: subData?.optionalIds || [],
+        optionalSubjectNames: subData?.optionalNames || [],
+        totalSubjectsCount: (subData?.compulsoryIds.length || 0) + (subData?.optionalIds.length || 0),
         sortOrder: created!.sortOrder,
         description: created!.description,
+        ownerId: created!.ownerId,
         applyTo: created!.applyTo as ConfigScopeType,
         branchIds: scope?.branchIds || [],
         branchNames: scope?.branchNames || [],
+        ...gov,
         isActive: created!.isActive,
         createdAt: created!.createdAt,
         updatedAt: created!.updatedAt,
@@ -1619,7 +1924,8 @@ export class AcademicService {
     id: string,
     dto: UpdateClassDto,
     actorUserId?: string,
-    authorizedBranchIds?: string[]
+    authorizedBranchIds?: string[],
+    userRole: string = 'SCHOOL_ADMIN'
   ): Promise<ClassListItemDto> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
       const [existing] = await tx
@@ -1629,26 +1935,48 @@ export class AcademicService {
 
       if (!existing) throw new NotFoundException(`Class with ID '${id}' not found.`);
 
-      const targetLevelId = dto.levelId || existing.levelId;
+      const gov = this.tagEffectiveGovernance(existing, userRole);
+      if (!gov.canEdit) {
+        throw new ForbiddenException('You do not have permission to edit this inherited configuration.');
+      }
+
+      if (dto.name || dto.code) {
+        await this.validateDuplicateAndParentConflict(
+          tx,
+          tenantId,
+          classes,
+          dto.name || existing.name,
+          dto.code || existing.code,
+          existing.ownerType as ConfigOwnerType,
+          existing.ownerId,
+          'Class / Grade',
+          'class',
+          id
+        );
+      }
+
+      let levelName = '';
+      const levelId = dto.levelId || existing.levelId;
       const [level] = await tx
         .select()
         .from(academicLevels)
-        .where(and(eq(academicLevels.organizationId, tenantId), eq(academicLevels.id, targetLevelId)));
+        .where(
+          and(
+            eq(academicLevels.organizationId, tenantId),
+            eq(academicLevels.id, levelId)
+          )
+        );
 
-      if (!level) throw new NotFoundException(`Academic Level '${targetLevelId}' not found.`);
-
-      const fromAge = dto.fromAge !== undefined ? dto.fromAge : (existing.fromAge ? Number(existing.fromAge) : undefined);
-      const toAge = dto.toAge !== undefined ? dto.toAge : (existing.toAge ? Number(existing.toAge) : undefined);
-      if (fromAge !== undefined && toAge !== undefined && fromAge > toAge) {
-        throw new BadRequestException('From Age must be less than or equal to To Age.');
+      if (!level) {
+        throw new BadRequestException(`Academic Level / Stage with ID '${levelId}' does not exist.`);
       }
+      levelName = level.name;
 
-      if (dto.compulsorySubjectIds !== undefined && dto.optionalSubjectIds !== undefined) {
-        for (const cid of dto.compulsorySubjectIds) {
-          if (dto.optionalSubjectIds.includes(cid)) {
-            throw new BadRequestException(`Subject ID '${cid}' cannot be mapped as both Compulsory and Optional for the same class.`);
-          }
-        }
+      const fromAge = dto.fromAge !== undefined ? (dto.fromAge !== null ? String(dto.fromAge) : null) : existing.fromAge;
+      const toAge = dto.toAge !== undefined ? (dto.toAge !== null ? String(dto.toAge) : null) : existing.toAge;
+
+      if (fromAge !== null && toAge !== null && Number(fromAge) > Number(toAge)) {
+        throw new BadRequestException('From Age must be less than or equal to To Age.');
       }
 
       const applyTo = dto.applyTo || (existing.applyTo as ConfigScopeType);
@@ -1656,12 +1984,12 @@ export class AcademicService {
       const [updated] = await tx
         .update(classes)
         .set({
-          levelId: targetLevelId,
+          levelId,
           name: dto.name ? dto.name.trim() : existing.name,
           shortName: dto.shortName !== undefined ? (dto.shortName ? dto.shortName.trim() : null) : existing.shortName,
           code: dto.code !== undefined ? (dto.code ? dto.code.trim().toUpperCase() : null) : existing.code,
-          fromAge: fromAge !== undefined ? String(fromAge) : null,
-          toAge: toAge !== undefined ? String(toAge) : null,
+          fromAge,
+          toAge,
           sortOrder: dto.sortOrder !== undefined ? dto.sortOrder : existing.sortOrder,
           description: dto.description !== undefined ? (dto.description ? dto.description.trim() : null) : existing.description,
           applyTo,
@@ -1670,33 +1998,6 @@ export class AcademicService {
         })
         .where(and(eq(classes.organizationId, tenantId), eq(classes.id, id)))
         .returning();
-
-      // Replace subject mappings if provided
-      if (dto.compulsorySubjectIds !== undefined || dto.optionalSubjectIds !== undefined) {
-        await tx
-          .delete(classSubjectMappings)
-          .where(and(eq(classSubjectMappings.organizationId, tenantId), eq(classSubjectMappings.classId, id)));
-
-        const compIds = dto.compulsorySubjectIds || [];
-        const optIds = dto.optionalSubjectIds || [];
-
-        for (const sid of compIds) {
-          await tx.insert(classSubjectMappings).values({
-            organizationId: tenantId,
-            classId: id,
-            subjectId: sid,
-            isCompulsory: true,
-          });
-        }
-        for (const sid of optIds) {
-          await tx.insert(classSubjectMappings).values({
-            organizationId: tenantId,
-            classId: id,
-            subjectId: sid,
-            isCompulsory: false,
-          });
-        }
-      }
 
       if (dto.applyTo !== undefined || dto.branchIds !== undefined) {
         await this.syncScopeBranches(
@@ -1708,6 +2009,14 @@ export class AcademicService {
           dto.branchIds || [],
           authorizedBranchIds
         );
+      }
+
+      if (dto.compulsorySubjectIds !== undefined || dto.optionalSubjectIds !== undefined) {
+        const currentSubjects = await this.loadClassSubjects(tx, tenantId, [id]);
+        const currentData = currentSubjects.get(id);
+        const compIds = dto.compulsorySubjectIds !== undefined ? dto.compulsorySubjectIds : (currentData?.compulsoryIds || []);
+        const optIds = dto.optionalSubjectIds !== undefined ? dto.optionalSubjectIds : (currentData?.optionalIds || []);
+        await this.syncClassSubjects(tx, tenantId, id, compIds, optIds);
       }
 
       await this.auditService.logEvent(
@@ -1726,23 +2035,32 @@ export class AcademicService {
       );
 
       const branchMap = await this.loadScopeBranchInfo(tx, tenantId, 'class', [id]);
+      const subjectMap = await this.loadClassSubjects(tx, tenantId, [id]);
       const scope = branchMap.get(id);
+      const subData = subjectMap.get(id);
 
       return {
         id: updated!.id,
         organizationId: updated!.organizationId,
         levelId: updated!.levelId,
-        levelName: level.name,
+        levelName,
         name: updated!.name,
         shortName: updated!.shortName,
         code: updated!.code,
         fromAge: updated!.fromAge ? Number(updated!.fromAge) : null,
         toAge: updated!.toAge ? Number(updated!.toAge) : null,
+        compulsorySubjectIds: subData?.compulsoryIds || [],
+        compulsorySubjectNames: subData?.compulsoryNames || [],
+        optionalSubjectIds: subData?.optionalIds || [],
+        optionalSubjectNames: subData?.optionalNames || [],
+        totalSubjectsCount: (subData?.compulsoryIds.length || 0) + (subData?.optionalIds.length || 0),
         sortOrder: updated!.sortOrder,
         description: updated!.description,
+        ownerId: updated!.ownerId,
         applyTo: updated!.applyTo as ConfigScopeType,
         branchIds: scope?.branchIds || [],
         branchNames: scope?.branchNames || [],
+        ...gov,
         isActive: updated!.isActive,
         createdAt: updated!.createdAt,
         updatedAt: updated!.updatedAt,
@@ -1754,15 +2072,40 @@ export class AcademicService {
     tenantId: string,
     id: string,
     isActive: boolean,
-    actorUserId?: string
+    actorUserId?: string,
+    userRole: string = 'SCHOOL_ADMIN'
   ): Promise<ClassListItemDto> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
       const [existing] = await tx
-        .select()
+        .select({
+          id: classes.id,
+          organizationId: classes.organizationId,
+          levelId: classes.levelId,
+          levelName: academicLevels.name,
+          name: classes.name,
+          shortName: classes.shortName,
+          code: classes.code,
+          fromAge: classes.fromAge,
+          toAge: classes.toAge,
+          sortOrder: classes.sortOrder,
+          description: classes.description,
+          ownerType: classes.ownerType,
+          ownerId: classes.ownerId,
+          applyTo: classes.applyTo,
+          isActive: classes.isActive,
+          createdAt: classes.createdAt,
+          updatedAt: classes.updatedAt,
+        })
         .from(classes)
+        .innerJoin(academicLevels, eq(classes.levelId, academicLevels.id))
         .where(and(eq(classes.organizationId, tenantId), eq(classes.id, id)));
 
       if (!existing) throw new NotFoundException(`Class with ID '${id}' not found.`);
+
+      const gov = this.tagEffectiveGovernance(existing, userRole);
+      if (!gov.canToggleStatus) {
+        throw new ForbiddenException('You do not have permission to toggle status for this inherited configuration.');
+      }
 
       const [updated] = await tx
         .update(classes)
@@ -1786,20 +2129,32 @@ export class AcademicService {
       );
 
       const branchMap = await this.loadScopeBranchInfo(tx, tenantId, 'class', [id]);
+      const subjectMap = await this.loadClassSubjects(tx, tenantId, [id]);
       const scope = branchMap.get(id);
+      const subData = subjectMap.get(id);
 
       return {
         id: updated!.id,
         organizationId: updated!.organizationId,
         levelId: updated!.levelId,
+        levelName: existing.levelName,
         name: updated!.name,
         shortName: updated!.shortName,
         code: updated!.code,
+        fromAge: updated!.fromAge ? Number(updated!.fromAge) : null,
+        toAge: updated!.toAge ? Number(updated!.toAge) : null,
+        compulsorySubjectIds: subData?.compulsoryIds || [],
+        compulsorySubjectNames: subData?.compulsoryNames || [],
+        optionalSubjectIds: subData?.optionalIds || [],
+        optionalSubjectNames: subData?.optionalNames || [],
+        totalSubjectsCount: (subData?.compulsoryIds.length || 0) + (subData?.optionalIds.length || 0),
         sortOrder: updated!.sortOrder,
         description: updated!.description,
+        ownerId: updated!.ownerId,
         applyTo: updated!.applyTo as ConfigScopeType,
         branchIds: scope?.branchIds || [],
         branchNames: scope?.branchNames || [],
+        ...gov,
         isActive: updated!.isActive,
         createdAt: updated!.createdAt,
         updatedAt: updated!.updatedAt,
@@ -1815,7 +2170,8 @@ export class AcademicService {
     tenantId: string,
     campusId?: string,
     search?: string,
-    status?: string
+    status?: string,
+    userRole: string = 'SCHOOL_ADMIN'
   ): Promise<SectionListItemDto[]> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
       const rows = await tx
@@ -1835,15 +2191,18 @@ export class AcademicService {
 
       let result: SectionListItemDto[] = rows.map((r: any) => {
         const scope = branchMap.get(r.id);
+        const gov = this.tagEffectiveGovernance(r, userRole, campusId);
         return {
           id: r.id,
           organizationId: r.organizationId,
           name: r.name,
           sortOrder: r.sortOrder,
           description: r.description,
+          ownerId: r.ownerId,
           applyTo: r.applyTo as ConfigScopeType,
           branchIds: scope?.branchIds || [],
           branchNames: scope?.branchNames || [],
+          ...gov,
           isActive: r.isActive,
           createdAt: r.createdAt,
           updatedAt: r.updatedAt,
@@ -1851,7 +2210,11 @@ export class AcademicService {
       });
 
       if (campusId && campusId !== 'ALL') {
-        result = result.filter((s) => s.applyTo === 'ALL_CAMPUSES' || s.branchIds?.includes(campusId));
+        result = result.filter((sec) => {
+          if (sec.ownerType === 'CAMPUS' && sec.ownerId === campusId) return true;
+          if (sec.applyTo === 'ALL_CAMPUSES') return true;
+          return sec.branchIds?.includes(campusId);
+        });
       }
 
       return result;
@@ -1862,24 +2225,25 @@ export class AcademicService {
     tenantId: string,
     dto: CreateSectionDto,
     actorUserId?: string,
-    authorizedBranchIds?: string[]
+    authorizedBranchIds?: string[],
+    userRole: string = 'SCHOOL_ADMIN'
   ): Promise<SectionListItemDto> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
       const cleanName = dto.name.trim();
+      const ownerType: ConfigOwnerType = dto.ownerType || 'SCHOOL';
+      const ownerId = dto.ownerId || null;
 
-      const [existing] = await tx
-        .select({ id: sections.id })
-        .from(sections)
-        .where(
-          and(
-            eq(sections.organizationId, tenantId),
-            ilike(sections.name, cleanName)
-          )
-        );
-
-      if (existing) {
-        throw new ConflictException(`Section '${cleanName}' already exists.`);
-      }
+      await this.validateDuplicateAndParentConflict(
+        tx,
+        tenantId,
+        sections,
+        cleanName,
+        null,
+        ownerType,
+        ownerId,
+        'Section',
+        'section'
+      );
 
       let resolvedSortOrder = dto.sortOrder;
       if (!resolvedSortOrder || resolvedSortOrder <= 0) {
@@ -1897,6 +2261,8 @@ export class AcademicService {
           name: cleanName,
           sortOrder: resolvedSortOrder,
           description: dto.description?.trim() || null,
+          ownerType,
+          ownerId,
           applyTo: dto.applyTo || 'ALL_CAMPUSES',
           isActive: dto.isActive ?? true,
         })
@@ -1928,12 +2294,14 @@ export class AcademicService {
 
       const branchMap = await this.loadScopeBranchInfo(tx, tenantId, 'section', [created!.id]);
       const scope = branchMap.get(created!.id);
+      const gov = this.tagEffectiveGovernance(created!, userRole);
 
       return {
         ...created!,
         applyTo: created!.applyTo as ConfigScopeType,
         branchIds: scope?.branchIds || [],
         branchNames: scope?.branchNames || [],
+        ...gov,
       };
     });
   }
@@ -1943,7 +2311,8 @@ export class AcademicService {
     id: string,
     dto: UpdateSectionDto,
     actorUserId?: string,
-    authorizedBranchIds?: string[]
+    authorizedBranchIds?: string[],
+    userRole: string = 'SCHOOL_ADMIN'
   ): Promise<SectionListItemDto> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
       const [existing] = await tx
@@ -1952,6 +2321,26 @@ export class AcademicService {
         .where(and(eq(sections.organizationId, tenantId), eq(sections.id, id)));
 
       if (!existing) throw new NotFoundException(`Section with ID '${id}' not found.`);
+
+      const gov = this.tagEffectiveGovernance(existing, userRole);
+      if (!gov.canEdit) {
+        throw new ForbiddenException('You do not have permission to edit this inherited configuration.');
+      }
+
+      if (dto.name) {
+        await this.validateDuplicateAndParentConflict(
+          tx,
+          tenantId,
+          sections,
+          dto.name,
+          null,
+          existing.ownerType as ConfigOwnerType,
+          existing.ownerId,
+          'Section',
+          'section',
+          id
+        );
+      }
 
       const applyTo = dto.applyTo || (existing.applyTo as ConfigScopeType);
 
@@ -2003,6 +2392,7 @@ export class AcademicService {
         applyTo: updated!.applyTo as ConfigScopeType,
         branchIds: scope?.branchIds || [],
         branchNames: scope?.branchNames || [],
+        ...gov,
       };
     });
   }
@@ -2011,7 +2401,8 @@ export class AcademicService {
     tenantId: string,
     id: string,
     isActive: boolean,
-    actorUserId?: string
+    actorUserId?: string,
+    userRole: string = 'SCHOOL_ADMIN'
   ): Promise<SectionListItemDto> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
       const [existing] = await tx
@@ -2020,6 +2411,11 @@ export class AcademicService {
         .where(and(eq(sections.organizationId, tenantId), eq(sections.id, id)));
 
       if (!existing) throw new NotFoundException(`Section with ID '${id}' not found.`);
+
+      const gov = this.tagEffectiveGovernance(existing, userRole);
+      if (!gov.canToggleStatus) {
+        throw new ForbiddenException('You do not have permission to toggle status for this inherited configuration.');
+      }
 
       const [updated] = await tx
         .update(sections)
@@ -2050,6 +2446,7 @@ export class AcademicService {
         applyTo: updated!.applyTo as ConfigScopeType,
         branchIds: scope?.branchIds || [],
         branchNames: scope?.branchNames || [],
+        ...gov,
       };
     });
   }
@@ -2062,7 +2459,8 @@ export class AcademicService {
     tenantId: string,
     campusId?: string,
     search?: string,
-    status?: string
+    status?: string,
+    userRole: string = 'SCHOOL_ADMIN'
   ): Promise<LanguageListItemDto[]> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
       const rows = await tx
@@ -2087,6 +2485,7 @@ export class AcademicService {
 
       let result: LanguageListItemDto[] = rows.map((r: any) => {
         const scope = branchMap.get(r.id);
+        const gov = this.tagEffectiveGovernance(r, userRole, campusId);
         return {
           id: r.id,
           organizationId: r.organizationId,
@@ -2094,9 +2493,11 @@ export class AcademicService {
           code: r.code,
           sortOrder: r.sortOrder,
           description: r.description,
+          ownerId: r.ownerId,
           applyTo: r.applyTo as ConfigScopeType,
           branchIds: scope?.branchIds || [],
           branchNames: scope?.branchNames || [],
+          ...gov,
           isActive: r.isActive,
           createdAt: r.createdAt,
           updatedAt: r.updatedAt,
@@ -2104,7 +2505,11 @@ export class AcademicService {
       });
 
       if (campusId && campusId !== 'ALL') {
-        result = result.filter((l) => l.applyTo === 'ALL_CAMPUSES' || l.branchIds?.includes(campusId));
+        result = result.filter((l) => {
+          if (l.ownerType === 'CAMPUS' && l.ownerId === campusId) return true;
+          if (l.applyTo === 'ALL_CAMPUSES') return true;
+          return l.branchIds?.includes(campusId);
+        });
       }
 
       return result;
@@ -2115,24 +2520,25 @@ export class AcademicService {
     tenantId: string,
     dto: CreateLanguageDto,
     actorUserId?: string,
-    authorizedBranchIds?: string[]
+    authorizedBranchIds?: string[],
+    userRole: string = 'SCHOOL_ADMIN'
   ): Promise<LanguageListItemDto> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
       const cleanName = dto.name.trim();
+      const ownerType: ConfigOwnerType = dto.ownerType || 'SCHOOL';
+      const ownerId = dto.ownerId || null;
 
-      const [existing] = await tx
-        .select({ id: languages.id })
-        .from(languages)
-        .where(
-          and(
-            eq(languages.organizationId, tenantId),
-            ilike(languages.name, cleanName)
-          )
-        );
-
-      if (existing) {
-        throw new ConflictException(`Language '${cleanName}' already exists.`);
-      }
+      await this.validateDuplicateAndParentConflict(
+        tx,
+        tenantId,
+        languages,
+        cleanName,
+        dto.code,
+        ownerType,
+        ownerId,
+        'Language',
+        'language'
+      );
 
       let resolvedSortOrder = dto.sortOrder;
       if (!resolvedSortOrder || resolvedSortOrder <= 0) {
@@ -2151,6 +2557,8 @@ export class AcademicService {
           code: dto.code?.trim().toUpperCase() || null,
           sortOrder: resolvedSortOrder,
           description: dto.description?.trim() || null,
+          ownerType,
+          ownerId,
           applyTo: dto.applyTo || 'ALL_CAMPUSES',
           isActive: dto.isActive ?? true,
         })
@@ -2182,12 +2590,14 @@ export class AcademicService {
 
       const branchMap = await this.loadScopeBranchInfo(tx, tenantId, 'language', [created!.id]);
       const scope = branchMap.get(created!.id);
+      const gov = this.tagEffectiveGovernance(created!, userRole);
 
       return {
         ...created!,
         applyTo: created!.applyTo as ConfigScopeType,
         branchIds: scope?.branchIds || [],
         branchNames: scope?.branchNames || [],
+        ...gov,
       };
     });
   }
@@ -2197,7 +2607,8 @@ export class AcademicService {
     id: string,
     dto: UpdateLanguageDto,
     actorUserId?: string,
-    authorizedBranchIds?: string[]
+    authorizedBranchIds?: string[],
+    userRole: string = 'SCHOOL_ADMIN'
   ): Promise<LanguageListItemDto> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
       const [existing] = await tx
@@ -2206,6 +2617,26 @@ export class AcademicService {
         .where(and(eq(languages.organizationId, tenantId), eq(languages.id, id)));
 
       if (!existing) throw new NotFoundException(`Language with ID '${id}' not found.`);
+
+      const gov = this.tagEffectiveGovernance(existing, userRole);
+      if (!gov.canEdit) {
+        throw new ForbiddenException('You do not have permission to edit this inherited configuration.');
+      }
+
+      if (dto.name || dto.code) {
+        await this.validateDuplicateAndParentConflict(
+          tx,
+          tenantId,
+          languages,
+          dto.name || existing.name,
+          dto.code || existing.code,
+          existing.ownerType as ConfigOwnerType,
+          existing.ownerId,
+          'Language',
+          'language',
+          id
+        );
+      }
 
       const applyTo = dto.applyTo || (existing.applyTo as ConfigScopeType);
 
@@ -2258,6 +2689,7 @@ export class AcademicService {
         applyTo: updated!.applyTo as ConfigScopeType,
         branchIds: scope?.branchIds || [],
         branchNames: scope?.branchNames || [],
+        ...gov,
       };
     });
   }
@@ -2266,7 +2698,8 @@ export class AcademicService {
     tenantId: string,
     id: string,
     isActive: boolean,
-    actorUserId?: string
+    actorUserId?: string,
+    userRole: string = 'SCHOOL_ADMIN'
   ): Promise<LanguageListItemDto> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
       const [existing] = await tx
@@ -2275,6 +2708,11 @@ export class AcademicService {
         .where(and(eq(languages.organizationId, tenantId), eq(languages.id, id)));
 
       if (!existing) throw new NotFoundException(`Language with ID '${id}' not found.`);
+
+      const gov = this.tagEffectiveGovernance(existing, userRole);
+      if (!gov.canToggleStatus) {
+        throw new ForbiddenException('You do not have permission to toggle status for this inherited configuration.');
+      }
 
       const [updated] = await tx
         .update(languages)
@@ -2305,6 +2743,7 @@ export class AcademicService {
         applyTo: updated!.applyTo as ConfigScopeType,
         branchIds: scope?.branchIds || [],
         branchNames: scope?.branchNames || [],
+        ...gov,
       };
     });
   }

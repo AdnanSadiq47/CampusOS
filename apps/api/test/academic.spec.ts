@@ -1,84 +1,94 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
-import { ConflictException, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
-import { TenantTransactionManager } from '@campus-os/database';
+import {
+  organizations,
+  branches,
+  configScopeBranches,
+  academicYears,
+  boards,
+  academicLevels,
+  subjects,
+  classes,
+  classSubjectMappings,
+  sections,
+  languages,
+  auditLogs,
+  TenantTransactionManager,
+} from '@campus-os/database';
 import { AcademicService } from '../src/modules/academic/academic.service.js';
 import { AuditService } from '../src/core/audit/audit.service.js';
 
-const TENANT_A = '11111111-1111-1111-1111-111111111111';
-const TENANT_B = '22222222-2222-2222-2222-222222222222';
-const USER_ID = '99999999-9999-9999-9999-999999999999';
-
-const CAMPUS_A = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
-const CAMPUS_B = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
-const CAMPUS_C = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
-
-describe('AcademicService & Academic Masters Suite Integration Tests (PGlite)', () => {
+describe('Academic Setup & Governance Engine Integration Tests', () => {
   let pglite: PGlite;
-  let db: any;
-  let txManager: TenantTransactionManager;
-  let auditService: AuditService;
   let academicService: AcademicService;
+  let auditService: AuditService;
+  let txManager: TenantTransactionManager;
 
-  let primaryLevelId: string;
-  let secondaryLevelId: string;
-  let mathSubjectId: string;
-  let englishSubjectId: string;
-  let physicsSubjectId: string;
-  let grade5ClassId: string;
-  let matricBoardId: string;
-  let year2025Id: string;
-  let sectionAId: string;
-  let englishLangId: string;
+  const TENANT_A = '11111111-1111-1111-1111-111111111111';
+  const TENANT_B = '22222222-2222-2222-2222-222222222222';
+  const CAMPUS_A = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+  const CAMPUS_B = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+  const CAMPUS_C = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
 
-  beforeAll(async () => {
+  beforeEach(async () => {
     pglite = new PGlite();
-    db = drizzle(pglite);
+    const db = drizzle(pglite);
 
+    // Create all required schema tables
     await pglite.exec(`
-      CREATE TABLE organizations (
+      CREATE TABLE IF NOT EXISTS organizations (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         code VARCHAR(64) UNIQUE NOT NULL,
         name VARCHAR(255) NOT NULL,
-        status VARCHAR(32) DEFAULT 'ACTIVE' NOT NULL,
+        legal_name VARCHAR(255),
+        tax_identifier VARCHAR(64),
+        primary_currency VARCHAR(3) DEFAULT 'USD' NOT NULL,
+        domain VARCHAR(255) UNIQUE,
+        logo_url TEXT,
+        settings JSONB DEFAULT '{}'::jsonb NOT NULL,
+        is_active BOOLEAN DEFAULT TRUE NOT NULL,
         created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
         updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
       );
 
-      CREATE TABLE schools (
+      CREATE TABLE IF NOT EXISTS branches (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-        name VARCHAR(255) NOT NULL,
+        hierarchy_node_id UUID,
+        school_id UUID,
         code VARCHAR(64) NOT NULL,
-        status VARCHAR(32) DEFAULT 'ACTIVE' NOT NULL,
-        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-        updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
-      );
-
-      CREATE TABLE branches (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-        school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
         name VARCHAR(255) NOT NULL,
-        code VARCHAR(64) NOT NULL,
-        status VARCHAR(32) DEFAULT 'ACTIVE' NOT NULL,
+        short_name VARCHAR(128),
+        description TEXT,
         sort_order INTEGER DEFAULT 1 NOT NULL,
+        logo_url TEXT,
+        phone VARCHAR(64),
+        alternate_phone VARCHAR(64),
+        email VARCHAR(255),
+        website VARCHAR(255),
+        country VARCHAR(128) DEFAULT 'Pakistan',
+        province VARCHAR(128),
+        city VARCHAR(128),
+        area VARCHAR(128),
+        address TEXT,
+        postal_code VARCHAR(32),
+        notes TEXT,
+        is_active BOOLEAN DEFAULT TRUE NOT NULL,
         created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
         updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
       );
 
-      CREATE TABLE config_scope_branches (
+      CREATE TABLE IF NOT EXISTS config_scope_branches (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
         entity_type VARCHAR(64) NOT NULL,
         entity_id UUID NOT NULL,
         branch_id UUID NOT NULL REFERENCES branches(id) ON DELETE CASCADE,
-        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
       );
-      CREATE UNIQUE INDEX uq_scope_org_entity_branch ON config_scope_branches(organization_id, entity_type, entity_id, branch_id);
 
-      CREATE TABLE academic_years (
+      CREATE TABLE IF NOT EXISTS academic_years (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
         name VARCHAR(255) NOT NULL,
@@ -88,14 +98,15 @@ describe('AcademicService & Academic Masters Suite Integration Tests (PGlite)', 
         is_current BOOLEAN DEFAULT FALSE NOT NULL,
         sort_order INTEGER DEFAULT 1 NOT NULL,
         description TEXT,
+        owner_type VARCHAR(32) DEFAULT 'SCHOOL' NOT NULL,
+        owner_id UUID,
         apply_to VARCHAR(32) DEFAULT 'ALL_CAMPUSES' NOT NULL,
         is_active BOOLEAN DEFAULT TRUE NOT NULL,
-        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-        updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
       );
-      CREATE UNIQUE INDEX uq_academic_year_org_code ON academic_years(organization_id, code);
 
-      CREATE TABLE boards (
+      CREATE TABLE IF NOT EXISTS boards (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
         name VARCHAR(255) NOT NULL,
@@ -103,28 +114,30 @@ describe('AcademicService & Academic Masters Suite Integration Tests (PGlite)', 
         code VARCHAR(64),
         sort_order INTEGER DEFAULT 1 NOT NULL,
         description TEXT,
+        owner_type VARCHAR(32) DEFAULT 'SCHOOL' NOT NULL,
+        owner_id UUID,
         apply_to VARCHAR(32) DEFAULT 'ALL_CAMPUSES' NOT NULL,
         is_active BOOLEAN DEFAULT TRUE NOT NULL,
-        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-        updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
       );
-      CREATE UNIQUE INDEX uq_board_org_name ON boards(organization_id, name);
 
-      CREATE TABLE academic_levels (
+      CREATE TABLE IF NOT EXISTS academic_levels (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
         name VARCHAR(255) NOT NULL,
         short_name VARCHAR(64),
         sort_order INTEGER DEFAULT 1 NOT NULL,
         description TEXT,
+        owner_type VARCHAR(32) DEFAULT 'SCHOOL' NOT NULL,
+        owner_id UUID,
         apply_to VARCHAR(32) DEFAULT 'ALL_CAMPUSES' NOT NULL,
         is_active BOOLEAN DEFAULT TRUE NOT NULL,
-        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-        updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
       );
-      CREATE UNIQUE INDEX uq_academic_level_org_name ON academic_levels(organization_id, name);
 
-      CREATE TABLE subjects (
+      CREATE TABLE IF NOT EXISTS subjects (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
         name VARCHAR(255) NOT NULL,
@@ -139,14 +152,15 @@ describe('AcademicService & Academic Masters Suite Integration Tests (PGlite)', 
         credit_weight NUMERIC(4, 2),
         sort_order INTEGER DEFAULT 1 NOT NULL,
         description TEXT,
+        owner_type VARCHAR(32) DEFAULT 'SCHOOL' NOT NULL,
+        owner_id UUID,
         apply_to VARCHAR(32) DEFAULT 'ALL_CAMPUSES' NOT NULL,
         is_active BOOLEAN DEFAULT TRUE NOT NULL,
-        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-        updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
       );
-      CREATE UNIQUE INDEX uq_subject_org_name ON subjects(organization_id, name);
 
-      CREATE TABLE classes (
+      CREATE TABLE IF NOT EXISTS classes (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
         level_id UUID NOT NULL REFERENCES academic_levels(id) ON DELETE RESTRICT,
@@ -157,465 +171,450 @@ describe('AcademicService & Academic Masters Suite Integration Tests (PGlite)', 
         to_age NUMERIC(4, 1),
         sort_order INTEGER DEFAULT 1 NOT NULL,
         description TEXT,
+        owner_type VARCHAR(32) DEFAULT 'SCHOOL' NOT NULL,
+        owner_id UUID,
         apply_to VARCHAR(32) DEFAULT 'ALL_CAMPUSES' NOT NULL,
         is_active BOOLEAN DEFAULT TRUE NOT NULL,
-        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-        updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
       );
-      CREATE UNIQUE INDEX uq_class_org_name ON classes(organization_id, name);
 
-      CREATE TABLE class_subject_mappings (
+      CREATE TABLE IF NOT EXISTS class_subject_mappings (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
         class_id UUID NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
         subject_id UUID NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
         is_compulsory BOOLEAN DEFAULT TRUE NOT NULL,
-        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
       );
-      CREATE UNIQUE INDEX uq_class_subject ON class_subject_mappings(organization_id, class_id, subject_id);
 
-      CREATE TABLE sections (
+      CREATE TABLE IF NOT EXISTS sections (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
         name VARCHAR(64) NOT NULL,
         sort_order INTEGER DEFAULT 1 NOT NULL,
         description TEXT,
+        owner_type VARCHAR(32) DEFAULT 'SCHOOL' NOT NULL,
+        owner_id UUID,
         apply_to VARCHAR(32) DEFAULT 'ALL_CAMPUSES' NOT NULL,
         is_active BOOLEAN DEFAULT TRUE NOT NULL,
-        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-        updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
       );
-      CREATE UNIQUE INDEX uq_section_org_name ON sections(organization_id, name);
 
-      CREATE TABLE languages (
+      CREATE TABLE IF NOT EXISTS languages (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
         name VARCHAR(255) NOT NULL,
         code VARCHAR(64),
         sort_order INTEGER DEFAULT 1 NOT NULL,
         description TEXT,
+        owner_type VARCHAR(32) DEFAULT 'SCHOOL' NOT NULL,
+        owner_id UUID,
         apply_to VARCHAR(32) DEFAULT 'ALL_CAMPUSES' NOT NULL,
         is_active BOOLEAN DEFAULT TRUE NOT NULL,
-        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-        updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
       );
-      CREATE UNIQUE INDEX uq_language_org_name ON languages(organization_id, name);
 
-      CREATE TABLE audit_logs (
+      CREATE TABLE IF NOT EXISTS audit_logs (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        organization_id UUID NOT NULL,
         hierarchy_node_id UUID,
         actor_id UUID,
         actor_email VARCHAR(255),
         impersonator_id UUID,
-        module VARCHAR(64) DEFAULT 'ACADEMIC' NOT NULL,
+        module VARCHAR(64) DEFAULT 'GENERAL' NOT NULL,
         action VARCHAR(64) NOT NULL,
         entity_type VARCHAR(64) NOT NULL,
-        entity_id UUID,
+        entity_id UUID NOT NULL,
         before_state JSONB,
         after_state JSONB,
         diff JSONB,
         outcome VARCHAR(32) DEFAULT 'SUCCESS' NOT NULL,
-        ip_address VARCHAR(64),
+        ip_address INET,
         user_agent TEXT,
         metadata JSONB DEFAULT '{}'::jsonb NOT NULL,
         created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
       );
-
-      -- Seed Organizations & School & Branches
-      INSERT INTO organizations (id, code, name) VALUES
-        ('${TENANT_A}', 'ORG-A', 'Beaconhouse Organization'),
-        ('${TENANT_B}', 'ORG-B', 'City School Organization');
-
-      INSERT INTO schools (id, organization_id, code, name) VALUES
-        ('11111111-2222-3333-4444-555555555555', '${TENANT_A}', 'BSS-MAIN', 'Beaconhouse Main');
-
-      INSERT INTO branches (id, organization_id, school_id, code, name) VALUES
-        ('${CAMPUS_A}', '${TENANT_A}', '11111111-2222-3333-4444-555555555555', 'CAMPUS-A', 'Gulshan Campus'),
-        ('${CAMPUS_B}', '${TENANT_A}', '11111111-2222-3333-4444-555555555555', 'CAMPUS-B', 'Clifton Campus');
     `);
+
+    // Seed test organizations and branches
+    await db.insert(organizations).values([
+      { id: TENANT_A, code: 'ORG-A', name: 'Beaconhouse Group' },
+      { id: TENANT_B, code: 'ORG-B', name: 'City School Network' },
+    ]);
+
+    await db.insert(branches).values([
+      { id: CAMPUS_A, organizationId: TENANT_A, name: 'Main Campus Gulshan', code: 'BH-GUL' },
+      { id: CAMPUS_B, organizationId: TENANT_A, name: 'Clifton Campus', code: 'BH-CLF' },
+    ]);
 
     txManager = new TenantTransactionManager(pglite as any);
     auditService = new AuditService(txManager);
     academicService = new AcademicService(txManager, auditService);
   });
 
-  // ─────────────────────────────────────────────────────────────────
-  // PART 1: ACADEMIC YEARS & CURRENT YEAR RESOLUTION
-  // ─────────────────────────────────────────────────────────────────
-
-  it('1. should create Academic Year with valid date range and ALL_CAMPUSES', async () => {
-    const year = await academicService.createAcademicYear(
-      TENANT_A,
-      {
-        name: 'Academic Session 2025-2026',
-        code: '2025-2026',
-        startDate: '2025-08-01',
-        endDate: '2026-06-30',
-        isCurrent: true,
-        sortOrder: 1,
-        applyTo: 'ALL_CAMPUSES',
-      },
-      USER_ID
-    );
-
-    expect(year.id).toBeDefined();
-    expect(year.name).toBe('Academic Session 2025-2026');
-    expect(year.code).toBe('2025-2026');
-    expect(year.isCurrent).toBe(true);
-    expect(year.applyTo).toBe('ALL_CAMPUSES');
-    year2025Id = year.id;
+  afterEach(async () => {
+    if (pglite) await pglite.close();
   });
 
-  it('2. should reject Academic Year where Start Date >= End Date', async () => {
-    await expect(
-      academicService.createAcademicYear(TENANT_A, {
-        name: 'Invalid Session',
-        code: 'INVALID-2025',
-        startDate: '2026-08-01',
-        endDate: '2025-08-01', // End date is before start date
-        applyTo: 'ALL_CAMPUSES',
-      })
-    ).rejects.toThrow(BadRequestException);
-  });
+  // ═════════════════════════════════════════════════════════════════
+  // PART AT — 10 REQUIRED GOVERNANCE SCENARIOS
+  // ═════════════════════════════════════════════════════════════════
 
-  it('3. should create a second Academic Year and safely reset Current Year flag', async () => {
-    const year2026 = await academicService.createAcademicYear(
-      TENANT_A,
-      {
-        name: 'Academic Session 2026-2027',
-        code: '2026-2027',
-        startDate: '2026-08-01',
-        endDate: '2027-06-30',
-        isCurrent: true, // Making this new year current
-        sortOrder: 2,
-        applyTo: 'ALL_CAMPUSES',
-      },
-      USER_ID
-    );
-
-    expect(year2026.isCurrent).toBe(true);
-
-    // Verify previous year 2025 is no longer current
-    const list = await academicService.listAcademicYears(TENANT_A);
-    const oldYear = list.find((y) => y.id === year2025Id);
-    expect(oldYear?.isCurrent).toBe(false);
-  });
-
-  it('4. should support SELECTED_CAMPUSES for an Academic Year', async () => {
-    const pilotYear = await academicService.createAcademicYear(
-      TENANT_A,
-      {
-        name: 'IB Pilot Session 2026-2027',
-        code: 'IB-2026',
-        startDate: '2026-09-01',
-        endDate: '2027-07-15',
-        applyTo: 'SELECTED_CAMPUSES',
-        branchIds: [CAMPUS_A],
-      },
-      USER_ID
-    );
-
-    expect(pilotYear.applyTo).toBe('SELECTED_CAMPUSES');
-    expect(pilotYear.branchIds).toEqual([CAMPUS_A]);
-    expect(pilotYear.branchNames).toEqual(['Gulshan Campus']);
-
-    // Campus A should see it
-    const campusAList = await academicService.listAcademicYears(TENANT_A, CAMPUS_A);
-    expect(campusAList.some((y) => y.id === pilotYear.id)).toBe(true);
-
-    // Campus B should NOT see it (only sees ALL_CAMPUSES years)
-    const campusBList = await academicService.listAcademicYears(TENANT_A, CAMPUS_B);
-    expect(campusBList.some((y) => y.id === pilotYear.id)).toBe(false);
-  });
-
-  // ─────────────────────────────────────────────────────────────────
-  // PART 2: BOARDS MASTER
-  // ─────────────────────────────────────────────────────────────────
-
-  it('5. should create, search, and update Boards', async () => {
-    const board = await academicService.createBoard(
-      TENANT_A,
-      {
-        name: 'Federal Board of Intermediate and Secondary Education',
-        shortName: 'FBISE',
-        code: 'FBISE-PK',
-        sortOrder: 1,
-        applyTo: 'ALL_CAMPUSES',
-      },
-      USER_ID
-    );
-
-    expect(board.id).toBeDefined();
-    expect(board.name).toBe('Federal Board of Intermediate and Secondary Education');
-    expect(board.shortName).toBe('FBISE');
-    matricBoardId = board.id;
-
-    // Search FBISE
-    const searchResult = await academicService.listBoards(TENANT_A, undefined, 'FBISE');
-    expect(searchResult.length).toBe(1);
-    expect(searchResult[0]?.id).toBe(matricBoardId);
-
-    // Update board
-    const updated = await academicService.updateBoard(TENANT_A, matricBoardId, {
-      description: 'Official National Examination Board',
-    });
-    expect(updated.description).toBe('Official National Examination Board');
-  });
-
-  // ─────────────────────────────────────────────────────────────────
-  // PART 3: ACADEMIC LEVELS / STAGES
-  // ─────────────────────────────────────────────────────────────────
-
-  it('6. should create Academic Levels / Stages in sequence', async () => {
-    const primary = await academicService.createAcademicLevel(
-      TENANT_A,
-      {
-        name: 'Primary Stage',
-        shortName: 'PRI',
-        sortOrder: 1,
-        applyTo: 'ALL_CAMPUSES',
-      },
-      USER_ID
-    );
-    primaryLevelId = primary.id;
-
-    const secondary = await academicService.createAcademicLevel(
-      TENANT_A,
-      {
-        name: 'Secondary Stage',
-        shortName: 'SEC',
-        sortOrder: 2,
-        applyTo: 'ALL_CAMPUSES',
-      },
-      USER_ID
-    );
-    secondaryLevelId = secondary.id;
-
-    const levels = await academicService.listAcademicLevels(TENANT_A);
-    expect(levels.length).toBe(2);
-    expect(levels[0]?.name).toBe('Primary Stage');
-    expect(levels[1]?.name).toBe('Secondary Stage');
-  });
-
-  // ─────────────────────────────────────────────────────────────────
-  // PART 4: SUBJECTS (Practical conditional logic & marks metadata)
-  // ─────────────────────────────────────────────────────────────────
-
-  it('7. should create Theory Subject and enforce practical marks nullification when hasPractical is false', async () => {
-    const math = await academicService.createSubject(
-      TENANT_A,
-      {
-        name: 'Mathematics',
-        shortName: 'MATH',
-        code: 'MATH-101',
-        type: 'Theory',
-        category: 'Core',
-        defaultMaxMarks: 100,
-        defaultPassingMarks: 40,
-        hasPractical: false,
-        practicalMaxMarks: 25, // Should be ignored/cleared because hasPractical = false
-        creditWeight: 4.0,
-        sortOrder: 1,
-        applyTo: 'ALL_CAMPUSES',
-      },
-      USER_ID
-    );
-
-    expect(math.id).toBeDefined();
-    expect(math.hasPractical).toBe(false);
-    expect(math.practicalMaxMarks).toBeNull();
-    mathSubjectId = math.id;
-
-    const eng = await academicService.createSubject(TENANT_A, {
-      name: 'English Language',
-      shortName: 'ENG',
-      code: 'ENG-101',
-      type: 'Theory',
-      category: 'Language',
-      defaultMaxMarks: 100,
-      defaultPassingMarks: 40,
+  it('SCENARIO 1 — School assigns only Grade 1 & 2 to Campus A -> Campus A gets ONLY Grade 1 & 2', async () => {
+    const level = await academicService.createAcademicLevel(TENANT_A, {
+      name: 'Primary Stage',
       applyTo: 'ALL_CAMPUSES',
     });
-    englishSubjectId = eng.id;
+
+    await academicService.createClass(TENANT_A, {
+      levelId: level.id,
+      name: 'Grade 1',
+      applyTo: 'SELECTED_CAMPUSES',
+      branchIds: [CAMPUS_A],
+    });
+
+    await academicService.createClass(TENANT_A, {
+      levelId: level.id,
+      name: 'Grade 2',
+      applyTo: 'SELECTED_CAMPUSES',
+      branchIds: [CAMPUS_A],
+    });
+
+    await academicService.createClass(TENANT_A, {
+      levelId: level.id,
+      name: 'Grade 3',
+      applyTo: 'SELECTED_CAMPUSES',
+      branchIds: [CAMPUS_B], // Only Campus B
+    });
+
+    const campusAClasses = await academicService.listClasses(TENANT_A, CAMPUS_A);
+    expect(campusAClasses).toHaveLength(2);
+    expect(campusAClasses.map((c) => c.name)).toEqual(['Grade 1', 'Grade 2']);
+    expect(campusAClasses.map((c) => c.name)).not.toContain('Grade 3');
   });
 
-  it('8. should create Theory + Practical Subject with practical marks when hasPractical is true', async () => {
-    const physics = await academicService.createSubject(
+  it('SCENARIO 2 — Local Campus Creation with sourceOrigin = LOCAL', async () => {
+    const level = await academicService.createAcademicLevel(TENANT_A, {
+      name: 'Primary Stage',
+      applyTo: 'ALL_CAMPUSES',
+    });
+
+    await academicService.createClass(TENANT_A, {
+      levelId: level.id,
+      name: 'Grade 1',
+      applyTo: 'SELECTED_CAMPUSES',
+      branchIds: [CAMPUS_A],
+    });
+
+    await academicService.createClass(TENANT_A, {
+      levelId: level.id,
+      name: 'Grade 2',
+      applyTo: 'SELECTED_CAMPUSES',
+      branchIds: [CAMPUS_A],
+    });
+
+    // Campus A creates local Grade 4
+    const localGrade4 = await academicService.createClass(
       TENANT_A,
       {
-        name: 'Physics',
-        shortName: 'PHY',
-        code: 'PHY-201',
-        type: 'Theory + Practical',
-        category: 'Science',
-        defaultMaxMarks: 100,
-        defaultPassingMarks: 40,
-        hasPractical: true,
-        practicalMaxMarks: 25,
-        creditWeight: 4.0,
-        sortOrder: 3,
-        applyTo: 'ALL_CAMPUSES',
+        levelId: level.id,
+        name: 'Grade 4',
+        ownerType: 'CAMPUS',
+        ownerId: CAMPUS_A,
+        applyTo: 'LOCAL_SCOPE',
       },
-      USER_ID
+      '99999999-9999-9999-9999-999999999999',
+      undefined,
+      'CAMPUS_ADMIN'
     );
 
-    expect(physics.hasPractical).toBe(true);
-    expect(physics.practicalMaxMarks).toBe(25);
-    physicsSubjectId = physics.id;
+    expect(localGrade4.sourceOrigin).toBe('LOCAL');
+    expect(localGrade4.isInherited).toBe(false);
+
+    const effective = await academicService.listClasses(TENANT_A, CAMPUS_A);
+    expect(effective).toHaveLength(3);
+    expect(effective.map((c) => c.name)).toEqual(['Grade 1', 'Grade 2', 'Grade 4']);
+
+    const g1 = effective.find((c) => c.name === 'Grade 1');
+    const g4 = effective.find((c) => c.name === 'Grade 4');
+    expect(g1?.sourceOrigin).toBe('INHERITED');
+    expect(g4?.sourceOrigin).toBe('LOCAL');
   });
 
-  // ─────────────────────────────────────────────────────────────────
-  // PART 5: CLASSES / GRADES (Academic Level FK, Ages, Subject Mappings)
-  // ─────────────────────────────────────────────────────────────────
+  it('SCENARIO 3 — Duplicate Effective Class creation is rejected', async () => {
+    const level = await academicService.createAcademicLevel(TENANT_A, {
+      name: 'Primary Stage',
+      applyTo: 'ALL_CAMPUSES',
+    });
 
-  it('9. should create Class linked to Academic Level with optional age range and subject mappings', async () => {
-    const grade5 = await academicService.createClass(
-      TENANT_A,
-      {
-        levelId: primaryLevelId,
-        name: 'Grade 5',
-        shortName: 'G5',
-        code: 'CLS-G5',
-        fromAge: 9.5,
-        toAge: 11.0,
-        compulsorySubjectIds: [mathSubjectId, englishSubjectId],
-        optionalSubjectIds: [physicsSubjectId],
-        sortOrder: 1,
-        applyTo: 'ALL_CAMPUSES',
-      },
-      USER_ID
-    );
+    await academicService.createClass(TENANT_A, {
+      levelId: level.id,
+      name: 'Grade 1',
+      applyTo: 'SELECTED_CAMPUSES',
+      branchIds: [CAMPUS_A],
+    });
 
-    expect(grade5.id).toBeDefined();
-    expect(grade5.levelId).toBe(primaryLevelId);
-    expect(grade5.levelName).toBe('Primary Stage');
-    expect(grade5.fromAge).toBe(9.5);
-    expect(grade5.toAge).toBe(11.0);
-    expect(grade5.compulsorySubjectIds).toContain(mathSubjectId);
-    expect(grade5.compulsorySubjectIds).toContain(englishSubjectId);
-    expect(grade5.optionalSubjectIds).toContain(physicsSubjectId);
-    expect(grade5.totalSubjectsCount).toBe(3);
-    grade5ClassId = grade5.id;
-  });
-
-  it('10. should reject Class creation when From Age > To Age', async () => {
+    // Campus A attempts to create Grade 1
     await expect(
-      academicService.createClass(TENANT_A, {
-        levelId: primaryLevelId,
-        name: 'Invalid Age Class',
-        fromAge: 12.0,
-        toAge: 10.0, // Invalid: From > To
-        applyTo: 'ALL_CAMPUSES',
-      })
-    ).rejects.toThrow(BadRequestException);
-  });
-
-  it('11. should reject Class mapping when same Subject is both Compulsory and Optional', async () => {
-    await expect(
-      academicService.createClass(TENANT_A, {
-        levelId: primaryLevelId,
-        name: 'Grade 6 Conflict',
-        compulsorySubjectIds: [mathSubjectId],
-        optionalSubjectIds: [mathSubjectId], // Conflict: same subject
-        applyTo: 'ALL_CAMPUSES',
-      })
-    ).rejects.toThrow(BadRequestException);
-  });
-
-  // ─────────────────────────────────────────────────────────────────
-  // PART 6: SECTIONS & LANGUAGES
-  // ─────────────────────────────────────────────────────────────────
-
-  it('12. should create and toggle Sections', async () => {
-    const secA = await academicService.createSection(
-      TENANT_A,
-      {
-        name: 'Section A (Rose)',
-        sortOrder: 1,
-        applyTo: 'ALL_CAMPUSES',
-      },
-      USER_ID
-    );
-    expect(secA.name).toBe('Section A (Rose)');
-    expect(secA.isActive).toBe(true);
-    sectionAId = secA.id;
-
-    const deactivated = await academicService.toggleSectionStatus(TENANT_A, sectionAId, false, USER_ID);
-    expect(deactivated.isActive).toBe(false);
-
-    const reactivated = await academicService.toggleSectionStatus(TENANT_A, sectionAId, true, USER_ID);
-    expect(reactivated.isActive).toBe(true);
-  });
-
-  it('13. should create and manage Languages', async () => {
-    const eng = await academicService.createLanguage(
-      TENANT_A,
-      {
-        name: 'English',
-        code: 'EN',
-        sortOrder: 1,
-        applyTo: 'ALL_CAMPUSES',
-      },
-      USER_ID
-    );
-    expect(eng.name).toBe('English');
-    englishLangId = eng.id;
-
-    const urdu = await academicService.createLanguage(
-      TENANT_A,
-      {
-        name: 'Urdu',
-        code: 'UR',
-        sortOrder: 2,
-        applyTo: 'ALL_CAMPUSES',
-      },
-      USER_ID
-    );
-    expect(urdu.name).toBe('Urdu');
-
-    const langs = await academicService.listLanguages(TENANT_A);
-    expect(langs.length).toBe(2);
-  });
-
-  // ─────────────────────────────────────────────────────────────────
-  // PART 7: DYNAMIC NEW CAMPUS INHERITANCE TEST
-  // ─────────────────────────────────────────────────────────────────
-
-  it('14. should automatically inherit ALL_CAMPUSES configurations when a new Campus is created tomorrow', async () => {
-    // School creates Campus C tomorrow
-    await pglite.exec(`
-      INSERT INTO branches (id, organization_id, school_id, code, name) VALUES
-        ('${CAMPUS_C}', '${TENANT_A}', '11111111-2222-3333-4444-555555555555', 'CAMPUS-C', 'DHA Phase 8 Campus');
-    `);
-
-    // Verify Campus C queries Academic Years: automatically sees ALL_CAMPUSES session 2025 and 2026
-    const campusCYears = await academicService.listAcademicYears(TENANT_A, CAMPUS_C);
-    expect(campusCYears.some((y) => y.code === '2025-2026')).toBe(true);
-    expect(campusCYears.some((y) => y.code === '2026-2027')).toBe(true);
-
-    // Campus C does NOT see IB-2026 (which was SELECTED_CAMPUSES for Campus A only)
-    expect(campusCYears.some((y) => y.code === 'IB-2026')).toBe(false);
-
-    // Campus C automatically sees Boards, Academic Levels, Classes, Subjects
-    const campusCClasses = await academicService.listClasses(TENANT_A, undefined, CAMPUS_C);
-    expect(campusCClasses.some((c) => c.name === 'Grade 5')).toBe(true);
-  });
-
-  it('15. should reject unauthorized branch assignment on Selected Campuses', async () => {
-    // User only authorized for Campus A, tries to assign Campus B
-    await expect(
-      academicService.createBoard(
+      academicService.createClass(
         TENANT_A,
         {
-          name: 'Cambridge International Assessment',
-          shortName: 'CAIE',
-          applyTo: 'SELECTED_CAMPUSES',
-          branchIds: [CAMPUS_B], // Unauthorized for this user
+          levelId: level.id,
+          name: 'Grade 1',
+          ownerType: 'CAMPUS',
+          ownerId: CAMPUS_A,
+          applyTo: 'LOCAL_SCOPE',
         },
-        USER_ID,
-        [CAMPUS_A] // User's authorized ceiling
+        '99999999-9999-9999-9999-999999999999',
+        undefined,
+        'CAMPUS_ADMIN'
       )
-    ).rejects.toThrow(ForbiddenException);
+    ).rejects.toThrow(/already exists and is available to this Campus through School configuration/);
+  });
+
+  it('SCENARIO 4 — Parent exists but not assigned conflict is detected', async () => {
+    const level = await academicService.createAcademicLevel(TENANT_A, {
+      name: 'Primary Stage',
+      applyTo: 'ALL_CAMPUSES',
+    });
+
+    // School owns Grade 5, assigned only to Campus B
+    await academicService.createClass(TENANT_A, {
+      levelId: level.id,
+      name: 'Grade 5',
+      applyTo: 'SELECTED_CAMPUSES',
+      branchIds: [CAMPUS_B],
+    });
+
+    // Campus A attempts to create Grade 5 locally
+    await expect(
+      academicService.createClass(
+        TENANT_A,
+        {
+          levelId: level.id,
+          name: 'Grade 5',
+          ownerType: 'CAMPUS',
+          ownerId: CAMPUS_A,
+          applyTo: 'LOCAL_SCOPE',
+        },
+        '99999999-9999-9999-9999-999999999999',
+        undefined,
+        'CAMPUS_ADMIN'
+      )
+    ).rejects.toThrow(/already exists at School level but is not currently assigned to this Campus/);
+  });
+
+  it('SCENARIO 5 — ALL_CAMPUSES dynamic future campus inheritance', async () => {
+    // School creates English with ALL_CAMPUSES
+    await academicService.createSubject(TENANT_A, {
+      name: 'English Language',
+      code: 'ENG-101',
+      applyTo: 'ALL_CAMPUSES',
+    });
+
+    // Verify Campus A & B resolve English
+    const resA = await academicService.listSubjects(TENANT_A, CAMPUS_A);
+    const resB = await academicService.listSubjects(TENANT_A, CAMPUS_B);
+    expect(resA.map((s) => s.name)).toContain('English Language');
+    expect(resB.map((s) => s.name)).toContain('English Language');
+
+    // Add Campus C later
+    const db = drizzle(pglite);
+    await db.insert(branches).values({
+      id: CAMPUS_C,
+      organizationId: TENANT_A,
+      name: 'DHA Phase 8 Campus',
+      code: 'BH-DHA',
+    });
+
+    // Campus C automatically inherits English dynamically without new records
+    const resC = await academicService.listSubjects(TENANT_A, CAMPUS_C);
+    expect(resC.map((s) => s.name)).toContain('English Language');
+  });
+
+  it('SCENARIO 6 — SELECTED_CAMPUSES does NOT automatically include newly created campuses', async () => {
+    // School creates Math for only Campus A & B
+    await academicService.createSubject(TENANT_A, {
+      name: 'Advanced Mathematics',
+      code: 'MATH-ADV',
+      applyTo: 'SELECTED_CAMPUSES',
+      branchIds: [CAMPUS_A, CAMPUS_B],
+    });
+
+    // Add Campus C later
+    const db = drizzle(pglite);
+    await db.insert(branches).values({
+      id: CAMPUS_C,
+      organizationId: TENANT_A,
+      name: 'DHA Phase 8 Campus',
+      code: 'BH-DHA',
+    });
+
+    const resC = await academicService.listSubjects(TENANT_A, CAMPUS_C);
+    expect(resC.map((s) => s.name)).not.toContain('Advanced Mathematics');
+  });
+
+  it('SCENARIO 7 — Ownership immutability (School-created Grade 1 assigned to Campus A remains School-owned)', async () => {
+    const level = await academicService.createAcademicLevel(TENANT_A, {
+      name: 'Primary Stage',
+      applyTo: 'ALL_CAMPUSES',
+    });
+
+    const created = await academicService.createClass(TENANT_A, {
+      levelId: level.id,
+      name: 'Grade 1',
+      ownerType: 'SCHOOL',
+      applyTo: 'SELECTED_CAMPUSES',
+      branchIds: [CAMPUS_A],
+    });
+
+    expect(created.ownerType).toBe('SCHOOL');
+
+    const campusAList = await academicService.listClasses(TENANT_A, CAMPUS_A);
+    const resolved = campusAList.find((c) => c.id === created.id);
+    expect(resolved?.ownerType).toBe('SCHOOL');
+    expect(resolved?.sourceOrigin).toBe('INHERITED');
+    expect(resolved?.isInherited).toBe(true);
+  });
+
+  it('SCENARIO 8 — Edit Permission Enforcement (Campus A user cannot edit inherited configuration)', async () => {
+    const level = await academicService.createAcademicLevel(TENANT_A, {
+      name: 'Primary Stage',
+      applyTo: 'ALL_CAMPUSES',
+    });
+
+    const schoolClass = await academicService.createClass(TENANT_A, {
+      levelId: level.id,
+      name: 'Grade 1',
+      ownerType: 'SCHOOL',
+      applyTo: 'SELECTED_CAMPUSES',
+      branchIds: [CAMPUS_A],
+    });
+
+    // Campus admin attempting to update School-owned class is rejected
+    await expect(
+      academicService.updateClass(
+        TENANT_A,
+        schoolClass.id,
+        { name: 'Grade 1 Modified by Campus' },
+        '99999999-9999-9999-9999-999999999999',
+        undefined,
+        'CAMPUS_ADMIN'
+      )
+    ).rejects.toThrow(/You do not have permission to edit this inherited configuration/);
+  });
+
+  it('SCENARIO 9 — Upward Visibility & Management Rights metadata', async () => {
+    const section = await academicService.createSection(TENANT_A, {
+      name: 'Section A',
+      applyTo: 'ALL_CAMPUSES',
+    });
+
+    const orgAdminView = await academicService.listSections(TENANT_A, undefined, undefined, undefined, 'SCHOOL_ADMIN');
+    const campusAdminView = await academicService.listSections(TENANT_A, CAMPUS_A, undefined, undefined, 'CAMPUS_ADMIN');
+
+    expect(orgAdminView[0].canEdit).toBe(true);
+    expect(orgAdminView[0].canAssign).toBe(true);
+    expect(campusAdminView[0].canEdit).toBe(false); // Inherited record view-only for campus admin
+  });
+
+  it('SCENARIO 10 — Tenant Isolation (Tenant A configs never leak into Tenant B)', async () => {
+    await academicService.createBoard(TENANT_A, {
+      name: 'Federal Board PK',
+      shortName: 'FBISE',
+      applyTo: 'ALL_CAMPUSES',
+    });
+
+    const tenantAList = await academicService.listBoards(TENANT_A);
+    const tenantBList = await academicService.listBoards(TENANT_B);
+
+    expect(tenantAList).toHaveLength(1);
+    expect(tenantAList[0].name).toBe('Federal Board PK');
+    expect(tenantBList).toHaveLength(0);
+  });
+
+  // ═════════════════════════════════════════════════════════════════
+  // ACADEMIC ENTITY DOMAIN LOGIC TESTS
+  // ═════════════════════════════════════════════════════════════════
+
+  it('Academic Years — Validates start date < end date and handles current year replacement', async () => {
+    await expect(
+      academicService.createAcademicYear(TENANT_A, {
+        name: 'Invalid Year',
+        code: 'INV-2026',
+        startDate: '2026-12-31',
+        endDate: '2026-01-01',
+        applyTo: 'ALL_CAMPUSES',
+      })
+    ).rejects.toThrow(/Start Date must be earlier than End Date/);
+
+    const year1 = await academicService.createAcademicYear(TENANT_A, {
+      name: 'Academic Year 2026-2027',
+      code: 'AY-2026-27',
+      startDate: '2026-08-01',
+      endDate: '2027-06-30',
+      isCurrent: true,
+      applyTo: 'ALL_CAMPUSES',
+    });
+    expect(year1.isCurrent).toBe(true);
+
+    const year2 = await academicService.createAcademicYear(TENANT_A, {
+      name: 'Academic Year 2027-2028',
+      code: 'AY-2027-28',
+      startDate: '2027-08-01',
+      endDate: '2028-06-30',
+      isCurrent: true,
+      applyTo: 'ALL_CAMPUSES',
+    });
+    expect(year2.isCurrent).toBe(true);
+
+    const allYears = await academicService.listAcademicYears(TENANT_A);
+    const prevYear = allYears.find((y) => y.id === year1.id);
+    expect(prevYear?.isCurrent).toBe(false);
+  });
+
+  it('Subjects — Enforces practical conditional logic', async () => {
+    const theorySub = await academicService.createSubject(TENANT_A, {
+      name: 'History',
+      hasPractical: false,
+      practicalMaxMarks: 50, // Should be ignored/cleared when hasPractical is false
+      applyTo: 'ALL_CAMPUSES',
+    });
+    expect(theorySub.hasPractical).toBe(false);
+    expect(theorySub.practicalMaxMarks).toBeNull();
+
+    const labSub = await academicService.createSubject(TENANT_A, {
+      name: 'Chemistry',
+      hasPractical: true,
+      practicalMaxMarks: 25,
+      applyTo: 'ALL_CAMPUSES',
+    });
+    expect(labSub.hasPractical).toBe(true);
+    expect(labSub.practicalMaxMarks).toBe(25);
+  });
+
+  it('Classes — Rejects subject if mapped in both compulsory and optional', async () => {
+    const level = await academicService.createAcademicLevel(TENANT_A, {
+      name: 'Secondary Stage',
+      applyTo: 'ALL_CAMPUSES',
+    });
+
+    const sub = await academicService.createSubject(TENANT_A, {
+      name: 'Computer Science',
+      applyTo: 'ALL_CAMPUSES',
+    });
+
+    await expect(
+      academicService.createClass(TENANT_A, {
+        levelId: level.id,
+        name: 'Grade 9 CS',
+        compulsorySubjectIds: [sub.id],
+        optionalSubjectIds: [sub.id],
+        applyTo: 'ALL_CAMPUSES',
+      })
+    ).rejects.toThrow(/A subject cannot be mapped as both Compulsory and Optional/);
   });
 });
