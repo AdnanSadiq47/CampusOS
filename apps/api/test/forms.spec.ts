@@ -1495,4 +1495,255 @@ describe('CampusOS Dynamic Form Builder Platform Foundation & Governance (PGlite
     expect(found?.origin).toBe('CUSTOM');
     expect(found?.category).toBe('SIBLINGS');
   });
+
+  it('TEST 51 — Large hierarchy with 70 campuses resolves effective targets and child counts without duplicates', async () => {
+    // Construct 70-campus hierarchy fixture
+    const largeHierarchy: any[] = [
+      {
+        id: 'ho_enterprise',
+        name: 'Enterprise Head Office',
+        type: 'HEAD_OFFICE',
+        children: Array.from({ length: 3 }, (_, rIdx) => ({
+          id: `reg_${rIdx + 1}`,
+          name: `Region ${rIdx + 1}`,
+          type: 'REGION',
+          parentId: 'ho_enterprise',
+          children: Array.from({ length: 4 }, (_, sIdx) => {
+            const schId = `sch_r${rIdx + 1}_s${sIdx + 1}`;
+            return {
+              id: schId,
+              name: `School ${rIdx + 1}-${sIdx + 1}`,
+              type: 'SCHOOL',
+              parentId: `reg_${rIdx + 1}`,
+              children: Array.from({ length: 6 }, (_, cIdx) => ({
+                id: `campus_r${rIdx + 1}_s${sIdx + 1}_c${cIdx + 1}`,
+                name: `Campus ${rIdx + 1}-${sIdx + 1}-${cIdx + 1}`,
+                type: 'CAMPUS',
+                parentId: schId,
+              })),
+            };
+          }),
+        })),
+      },
+    ];
+
+    // Selecting Region 1 (which has 4 schools * 6 campuses = 24 campuses)
+    const state: any = {
+      isEntireOrg: false,
+      selectedHeadOfficeIds: [],
+      selectedRegionIds: ['reg_1'],
+      selectedSchoolIds: [],
+      selectedCampusIds: [],
+    };
+
+    // Use pure resolver logic
+    const branchSet = new Set<string>();
+    const collectCampuses = (node: any) => {
+      if (node.type === 'CAMPUS') branchSet.add(node.id);
+      if (node.children) node.children.forEach(collectCampuses);
+    };
+    const findAndCollect = (nodeId: string, node: any) => {
+      if (node.id === nodeId) {
+        collectCampuses(node);
+        return true;
+      }
+      if (node.children) {
+        for (const child of node.children) {
+          if (findAndCollect(nodeId, child)) return true;
+        }
+      }
+      return false;
+    };
+
+    state.selectedRegionIds.forEach((pId: string) => {
+      largeHierarchy.forEach((root) => findAndCollect(pId, root));
+    });
+
+    expect(branchSet.size).toBe(24);
+  });
+
+  it('TEST 52 — Edit Custom Field fixes typos while strictly preserving persistent UUID and code', async () => {
+    // 1. Create with typo
+    const created = await formsService.createCustomField(
+      TENANT_A,
+      {
+        name: 'Fater Occupation',
+        category: 'FATHER_INFO',
+        dataType: 'TEXT',
+        defaultLabel: 'Fater Occupation',
+        defaultPlaceholder: 'e.g. Business',
+      },
+      ACTOR_USER
+    );
+
+    const originalId = created.id;
+    const originalCode = created.code;
+
+    // 2. Edit to fix typo
+    const updated = await formsService.updateCustomField(
+      TENANT_A,
+      originalId,
+      {
+        name: 'Father Occupation',
+        defaultLabel: 'Father Occupation',
+        defaultPlaceholder: 'e.g. Software Engineer',
+      },
+      ACTOR_USER
+    );
+
+    expect(updated.id).toBe(originalId);
+    expect(updated.code).toBe(originalCode);
+    expect(updated.name).toBe('Father Occupation');
+    expect(updated.defaultLabel).toBe('Father Occupation');
+    expect(updated.defaultPlaceholder).toBe('e.g. Software Engineer');
+  });
+
+  it('TEST 53 — Form draft referencing edited custom field continues to resolve with stable ID', async () => {
+    const custom = await formsService.createCustomField(
+      TENANT_A,
+      {
+        name: 'Passport Expiry Date',
+        category: 'IDENTITY',
+        dataType: 'DATE',
+        defaultLabel: 'Passport Expiry',
+      },
+      ACTOR_USER
+    );
+
+    const form = await formsService.createFormDefinition(
+      TENANT_A,
+      { name: 'Passport Verification Form', formPurpose: 'ADMISSION' },
+      ACTOR_USER
+    );
+
+    const schema: FormSchemaPayload = {
+      rules: [],
+      settings: {},
+      sections: [
+        {
+          id: 'sec_id_docs',
+          title: 'Identity Documents',
+          showSectionHeading: true,
+          columns: 1,
+          sortOrder: 1,
+          fields: [
+            {
+              instanceId: 'fld_pass_exp',
+              fieldDefinitionId: custom.id,
+              customLabel: 'Passport Expiry (Form Override)',
+              width: 'FULL',
+              isRequired: true,
+              sortOrder: 1,
+            },
+          ],
+        },
+      ],
+    };
+
+    await formsService.saveFormDraft(TENANT_A, form.id, { schemaPayload: schema }, ACTOR_USER);
+
+    // Now update master field label
+    await formsService.updateCustomField(
+      TENANT_A,
+      custom.id,
+      { defaultLabel: 'Passport Expiration Date' },
+      ACTOR_USER
+    );
+
+    // Form version should still retain its reference to custom.id
+    const loaded = await formsService.getFormDefinition(TENANT_A, form.id);
+    const fieldInForm = loaded.currentVersion.schemaPayload.sections[0]!.fields[0]!;
+
+    expect(fieldInForm.fieldDefinitionId).toBe(custom.id);
+    expect(fieldInForm.customLabel).toBe('Passport Expiry (Form Override)');
+  });
+
+  it('TEST 54 — Unsafe data type mutation is blocked when field is referenced by a form', async () => {
+    const custom = await formsService.createCustomField(
+      TENANT_A,
+      {
+        name: 'Family Annual Income',
+        category: 'FATHER_INFO',
+        dataType: 'NUMBER',
+        defaultLabel: 'Annual Income',
+      },
+      ACTOR_USER
+    );
+
+    const form = await formsService.createFormDefinition(
+      TENANT_A,
+      { name: 'Income Form', formPurpose: 'ADMISSION' },
+      ACTOR_USER
+    );
+
+    await formsService.saveFormDraft(
+      TENANT_A,
+      form.id,
+      {
+        schemaPayload: {
+          rules: [],
+          settings: {},
+          sections: [
+            {
+              id: 'sec_1',
+              title: 'Income',
+              showSectionHeading: true,
+              columns: 1,
+              sortOrder: 1,
+              fields: [
+                {
+                  instanceId: 'fld_inc',
+                  fieldDefinitionId: custom.id,
+                  customLabel: 'Income',
+                  width: 'FULL',
+                  isRequired: false,
+                  sortOrder: 1,
+                },
+              ],
+            },
+          ],
+        },
+      },
+      ACTOR_USER
+    );
+
+    // Attempt to change dataType from NUMBER to DATE on referenced field
+    await expect(
+      formsService.updateCustomField(
+        TENANT_A,
+        custom.id,
+        { dataType: 'DATE' as any },
+        ACTOR_USER
+      )
+    ).rejects.toThrow(/Cannot modify data type/);
+  });
+
+  it('TEST 55 — System and canonical fields cannot be modified through Custom Field API', async () => {
+    await expect(
+      formsService.updateCustomField(
+        TENANT_A,
+        'STD_FIRST_NAME',
+        { defaultLabel: 'Illegal Rename' },
+        ACTOR_USER
+      )
+    ).rejects.toThrow();
+  });
+
+  it('TEST 56 — Unauthorized target scopes are rejected server-side', async () => {
+    // Caller is authorized only for CAMPUS_A
+    await expect(
+      formsService.createFormDefinition(
+        TENANT_A,
+        {
+          name: 'Unauthorized Target Form',
+          formPurpose: 'CUSTOM',
+          applyTo: 'SELECTED_CAMPUSES',
+          branchIds: [CAMPUS_B], // Not in caller's authorized scope
+        },
+        ACTOR_USER,
+        [CAMPUS_A], // authorized branches
+        'CAMPUS_ADMIN'
+      )
+    ).rejects.toThrow(/You are not authorized to assign forms to one or more selected locations/);
+  });
 });

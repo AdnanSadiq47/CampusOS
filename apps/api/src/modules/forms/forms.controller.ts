@@ -42,6 +42,17 @@ export class FormsController {
     return this.formsService.createCustomField(tenantId, dto, actorUserId);
   }
 
+  @Put('fields/:id')
+  async updateCustomField(
+    @Headers('x-tenant-id') tenantId: string,
+    @Headers('x-user-id') actorUserId: string,
+    @Headers('x-user-role') userRole: string = 'SCHOOL_ADMIN',
+    @Param('id') id: string,
+    @Body() dto: Partial<CreateCustomFieldDto> & { isActive?: boolean; defaultLabel?: string }
+  ) {
+    return this.formsService.updateCustomField(tenantId, id, dto, actorUserId, userRole);
+  }
+
   // ── Form Definitions Endpoints ────────────────────────────────────
   @Get('definitions')
   async listFormDefinitions(

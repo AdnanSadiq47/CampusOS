@@ -694,6 +694,98 @@ export class FormsService {
     });
   }
 
+  async updateCustomField(
+    tenantId: string,
+    fieldId: string,
+    dto: Partial<CreateCustomFieldDto> & { isActive?: boolean; defaultLabel?: string },
+    _actorUserId?: string,
+    _userRole: string = 'SCHOOL_ADMIN'
+  ): Promise<FieldDefinitionDto> {
+    return this.txManager.runInTenantContext(tenantId, async (tx) => {
+      const [field] = await tx
+        .select()
+        .from(fieldDefinitions)
+        .where(
+          and(
+            eq(fieldDefinitions.organizationId, tenantId),
+            eq(fieldDefinitions.id, fieldId)
+          )
+        );
+
+      if (!field) {
+        throw new NotFoundException(`Custom field with ID '${fieldId}' not found.`);
+      }
+
+      if (field.isSystemProtected || field.origin !== 'CUSTOM') {
+        throw new ForbiddenException('System and canonical fields cannot be edited directly.');
+      }
+
+      // Check if data type mutation is safe (if dataType is changing)
+      if (dto.dataType && dto.dataType !== field.dataType) {
+        const referencingVersions = await tx
+          .select({ id: formVersions.id, status: formVersions.status, schemaPayload: formVersions.schemaPayload })
+          .from(formVersions)
+          .where(eq(formVersions.organizationId, tenantId));
+
+        const isReferenced = referencingVersions.some((v) => {
+          const schema = v.schemaPayload as FormSchemaPayload;
+          return schema?.sections?.some((s) =>
+            s.fields?.some((f) => f.fieldDefinitionId === field.id || f.fieldDefinitionId === field.code)
+          );
+        });
+
+        if (isReferenced) {
+          throw new BadRequestException(
+            `Cannot modify data type of '${field.name}' because it is actively referenced in one or more forms. Update display label or create a new field version instead.`
+          );
+        }
+      }
+
+      const [updated] = await tx
+        .update(fieldDefinitions)
+        .set({
+          name: dto.name ? dto.name.trim() : field.name,
+          defaultLabel: dto.defaultLabel ? dto.defaultLabel.trim() : (dto.name ? dto.name.trim() : field.defaultLabel),
+          defaultPlaceholder: dto.defaultPlaceholder !== undefined ? dto.defaultPlaceholder?.trim() || null : field.defaultPlaceholder,
+          defaultHelpText: dto.defaultHelpText !== undefined ? dto.defaultHelpText?.trim() || null : field.defaultHelpText,
+          defaultOptions: dto.defaultOptions !== undefined ? dto.defaultOptions : field.defaultOptions,
+          defaultValidation: dto.defaultValidation !== undefined ? dto.defaultValidation : field.defaultValidation,
+          dataType: dto.dataType || field.dataType,
+          isActive: dto.isActive !== undefined ? dto.isActive : field.isActive,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(fieldDefinitions.organizationId, tenantId),
+            eq(fieldDefinitions.id, fieldId)
+          )
+        )
+        .returning();
+
+      return {
+        id: updated!.id,
+        organizationId: updated!.organizationId,
+        code: updated!.code,
+        canonicalKey: updated!.canonicalKey,
+        name: updated!.name,
+        description: updated!.description,
+        category: updated!.category as FieldCategory,
+        origin: updated!.origin as FieldOrigin,
+        dataType: updated!.dataType as FieldDataType,
+        masterBinding: updated!.masterBinding as any,
+        defaultLabel: updated!.defaultLabel,
+        defaultPlaceholder: updated!.defaultPlaceholder,
+        defaultHelpText: updated!.defaultHelpText,
+        defaultOptions: (updated!.defaultOptions as any) || [],
+        defaultValidation: (updated!.defaultValidation as any) || {},
+        isSystemProtected: updated!.isSystemProtected,
+        isActive: updated!.isActive,
+        createdAt: updated!.createdAt,
+        updatedAt: updated!.updatedAt,
+      };
+    });
+  }
+
   // ═════════════════════════════════════════════════════════════════
   // 2. FORM DEFINITIONS & VERSIONING
   // ═════════════════════════════════════════════════════════════════

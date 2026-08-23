@@ -36,8 +36,9 @@ export default function FieldLibraryPage() {
     });
   }, []);
 
-  // Custom Field Modal
+  // Custom Field Modals (Create & Edit)
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingField, setEditingField] = useState<FieldDefinitionDto | null>(null);
   const [customName, setCustomName] = useState('');
   const [customCategory, setCustomCategory] = useState<FieldCategory>('STUDENT_BASIC');
   const [customDataType, setCustomDataType] = useState<FieldDataType>('TEXT');
@@ -198,17 +199,26 @@ export default function FieldLibraryPage() {
                 <span className="truncate mr-2">{fld.code}</span>
                 <div className="flex items-center gap-1.5 shrink-0">
                   {fld.origin === 'CUSTOM' && (
-                    <button
-                      type="button"
-                      onClick={() => handleToggleStatus(fld)}
-                      className={`text-[10px] font-sans font-bold px-1.5 py-0.5 rounded cursor-pointer transition-colors ${
-                        fld.isActive
-                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                          : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
-                      }`}
-                    >
-                      {fld.isActive ? 'Active' : 'Inactive'}
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setEditingField(fld)}
+                        className="text-[10px] font-sans font-bold px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900 cursor-pointer transition-colors"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleStatus(fld)}
+                        className={`text-[10px] font-sans font-bold px-1.5 py-0.5 rounded cursor-pointer transition-colors ${
+                          fld.isActive
+                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                            : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                        }`}
+                      >
+                        {fld.isActive ? 'Active' : 'Inactive'}
+                      </button>
+                    </>
                   )}
                   <span className="uppercase text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
                     {fld.dataType}
@@ -219,6 +229,119 @@ export default function FieldLibraryPage() {
           );
         })}
       </div>
+
+      {/* Edit Custom Field Modal */}
+      {editingField && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Edit Custom Field</h3>
+                <span className="text-xs font-mono text-slate-400">ID: {editingField.id}</span>
+              </div>
+              <button
+                onClick={() => setEditingField(null)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!editingField) return;
+                await updatePersistedCustomFieldApi(editingField.id, {
+                  name: editingField.name,
+                  defaultLabel: editingField.defaultLabel,
+                  defaultPlaceholder: editingField.defaultPlaceholder,
+                  defaultHelpText: editingField.defaultHelpText,
+                  isActive: editingField.isActive,
+                });
+                const refreshed = await fetchMergedFieldCatalogApi();
+                setFields(refreshed);
+                setEditingField(null);
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1">
+                  Field Display Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editingField.name}
+                  onChange={(e) =>
+                    setEditingField({
+                      ...editingField,
+                      name: e.target.value,
+                      defaultLabel: editingField.defaultLabel === editingField.name ? e.target.value : editingField.defaultLabel,
+                    })
+                  }
+                  className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                />
+                <span className="text-[11px] text-slate-400 mt-1 block">
+                  Easily fix typos. Persistent identifier ({editingField.code}) remains unchanged.
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1">
+                  Default Input Label *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editingField.defaultLabel}
+                  onChange={(e) => setEditingField({ ...editingField, defaultLabel: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1">
+                  Default Placeholder Text
+                </label>
+                <input
+                  type="text"
+                  value={editingField.defaultPlaceholder || ''}
+                  onChange={(e) => setEditingField({ ...editingField, defaultPlaceholder: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1">
+                  Default Help Text / Instructions
+                </label>
+                <input
+                  type="text"
+                  value={editingField.defaultHelpText || ''}
+                  onChange={(e) => setEditingField({ ...editingField, defaultHelpText: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
+                />
+              </div>
+
+              <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setEditingField(null)}
+                  className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-sm font-medium hover:bg-slate-50 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold shadow-md shadow-indigo-500/20 cursor-pointer"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Add Custom Field Modal */}
       {showCreateModal && (
