@@ -138,16 +138,29 @@
 
 ## 12. Permanent Enterprise Configuration Governance Model
 
-45. **Multi-Tier Scope & Ownership Model**: Configuration records across shared masters and operational modules operate under a universal 8-dimension Governance Engine:
-    - **Ownership (`ownerType` + `ownerId`)**: `PLATFORM` | `HEAD_OFFICE` | `REGION` | `SCHOOL` | `CAMPUS`. Record ownership never shifts on assignment.
-    - **Applicability (`applyTo`)**: `ALL_CAMPUSES` | `SELECTED_CAMPUSES` | `LOCAL_SCOPE`. `ALL_CAMPUSES` dynamically applies to all existing and future branches under the owner.
-    - **Assignment (`config_scope_branches`)**: Explicit junction records mapping specific branches when `SELECTED_CAMPUSES` is configured.
-    - **Inheritance (`sourceOrigin` = `INHERITED` | `LOCAL`)**: Campuses dynamically inherit configurations without cloning or physical duplication.
-    - **Delegated Creation**: Campuses may define local records (`ownerType = 'CAMPUS'`) when allowed by organizational policy.
-    - **Management Rights (`canEdit`, `canToggleStatus`, `canAssign`)**: Inherited records are strictly view-only for campus-only admins; status toggles and modifications require author/owner authority or explicit delegated permissions.
+45. **Bidirectional Multi-Tier Scope & Governance Engine**: Configuration records across shared masters and operational modules operate under a universal Bidirectional Governance Engine:
+    - **Top-Down Assignment**: Higher levels (`HEAD_OFFICE`, `REGION`, `SCHOOL`) configure and assign records downward via `ALL_CAMPUSES` (future-proof dynamic inheritance) or `SELECTED_CAMPUSES` (explicit branch mapping via `config_scope_branches`).
+    - **Bottom-Up / Upward Visibility**: Campuses create local records (`ownerType = 'CAMPUS'`, `applyTo = 'LOCAL_SCOPE'`). Higher levels discover these records according to organizational upward visibility policies:
+      - `FULL_DETAIL`: Higher level views full operational configuration detail.
+      - `SUMMARY_ONLY`: Higher level receives consolidated reporting/KPI analytics without detailed operational clutter in standard config lists.
+      - `HIDDEN`: Higher level does not browse that detailed configuration.
+    - **Ownership Preservation Invariant**: A record created by a Campus remains Campus-owned (`ownerType: 'CAMPUS'`), and a record created by School remains School-owned (`ownerType: 'SCHOOL'`). Neither downward assignment nor upward visibility transfers record ownership.
+    - **View vs Update Separation**: Higher-level discovery / VIEW rights do NOT grant UPDATE, ACTIVATE/DEACTIVATE, or REASSIGN permissions on lower-owned records without explicit delegated authority.
     - **Effective Configuration Resolution**: Runtime configuration evaluates `(Authorized Inherited + Authorized Local) - Deactivated`.
     - **3-Tier Server-Side Duplicate Prevention**:
       1. Reject local creation if matching config is effectively available through parent inheritance (`"...already exists and is available to this Campus through School configuration"`).
       2. Reject local creation if parent owns the record but has not assigned it to the campus (`"...already exists at School level but is not currently assigned to this Campus"`).
       3. Reject duplicate local creation within the campus.
+
+---
+
+## 13. Responsive UI Invariants & Design Standards
+
+46. **Full-Viewport Device Responsiveness**: Every user interface component, administrative master, navigation bar, and modal must adapt seamlessly across 5 standard breakpoints:
+    - Mobile Portrait: `360px` – `390px` (single column layout, drawer navigation, expandable filter accordions, horizontal swipe tabs, touch targets $\ge 44\text{px}$, zero horizontal overflow).
+    - Tablet: `768px` – `1024px` (2-column grids, collapsed sidebars, compact tables/cards).
+    - Desktop: `1024px` – `1440px+` (full data tables, inline action bars, multi-column forms).
+47. **Mobile Overflow & Touch Targets**:
+    - Root containers and table containers must enforce `overflow-x-auto` or `overflow-x-hidden` to avoid window-level scrollbar breakage.
+    - All interactive buttons, action menus (`⋮`), and form inputs must maintain touch-friendly padding and clear visible focus rings.
 

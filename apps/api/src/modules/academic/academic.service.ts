@@ -230,21 +230,31 @@ export class AcademicService {
   private tagEffectiveGovernance<T extends { ownerType?: string; ownerId?: string | null; applyTo?: string }>(
     record: T,
     userRole: string = 'SCHOOL_ADMIN',
-    _targetCampusId?: string
+    targetCampusId?: string,
+    allowLowerLevelEdit: boolean = false
   ) {
     const isLocal = record.ownerType === 'CAMPUS';
-    const sourceOrigin: ConfigSourceOrigin = isLocal ? 'LOCAL' : 'INHERITED';
-    const isInherited = !isLocal;
+    const isCampusQuery = !!(targetCampusId && targetCampusId !== 'ALL');
+    const sourceOrigin: ConfigSourceOrigin = isCampusQuery
+      ? (isLocal && record.ownerId === targetCampusId ? 'LOCAL' : 'INHERITED')
+      : (isLocal ? 'LOCAL' : 'INHERITED');
+    const isInherited = sourceOrigin === 'INHERITED';
 
     const isOrgAdmin =
       userRole === 'SUPER_ADMIN' ||
       userRole === 'HEAD_OFFICE_ADMIN' ||
+      userRole === 'REGION_ADMIN' ||
       userRole === 'SCHOOL_ADMIN' ||
       userRole === 'ADMIN';
 
-    const canEdit = isOrgAdmin || (isLocal && userRole === 'CAMPUS_ADMIN');
+    // Campus admin can only edit their own local records.
+    // Org/School admin can edit school/org records; they cannot edit campus-owned records unless explicit allowLowerLevelEdit is granted.
+    const canEdit = isLocal
+      ? (userRole === 'CAMPUS_ADMIN' ? (targetCampusId ? record.ownerId === targetCampusId : true) : allowLowerLevelEdit)
+      : isOrgAdmin;
+
     const canToggleStatus = canEdit;
-    const canAssign = isOrgAdmin;
+    const canAssign = isOrgAdmin && !isLocal;
 
     return {
       ownerType: (record.ownerType as ConfigOwnerType) || 'SCHOOL',
@@ -323,6 +333,8 @@ export class AcademicService {
           if (ay.applyTo === 'ALL_CAMPUSES') return true;
           return ay.branchIds?.includes(campusId);
         });
+      } else if (userRole === 'HEAD_OFFICE_ADMIN') {
+        result = result.filter((ay) => ay.ownerType !== 'CAMPUS');
       }
 
       return result;
@@ -436,7 +448,8 @@ export class AcademicService {
     dto: UpdateAcademicYearDto,
     actorUserId?: string,
     authorizedBranchIds?: string[],
-    userRole: string = 'SCHOOL_ADMIN'
+    userRole: string = 'SCHOOL_ADMIN',
+    allowLowerLevelEdit: boolean = false
   ): Promise<AcademicYearListItemDto> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
       const [existing] = await tx
@@ -446,9 +459,13 @@ export class AcademicService {
 
       if (!existing) throw new NotFoundException(`Academic Year with ID '${id}' not found.`);
 
-      const gov = this.tagEffectiveGovernance(existing, userRole);
+      const gov = this.tagEffectiveGovernance(existing, userRole, undefined, allowLowerLevelEdit);
       if (!gov.canEdit) {
-        throw new ForbiddenException('You do not have permission to edit this inherited configuration.');
+        if (existing.ownerType === 'CAMPUS') {
+          throw new ForbiddenException('You do not have permission to edit this Campus-owned configuration. Upward visibility does not grant update rights.');
+        } else {
+          throw new ForbiddenException('You do not have permission to edit this inherited configuration.');
+        }
       }
 
       const startDate = dto.startDate || existing.startDate;
@@ -543,7 +560,8 @@ export class AcademicService {
     id: string,
     isActive: boolean,
     actorUserId?: string,
-    userRole: string = 'SCHOOL_ADMIN'
+    userRole: string = 'SCHOOL_ADMIN',
+    allowLowerLevelEdit: boolean = false
   ): Promise<AcademicYearListItemDto> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
       const [existing] = await tx
@@ -553,9 +571,13 @@ export class AcademicService {
 
       if (!existing) throw new NotFoundException(`Academic Year with ID '${id}' not found.`);
 
-      const gov = this.tagEffectiveGovernance(existing, userRole);
+      const gov = this.tagEffectiveGovernance(existing, userRole, undefined, allowLowerLevelEdit);
       if (!gov.canToggleStatus) {
-        throw new ForbiddenException('You do not have permission to toggle status for this inherited configuration.');
+        if (existing.ownerType === 'CAMPUS') {
+          throw new ForbiddenException('You do not have permission to toggle status for this Campus-owned configuration. Upward visibility does not grant update rights.');
+        } else {
+          throw new ForbiddenException('You do not have permission to toggle status for this inherited configuration.');
+        }
       }
 
       const [updated] = await tx
@@ -653,6 +675,8 @@ export class AcademicService {
           if (b.applyTo === 'ALL_CAMPUSES') return true;
           return b.branchIds?.includes(campusId);
         });
+      } else if (userRole === 'HEAD_OFFICE_ADMIN') {
+        result = result.filter((b) => b.ownerType !== 'CAMPUS');
       }
 
       return result;
@@ -752,7 +776,8 @@ export class AcademicService {
     dto: UpdateBoardDto,
     actorUserId?: string,
     authorizedBranchIds?: string[],
-    userRole: string = 'SCHOOL_ADMIN'
+    userRole: string = 'SCHOOL_ADMIN',
+    allowLowerLevelEdit: boolean = false
   ): Promise<BoardListItemDto> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
       const [existing] = await tx
@@ -762,9 +787,13 @@ export class AcademicService {
 
       if (!existing) throw new NotFoundException(`Board with ID '${id}' not found.`);
 
-      const gov = this.tagEffectiveGovernance(existing, userRole);
+      const gov = this.tagEffectiveGovernance(existing, userRole, undefined, allowLowerLevelEdit);
       if (!gov.canEdit) {
-        throw new ForbiddenException('You do not have permission to edit this inherited configuration.');
+        if (existing.ownerType === 'CAMPUS') {
+          throw new ForbiddenException('You do not have permission to edit this Campus-owned configuration. Upward visibility does not grant update rights.');
+        } else {
+          throw new ForbiddenException('You do not have permission to edit this inherited configuration.');
+        }
       }
 
       if (dto.name || dto.code) {
@@ -844,7 +873,8 @@ export class AcademicService {
     id: string,
     isActive: boolean,
     actorUserId?: string,
-    userRole: string = 'SCHOOL_ADMIN'
+    userRole: string = 'SCHOOL_ADMIN',
+    allowLowerLevelEdit: boolean = false
   ): Promise<BoardListItemDto> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
       const [existing] = await tx
@@ -854,9 +884,13 @@ export class AcademicService {
 
       if (!existing) throw new NotFoundException(`Board with ID '${id}' not found.`);
 
-      const gov = this.tagEffectiveGovernance(existing, userRole);
+      const gov = this.tagEffectiveGovernance(existing, userRole, undefined, allowLowerLevelEdit);
       if (!gov.canToggleStatus) {
-        throw new ForbiddenException('You do not have permission to toggle status for this inherited configuration.');
+        if (existing.ownerType === 'CAMPUS') {
+          throw new ForbiddenException('You do not have permission to toggle status for this Campus-owned configuration. Upward visibility does not grant update rights.');
+        } else {
+          throw new ForbiddenException('You do not have permission to toggle status for this inherited configuration.');
+        }
       }
 
       const [updated] = await tx
@@ -965,6 +999,8 @@ export class AcademicService {
           if (l.applyTo === 'ALL_CAMPUSES') return true;
           return l.branchIds?.includes(campusId);
         });
+      } else if (userRole === 'HEAD_OFFICE_ADMIN') {
+        result = result.filter((l) => l.ownerType !== 'CAMPUS');
       }
 
       return result;
@@ -1064,7 +1100,8 @@ export class AcademicService {
     dto: UpdateAcademicLevelDto,
     actorUserId?: string,
     authorizedBranchIds?: string[],
-    userRole: string = 'SCHOOL_ADMIN'
+    userRole: string = 'SCHOOL_ADMIN',
+    allowLowerLevelEdit: boolean = false
   ): Promise<AcademicLevelListItemDto> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
       const [existing] = await tx
@@ -1074,9 +1111,13 @@ export class AcademicService {
 
       if (!existing) throw new NotFoundException(`Academic Level with ID '${id}' not found.`);
 
-      const gov = this.tagEffectiveGovernance(existing, userRole);
+      const gov = this.tagEffectiveGovernance(existing, userRole, undefined, allowLowerLevelEdit);
       if (!gov.canEdit) {
-        throw new ForbiddenException('You do not have permission to edit this inherited configuration.');
+        if (existing.ownerType === 'CAMPUS') {
+          throw new ForbiddenException('You do not have permission to edit this Campus-owned configuration. Upward visibility does not grant update rights.');
+        } else {
+          throw new ForbiddenException('You do not have permission to edit this inherited configuration.');
+        }
       }
 
       if (dto.name) {
@@ -1155,7 +1196,8 @@ export class AcademicService {
     id: string,
     isActive: boolean,
     actorUserId?: string,
-    userRole: string = 'SCHOOL_ADMIN'
+    userRole: string = 'SCHOOL_ADMIN',
+    allowLowerLevelEdit: boolean = false
   ): Promise<AcademicLevelListItemDto> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
       const [existing] = await tx
@@ -1165,9 +1207,13 @@ export class AcademicService {
 
       if (!existing) throw new NotFoundException(`Academic Level with ID '${id}' not found.`);
 
-      const gov = this.tagEffectiveGovernance(existing, userRole);
+      const gov = this.tagEffectiveGovernance(existing, userRole, undefined, allowLowerLevelEdit);
       if (!gov.canToggleStatus) {
-        throw new ForbiddenException('You do not have permission to toggle status for this inherited configuration.');
+        if (existing.ownerType === 'CAMPUS') {
+          throw new ForbiddenException('You do not have permission to toggle status for this Campus-owned configuration. Upward visibility does not grant update rights.');
+        } else {
+          throw new ForbiddenException('You do not have permission to toggle status for this inherited configuration.');
+        }
       }
 
       const [updated] = await tx
@@ -1276,6 +1322,8 @@ export class AcademicService {
           if (s.applyTo === 'ALL_CAMPUSES') return true;
           return s.branchIds?.includes(campusId);
         });
+      } else if (userRole === 'HEAD_OFFICE_ADMIN') {
+        result = result.filter((s) => s.ownerType !== 'CAMPUS');
       }
 
       return result;
@@ -1391,7 +1439,8 @@ export class AcademicService {
     dto: UpdateSubjectDto,
     actorUserId?: string,
     authorizedBranchIds?: string[],
-    userRole: string = 'SCHOOL_ADMIN'
+    userRole: string = 'SCHOOL_ADMIN',
+    allowLowerLevelEdit: boolean = false
   ): Promise<SubjectListItemDto> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
       const [existing] = await tx
@@ -1401,9 +1450,13 @@ export class AcademicService {
 
       if (!existing) throw new NotFoundException(`Subject with ID '${id}' not found.`);
 
-      const gov = this.tagEffectiveGovernance(existing, userRole);
+      const gov = this.tagEffectiveGovernance(existing, userRole, undefined, allowLowerLevelEdit);
       if (!gov.canEdit) {
-        throw new ForbiddenException('You do not have permission to edit this inherited configuration.');
+        if (existing.ownerType === 'CAMPUS') {
+          throw new ForbiddenException('You do not have permission to edit this Campus-owned configuration. Upward visibility does not grant update rights.');
+        } else {
+          throw new ForbiddenException('You do not have permission to edit this inherited configuration.');
+        }
       }
 
       if (dto.name || dto.code) {
@@ -1501,7 +1554,8 @@ export class AcademicService {
     id: string,
     isActive: boolean,
     actorUserId?: string,
-    userRole: string = 'SCHOOL_ADMIN'
+    userRole: string = 'SCHOOL_ADMIN',
+    allowLowerLevelEdit: boolean = false
   ): Promise<SubjectListItemDto> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
       const [existing] = await tx
@@ -1511,9 +1565,13 @@ export class AcademicService {
 
       if (!existing) throw new NotFoundException(`Subject with ID '${id}' not found.`);
 
-      const gov = this.tagEffectiveGovernance(existing, userRole);
+      const gov = this.tagEffectiveGovernance(existing, userRole, undefined, allowLowerLevelEdit);
       if (!gov.canToggleStatus) {
-        throw new ForbiddenException('You do not have permission to toggle status for this inherited configuration.');
+        if (existing.ownerType === 'CAMPUS') {
+          throw new ForbiddenException('You do not have permission to toggle status for this Campus-owned configuration. Upward visibility does not grant update rights.');
+        } else {
+          throw new ForbiddenException('You do not have permission to toggle status for this inherited configuration.');
+        }
       }
 
       const [updated] = await tx
@@ -1772,6 +1830,8 @@ export class AcademicService {
           if (c.applyTo === 'ALL_CAMPUSES') return true;
           return c.branchIds?.includes(campusId);
         });
+      } else if (userRole === 'HEAD_OFFICE_ADMIN') {
+        result = result.filter((c) => c.ownerType !== 'CAMPUS');
       }
 
       return result;
@@ -1925,7 +1985,8 @@ export class AcademicService {
     dto: UpdateClassDto,
     actorUserId?: string,
     authorizedBranchIds?: string[],
-    userRole: string = 'SCHOOL_ADMIN'
+    userRole: string = 'SCHOOL_ADMIN',
+    allowLowerLevelEdit: boolean = false
   ): Promise<ClassListItemDto> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
       const [existing] = await tx
@@ -1935,9 +1996,13 @@ export class AcademicService {
 
       if (!existing) throw new NotFoundException(`Class with ID '${id}' not found.`);
 
-      const gov = this.tagEffectiveGovernance(existing, userRole);
+      const gov = this.tagEffectiveGovernance(existing, userRole, undefined, allowLowerLevelEdit);
       if (!gov.canEdit) {
-        throw new ForbiddenException('You do not have permission to edit this inherited configuration.');
+        if (existing.ownerType === 'CAMPUS') {
+          throw new ForbiddenException('You do not have permission to edit this Campus-owned configuration. Upward visibility does not grant update rights.');
+        } else {
+          throw new ForbiddenException('You do not have permission to edit this inherited configuration.');
+        }
       }
 
       if (dto.name || dto.code) {
@@ -2073,7 +2138,8 @@ export class AcademicService {
     id: string,
     isActive: boolean,
     actorUserId?: string,
-    userRole: string = 'SCHOOL_ADMIN'
+    userRole: string = 'SCHOOL_ADMIN',
+    allowLowerLevelEdit: boolean = false
   ): Promise<ClassListItemDto> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
       const [existing] = await tx
@@ -2102,9 +2168,13 @@ export class AcademicService {
 
       if (!existing) throw new NotFoundException(`Class with ID '${id}' not found.`);
 
-      const gov = this.tagEffectiveGovernance(existing, userRole);
+      const gov = this.tagEffectiveGovernance(existing, userRole, undefined, allowLowerLevelEdit);
       if (!gov.canToggleStatus) {
-        throw new ForbiddenException('You do not have permission to toggle status for this inherited configuration.');
+        if (existing.ownerType === 'CAMPUS') {
+          throw new ForbiddenException('You do not have permission to toggle status for this Campus-owned configuration. Upward visibility does not grant update rights.');
+        } else {
+          throw new ForbiddenException('You do not have permission to toggle status for this inherited configuration.');
+        }
       }
 
       const [updated] = await tx
@@ -2215,6 +2285,8 @@ export class AcademicService {
           if (sec.applyTo === 'ALL_CAMPUSES') return true;
           return sec.branchIds?.includes(campusId);
         });
+      } else if (userRole === 'HEAD_OFFICE_ADMIN') {
+        result = result.filter((sec) => sec.ownerType !== 'CAMPUS');
       }
 
       return result;
@@ -2312,7 +2384,8 @@ export class AcademicService {
     dto: UpdateSectionDto,
     actorUserId?: string,
     authorizedBranchIds?: string[],
-    userRole: string = 'SCHOOL_ADMIN'
+    userRole: string = 'SCHOOL_ADMIN',
+    allowLowerLevelEdit: boolean = false
   ): Promise<SectionListItemDto> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
       const [existing] = await tx
@@ -2322,9 +2395,13 @@ export class AcademicService {
 
       if (!existing) throw new NotFoundException(`Section with ID '${id}' not found.`);
 
-      const gov = this.tagEffectiveGovernance(existing, userRole);
+      const gov = this.tagEffectiveGovernance(existing, userRole, undefined, allowLowerLevelEdit);
       if (!gov.canEdit) {
-        throw new ForbiddenException('You do not have permission to edit this inherited configuration.');
+        if (existing.ownerType === 'CAMPUS') {
+          throw new ForbiddenException('You do not have permission to edit this Campus-owned configuration. Upward visibility does not grant update rights.');
+        } else {
+          throw new ForbiddenException('You do not have permission to edit this inherited configuration.');
+        }
       }
 
       if (dto.name) {
@@ -2402,7 +2479,8 @@ export class AcademicService {
     id: string,
     isActive: boolean,
     actorUserId?: string,
-    userRole: string = 'SCHOOL_ADMIN'
+    userRole: string = 'SCHOOL_ADMIN',
+    allowLowerLevelEdit: boolean = false
   ): Promise<SectionListItemDto> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
       const [existing] = await tx
@@ -2412,9 +2490,13 @@ export class AcademicService {
 
       if (!existing) throw new NotFoundException(`Section with ID '${id}' not found.`);
 
-      const gov = this.tagEffectiveGovernance(existing, userRole);
+      const gov = this.tagEffectiveGovernance(existing, userRole, undefined, allowLowerLevelEdit);
       if (!gov.canToggleStatus) {
-        throw new ForbiddenException('You do not have permission to toggle status for this inherited configuration.');
+        if (existing.ownerType === 'CAMPUS') {
+          throw new ForbiddenException('You do not have permission to toggle status for this Campus-owned configuration. Upward visibility does not grant update rights.');
+        } else {
+          throw new ForbiddenException('You do not have permission to toggle status for this inherited configuration.');
+        }
       }
 
       const [updated] = await tx
@@ -2510,6 +2592,8 @@ export class AcademicService {
           if (l.applyTo === 'ALL_CAMPUSES') return true;
           return l.branchIds?.includes(campusId);
         });
+      } else if (userRole === 'HEAD_OFFICE_ADMIN') {
+        result = result.filter((l) => l.ownerType !== 'CAMPUS');
       }
 
       return result;
@@ -2608,7 +2692,8 @@ export class AcademicService {
     dto: UpdateLanguageDto,
     actorUserId?: string,
     authorizedBranchIds?: string[],
-    userRole: string = 'SCHOOL_ADMIN'
+    userRole: string = 'SCHOOL_ADMIN',
+    allowLowerLevelEdit: boolean = false
   ): Promise<LanguageListItemDto> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
       const [existing] = await tx
@@ -2618,9 +2703,13 @@ export class AcademicService {
 
       if (!existing) throw new NotFoundException(`Language with ID '${id}' not found.`);
 
-      const gov = this.tagEffectiveGovernance(existing, userRole);
+      const gov = this.tagEffectiveGovernance(existing, userRole, undefined, allowLowerLevelEdit);
       if (!gov.canEdit) {
-        throw new ForbiddenException('You do not have permission to edit this inherited configuration.');
+        if (existing.ownerType === 'CAMPUS') {
+          throw new ForbiddenException('You do not have permission to edit this Campus-owned configuration. Upward visibility does not grant update rights.');
+        } else {
+          throw new ForbiddenException('You do not have permission to edit this inherited configuration.');
+        }
       }
 
       if (dto.name || dto.code) {
@@ -2699,7 +2788,8 @@ export class AcademicService {
     id: string,
     isActive: boolean,
     actorUserId?: string,
-    userRole: string = 'SCHOOL_ADMIN'
+    userRole: string = 'SCHOOL_ADMIN',
+    allowLowerLevelEdit: boolean = false
   ): Promise<LanguageListItemDto> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
       const [existing] = await tx
@@ -2709,9 +2799,13 @@ export class AcademicService {
 
       if (!existing) throw new NotFoundException(`Language with ID '${id}' not found.`);
 
-      const gov = this.tagEffectiveGovernance(existing, userRole);
+      const gov = this.tagEffectiveGovernance(existing, userRole, undefined, allowLowerLevelEdit);
       if (!gov.canToggleStatus) {
-        throw new ForbiddenException('You do not have permission to toggle status for this inherited configuration.');
+        if (existing.ownerType === 'CAMPUS') {
+          throw new ForbiddenException('You do not have permission to toggle status for this Campus-owned configuration. Upward visibility does not grant update rights.');
+        } else {
+          throw new ForbiddenException('You do not have permission to toggle status for this inherited configuration.');
+        }
       }
 
       const [updated] = await tx

@@ -149,7 +149,7 @@ export function AdminConfigPageHeader({
       : '/admin-config');
 
   return (
-    <div className="space-y-4 border-b border-slate-200 dark:border-slate-800 pb-5">
+    <div className="space-y-3.5 sm:space-y-4 border-b border-slate-200 dark:border-slate-800 pb-4 sm:pb-5">
       {/* Toast popup */}
       {toastMsg && (
         <div className="fixed bottom-6 right-6 z-50 px-4 py-2.5 rounded-xl shadow-xl bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-xs font-semibold flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2">
@@ -157,29 +157,30 @@ export function AdminConfigPageHeader({
         </div>
       )}
 
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          {/* Clickable Breadcrumbs */}
-          <nav className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5 flex-wrap">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3.5 sm:gap-4">
+        <div className="space-y-1">
+          {/* Clickable Breadcrumbs (Responsive) */}
+          <nav className="flex items-center gap-1.5 text-[11px] sm:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex-wrap">
             <Link
               href={sectionHref}
-              className="text-indigo-600 dark:text-indigo-400 hover:underline hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
+              className="text-indigo-600 dark:text-indigo-400 hover:underline hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors truncate max-w-[140px] sm:max-w-none"
             >
               {section}
             </Link>
             <span className="text-slate-300 dark:text-slate-700">/</span>
             <Link
               href={resolvedGroupHref}
-              className="text-slate-600 dark:text-slate-300 hover:underline hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+              className="text-slate-600 dark:text-slate-300 hover:underline hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors truncate max-w-[140px] sm:max-w-none"
             >
               {group}
             </Link>
             <span className="text-slate-300 dark:text-slate-700">/</span>
-            <span className="text-slate-900 dark:text-slate-100 font-bold">{title}</span>
+            <span className="text-slate-900 dark:text-slate-100 font-bold truncate">{title}</span>
           </nav>
 
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+          {/* Title and Personalization Badges */}
+          <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap">
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
               {title}
             </h1>
 
@@ -191,7 +192,7 @@ export function AdminConfigPageHeader({
                   type="button"
                   onClick={handleFavoriteClick}
                   title={isFavorited ? 'Remove from Favorites' : 'Add to Favorites'}
-                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer border ${
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-semibold transition-all cursor-pointer border min-h-[30px] ${
                     isFavorited
                       ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800 hover:bg-amber-100 shadow-sm'
                       : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:text-amber-600 hover:border-amber-300 dark:hover:border-amber-700'
@@ -200,7 +201,7 @@ export function AdminConfigPageHeader({
                   <span className={isFavorited ? 'text-amber-500' : 'text-slate-400'}>
                     {isFavorited ? '★' : '☆'}
                   </span>
-                  <span>{isFavorited ? 'Favorited' : 'Add to Favorites'}</span>
+                  <span>{isFavorited ? 'Favorited' : 'Favorite'}</span>
                 </button>
 
                 {/* Quick Action Toggle Button */}
@@ -208,32 +209,33 @@ export function AdminConfigPageHeader({
                   type="button"
                   onClick={handleQuickActionClick}
                   title={isInQuickActions ? 'Remove from Quick Actions' : 'Add to Quick Actions'}
-                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer border ${
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-semibold transition-all cursor-pointer border min-h-[30px] ${
                     isInQuickActions
                       ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 shadow-sm'
                       : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:text-indigo-600 hover:border-indigo-300 dark:hover:border-indigo-700'
                   }`}
                 >
                   <span className={isInQuickActions ? 'text-indigo-500' : 'text-slate-400'}>⚡</span>
-                  <span>{isInQuickActions ? 'In Quick Actions' : 'Add to Quick Actions'}</span>
+                  <span>{isInQuickActions ? 'In Quick Actions' : 'Quick Action'}</span>
                 </button>
               </div>
             )}
           </div>
 
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed max-w-3xl">
             {description}
           </p>
         </div>
 
-        <div className="flex items-center gap-3 flex-wrap">
+        {/* Action Buttons (Responsive Wrapping) */}
+        <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap">
           {children}
 
           {secondaryActionText && onSecondaryAction && (
             <button
               type="button"
               onClick={onSecondaryAction}
-              className="inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 text-sm font-medium transition-all cursor-pointer shadow-sm"
+              className="inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs sm:text-sm font-medium transition-all cursor-pointer shadow-sm min-h-[38px]"
             >
               {secondaryActionText}
             </button>
@@ -243,7 +245,7 @@ export function AdminConfigPageHeader({
             <button
               type="button"
               onClick={onAction}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-sm font-medium shadow-sm shadow-indigo-600/20 transition-all cursor-pointer"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs sm:text-sm font-medium shadow-sm shadow-indigo-600/20 transition-all cursor-pointer min-h-[38px]"
             >
               <span>+</span>
               <span>{actionButtonText}</span>
@@ -252,10 +254,10 @@ export function AdminConfigPageHeader({
         </div>
       </div>
 
-      {/* Context-Aware Secondary Navigation Strip */}
+      {/* Context-Aware Secondary Navigation Strip (Smooth Horizontal Scroll on Mobile) */}
       {categoryNav && categoryNav.length > 0 && (
-        <div className="pt-2">
-          <div className="inline-flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-x-auto max-w-full">
+        <div className="pt-1 overflow-x-auto scrollbar-none -mx-1 px-1">
+          <div className="inline-flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 flex-nowrap">
             {categoryNav.map((item) => {
               const isActive =
                 item.active ??
@@ -266,7 +268,7 @@ export function AdminConfigPageHeader({
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                  className={`px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all min-h-[32px] flex items-center ${
                     isActive
                       ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm border border-slate-200/60 dark:border-slate-700/60'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-white/50 dark:hover:bg-slate-800/50'
