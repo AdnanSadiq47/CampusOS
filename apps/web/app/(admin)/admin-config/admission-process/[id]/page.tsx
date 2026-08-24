@@ -27,13 +27,14 @@ interface StepLibraryItem {
   defaultRequired: boolean;
   requiresForm?: 'PRE_ADMISSION' | 'ADMISSION';
   isUnique?: boolean;
+  isSystemTerminal?: boolean;
 }
 
 const STEP_LIBRARY: StepLibraryItem[] = [
-  // APPLICATION
+  // 1. APPLICATION
   {
     stepType: 'PRE_ADMISSION',
-    defaultName: 'Pre-Admission Application',
+    defaultName: 'Pre-Admission',
     category: 'APPLICATION',
     description: 'Initial student & parent application intake via public or internal form.',
     defaultRequired: true,
@@ -44,54 +45,66 @@ const STEP_LIBRARY: StepLibraryItem[] = [
     stepType: 'APPLICATION_REVIEW',
     defaultName: 'Application Review',
     category: 'APPLICATION',
-    description: 'Admissions team reviews student information and previous records.',
+    description: 'Admissions team reviews student information, past records, and eligibility.',
     defaultRequired: true,
   },
   {
     stepType: 'DOCUMENT_VERIFICATION',
     defaultName: 'Document Verification',
     category: 'APPLICATION',
-    description: 'Verification of birth certificates, previous transcripts, and CNIC/B-Forms.',
+    description: 'Verification of birth certificates, prior transcripts, and B-Forms.',
     defaultRequired: true,
   },
-  // ASSESSMENT
+
+  // 2. PAYMENT
+  {
+    stepType: 'APPLICATION_FEE',
+    defaultName: 'Application / Registration Fee',
+    category: 'PAYMENT',
+    description: 'Collection of non-refundable application and registration processing fee.',
+    defaultRequired: false,
+  },
+
+  // 3. ASSESSMENT
   {
     stepType: 'ASSESSMENT_TEST',
-    defaultName: 'Assessment / Test',
+    defaultName: 'Test / Assessment',
     category: 'ASSESSMENT',
-    description: 'Entrance examination or age-appropriate diagnostic assessment.',
+    description: 'Entrance examination, academic diagnostic test, or placement evaluation.',
     defaultRequired: true,
   },
   {
     stepType: 'INTERVIEW',
     defaultName: 'Interview',
     category: 'ASSESSMENT',
-    description: 'Student and parent interview with school leadership.',
+    description: 'Student and parent interaction with admissions panel or leadership.',
     defaultRequired: false,
   },
+
+  // 4. DECISION
   {
-    stepType: 'ELIGIBILITY_REVIEW',
-    defaultName: 'Eligibility Review',
-    category: 'ASSESSMENT',
-    description: 'Academic committee verification of age, grades, and admission criteria.',
-    defaultRequired: true,
-  },
-  // DECISION
-  {
-    stepType: 'APPROVAL',
-    defaultName: 'Admission Approval',
+    stepType: 'ADMISSION_DECISION',
+    defaultName: 'Admission Decision',
     category: 'DECISION',
-    description: 'Principal or executive head final decision on admission application.',
+    description: 'Formal admission committee approval, conditional offer, or rejection.',
     defaultRequired: true,
   },
   {
     stepType: 'WAITING_LIST',
     defaultName: 'Waiting List',
     category: 'DECISION',
-    description: 'Optional waiting pool queue when class capacity is reached.',
+    description: 'Optional waiting pool queue when class or section capacity is reached.',
     defaultRequired: false,
   },
-  // CONFIRMATION
+
+  // 5. CONFIRMATION
+  {
+    stepType: 'PARENT_CONFIRMATION',
+    defaultName: 'Parent Confirmation',
+    category: 'CONFIRMATION',
+    description: 'Parent response (Accept, Decline, Need Time) to admission offer.',
+    defaultRequired: false,
+  },
   {
     stepType: 'SEAT_CONFIRMATION',
     defaultName: 'Seat Confirmation',
@@ -100,27 +113,31 @@ const STEP_LIBRARY: StepLibraryItem[] = [
     defaultRequired: true,
   },
   {
-    stepType: 'REGISTRATION_FEE',
-    defaultName: 'Registration Fee',
+    stepType: 'ADMISSION_FEE',
+    defaultName: 'Admission Fee',
     category: 'CONFIRMATION',
-    description: 'Collection of non-refundable application/registration processing fee.',
-    defaultRequired: false,
-  },
-  {
-    stepType: 'INITIAL_ADMISSION_FEE',
-    defaultName: 'Initial Admission Fee',
-    category: 'CONFIRMATION',
-    description: 'Payment of security deposit, admission fee, and first month tuition.',
+    description: 'Payment of security deposit, admission fee, and first tuition installment.',
     defaultRequired: true,
   },
   {
     stepType: 'FINAL_ADMISSION_FORM',
-    defaultName: 'Final Admission Form',
+    defaultName: 'Final Admission',
     category: 'CONFIRMATION',
     description: 'Comprehensive formal admission package with final guardian undertakings.',
     defaultRequired: true,
     requiresForm: 'ADMISSION',
     isUnique: true,
+  },
+
+  // 6. SYSTEM
+  {
+    stepType: 'STUDENT_REGISTRATION',
+    defaultName: 'Student Registration',
+    category: 'SYSTEM',
+    description: 'Terminal system step: creates official CampusOS Student record upon confirmed admission.',
+    defaultRequired: true,
+    isUnique: true,
+    isSystemTerminal: true,
   },
 ];
 
@@ -1014,12 +1031,464 @@ export default function AdmissionProcessBuilderPage() {
                 </select>
               </div>
 
-              {/* 4. Attached Dynamic Form Selection (Only when applicable) */}
+              {/* 4. STEP-SPECIFIC CONFIGURATION PANELS */}
+
+              {/* 4A. FEE CONFIGURATION (APPLICATION_FEE & ADMISSION_FEE) */}
+              {(editingStep.stepType === 'APPLICATION_FEE' || editingStep.stepType === 'ADMISSION_FEE') && (
+                <div className="p-4 rounded-2xl bg-amber-50/50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-amber-900 dark:text-amber-200">
+                      💰 Fee & Payment Settings
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-mono">Finance Foundation</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                        Fee Title *
+                      </label>
+                      <input
+                        type="text"
+                        value={editingStep.feeConfig?.feeName || (editingStep.stepType === 'APPLICATION_FEE' ? 'Registration Processing Fee' : 'Admission Security Deposit')}
+                        onChange={(e) =>
+                          setEditingStep({
+                            ...editingStep,
+                            feeConfig: {
+                              feeRequired: true,
+                              feeName: e.target.value,
+                              amount: editingStep.feeConfig?.amount ?? (editingStep.stepType === 'APPLICATION_FEE' ? 2000 : 25000),
+                              currency: editingStep.feeConfig?.currency || 'PKR',
+                              paymentRequiredBeforeNextStep: editingStep.feeConfig?.paymentRequiredBeforeNextStep ?? true,
+                              allowWaiver: editingStep.feeConfig?.allowWaiver ?? true,
+                              allowDiscount: editingStep.feeConfig?.allowDiscount ?? false,
+                              receiptRequired: editingStep.feeConfig?.receiptRequired ?? true,
+                            },
+                          })
+                        }
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                        Amount ({editingStep.feeConfig?.currency || 'PKR'}) *
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={editingStep.feeConfig?.amount ?? (editingStep.stepType === 'APPLICATION_FEE' ? 2000 : 25000)}
+                        onChange={(e) =>
+                          setEditingStep({
+                            ...editingStep,
+                            feeConfig: {
+                              feeRequired: true,
+                              feeName: editingStep.feeConfig?.feeName || (editingStep.stepType === 'APPLICATION_FEE' ? 'Registration Processing Fee' : 'Admission Security Deposit'),
+                              amount: Number(e.target.value) || 0,
+                              currency: editingStep.feeConfig?.currency || 'PKR',
+                              paymentRequiredBeforeNextStep: editingStep.feeConfig?.paymentRequiredBeforeNextStep ?? true,
+                              allowWaiver: editingStep.feeConfig?.allowWaiver ?? true,
+                              allowDiscount: editingStep.feeConfig?.allowDiscount ?? false,
+                              receiptRequired: editingStep.feeConfig?.receiptRequired ?? true,
+                            },
+                          })
+                        }
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 pt-1 border-t border-amber-200/60 dark:border-amber-900/40 text-[11px]">
+                    <label className="flex items-center justify-between cursor-pointer">
+                      <span className="font-semibold text-slate-700 dark:text-slate-300">
+                        Payment Required Before Next Step
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={editingStep.feeConfig?.paymentRequiredBeforeNextStep ?? true}
+                        onChange={(e) =>
+                          setEditingStep({
+                            ...editingStep,
+                            feeConfig: {
+                              ...editingStep.feeConfig!,
+                              feeRequired: true,
+                              feeName: editingStep.feeConfig?.feeName || 'Admission Fee',
+                              amount: editingStep.feeConfig?.amount ?? 2000,
+                              currency: editingStep.feeConfig?.currency || 'PKR',
+                              paymentRequiredBeforeNextStep: e.target.checked,
+                              allowWaiver: editingStep.feeConfig?.allowWaiver ?? true,
+                              allowDiscount: editingStep.feeConfig?.allowDiscount ?? false,
+                              receiptRequired: editingStep.feeConfig?.receiptRequired ?? true,
+                            },
+                          })
+                        }
+                        className="h-4 w-4 text-amber-600 rounded cursor-pointer"
+                      />
+                    </label>
+
+                    <div className="grid grid-cols-3 gap-2 text-[10px]">
+                      <label className="flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={editingStep.feeConfig?.allowWaiver ?? true}
+                          onChange={(e) =>
+                            setEditingStep({
+                              ...editingStep,
+                              feeConfig: { ...editingStep.feeConfig!, allowWaiver: e.target.checked },
+                            })
+                          }
+                          className="h-3.5 w-3.5 text-amber-600 rounded"
+                        />
+                        <span>Allow Waiver</span>
+                      </label>
+                      <label className="flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={editingStep.feeConfig?.allowDiscount ?? false}
+                          onChange={(e) =>
+                            setEditingStep({
+                              ...editingStep,
+                              feeConfig: { ...editingStep.feeConfig!, allowDiscount: e.target.checked },
+                            })
+                          }
+                          className="h-3.5 w-3.5 text-amber-600 rounded"
+                        />
+                        <span>Allow Discount</span>
+                      </label>
+                      <label className="flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={editingStep.feeConfig?.receiptRequired ?? true}
+                          onChange={(e) =>
+                            setEditingStep({
+                              ...editingStep,
+                              feeConfig: { ...editingStep.feeConfig!, receiptRequired: e.target.checked },
+                            })
+                          }
+                          className="h-3.5 w-3.5 text-amber-600 rounded"
+                        />
+                        <span>Receipt Required</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 4B. TEST / ASSESSMENT CONFIGURATION */}
+              {editingStep.stepType === 'ASSESSMENT_TEST' && (
+                <div className="p-4 rounded-2xl bg-blue-50/50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/60 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-blue-900 dark:text-blue-200">
+                      📝 Assessment & Test Settings
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-mono">Assessment Engine</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                        Assessment Mode *
+                      </label>
+                      <select
+                        value={editingStep.testConfig?.mode || 'PAPER_BASED'}
+                        onChange={(e) =>
+                          setEditingStep({
+                            ...editingStep,
+                            testConfig: {
+                              testRequired: true,
+                              assessmentName: editingStep.testConfig?.assessmentName || editingStep.displayName,
+                              mode: e.target.value as any,
+                              passMarks: editingStep.testConfig?.passMarks ?? 50,
+                              totalMarks: editingStep.testConfig?.totalMarks ?? 100,
+                              resultPublishingRule: editingStep.testConfig?.resultPublishingRule || 'AFTER_STAFF_APPROVAL',
+                            },
+                          })
+                        }
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold cursor-pointer"
+                      >
+                        <option value="PAPER_BASED">📄 Paper Based Exam</option>
+                        <option value="COMPUTER_BASED">💻 Computer Based (Lab Session)</option>
+                        <option value="ONLINE">🌐 Online Remote Assessment</option>
+                        <option value="HYBRID">🔀 Hybrid / Configurable</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                        Result Publishing Rule *
+                      </label>
+                      <select
+                        value={editingStep.testConfig?.resultPublishingRule || 'AFTER_STAFF_APPROVAL'}
+                        onChange={(e) =>
+                          setEditingStep({
+                            ...editingStep,
+                            testConfig: {
+                              ...editingStep.testConfig!,
+                              testRequired: true,
+                              assessmentName: editingStep.testConfig?.assessmentName || editingStep.displayName,
+                              mode: editingStep.testConfig?.mode || 'PAPER_BASED',
+                              resultPublishingRule: e.target.value as any,
+                            },
+                          })
+                        }
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold cursor-pointer"
+                      >
+                        <option value="AFTER_STAFF_APPROVAL">Publish After Staff Approval</option>
+                        <option value="IMMEDIATE">Publish Immediately on Scoring</option>
+                        <option value="ON_SCHEDULED_DATE">Publish on Scheduled Date</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                        Pass Marks / Cutoff
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={editingStep.testConfig?.passMarks ?? 50}
+                        onChange={(e) =>
+                          setEditingStep({
+                            ...editingStep,
+                            testConfig: { ...editingStep.testConfig!, testRequired: true, assessmentName: editingStep.displayName, mode: editingStep.testConfig?.mode || 'PAPER_BASED', resultPublishingRule: editingStep.testConfig?.resultPublishingRule || 'AFTER_STAFF_APPROVAL', passMarks: Number(e.target.value) },
+                          })
+                        }
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                        Total Marks
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={editingStep.testConfig?.totalMarks ?? 100}
+                        onChange={(e) =>
+                          setEditingStep({
+                            ...editingStep,
+                            testConfig: { ...editingStep.testConfig!, testRequired: true, assessmentName: editingStep.displayName, mode: editingStep.testConfig?.mode || 'PAPER_BASED', resultPublishingRule: editingStep.testConfig?.resultPublishingRule || 'AFTER_STAFF_APPROVAL', totalMarks: Number(e.target.value) },
+                          })
+                        }
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 4C. INTERVIEW CONFIGURATION */}
+              {editingStep.stepType === 'INTERVIEW' && (
+                <div className="p-4 rounded-2xl bg-purple-50/50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-900/60 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-purple-900 dark:text-purple-200">
+                      👥 Interview & Evaluation Settings
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-mono">Interview Panel</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                        Interview Mode *
+                      </label>
+                      <select
+                        value={editingStep.interviewConfig?.mode || 'PHYSICAL'}
+                        onChange={(e) =>
+                          setEditingStep({
+                            ...editingStep,
+                            interviewConfig: {
+                              interviewRequired: true,
+                              mode: e.target.value as any,
+                              durationMinutes: editingStep.interviewConfig?.durationMinutes ?? 20,
+                              meetingProvider: editingStep.interviewConfig?.meetingProvider || 'GOOGLE_MEET',
+                            },
+                          })
+                        }
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold cursor-pointer"
+                      >
+                        <option value="PHYSICAL">🏫 In-Person / Physical Venue</option>
+                        <option value="ONLINE">🌐 Online Video Meeting</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                        Slot Duration (Minutes)
+                      </label>
+                      <input
+                        type="number"
+                        min={5}
+                        step={5}
+                        value={editingStep.interviewConfig?.durationMinutes ?? 20}
+                        onChange={(e) =>
+                          setEditingStep({
+                            ...editingStep,
+                            interviewConfig: {
+                              interviewRequired: true,
+                              mode: editingStep.interviewConfig?.mode || 'PHYSICAL',
+                              durationMinutes: Number(e.target.value) || 20,
+                            },
+                          })
+                        }
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                      Evaluation Form (Dynamic Form Builder)
+                    </label>
+                    <select
+                      value={editingStep.interviewConfig?.attachedEvaluationFormId || ''}
+                      onChange={(e) =>
+                        setEditingStep({
+                          ...editingStep,
+                          interviewConfig: {
+                            ...editingStep.interviewConfig!,
+                            interviewRequired: true,
+                            mode: editingStep.interviewConfig?.mode || 'PHYSICAL',
+                            attachedEvaluationFormId: e.target.value,
+                          },
+                        })
+                      }
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold cursor-pointer"
+                    >
+                      <option value="">Standard Rubric / Notes Only</option>
+                      <option value="f_interview_eval">Admission Interview Evaluation Rubric (v1)</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {/* 4D. ADMISSION DECISION CONFIGURATION */}
+              {editingStep.stepType === 'ADMISSION_DECISION' && (
+                <div className="p-4 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/60 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-900 dark:text-emerald-200">
+                      ⚖️ Admission Decision Settings
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-mono">Committee Governance</span>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                      Allowed Outcomes
+                    </label>
+                    <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+                      {['APPROVED', 'APPROVED_WITH_CONDITION', 'WAITING_LIST', 'ON_HOLD', 'REJECTED', 'WITHDRAWN'].map((oc) => (
+                        <label key={oc} className="flex items-center gap-1.5 p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={editingStep.decisionConfig?.allowedOutcomes?.includes(oc as any) ?? true}
+                            onChange={(e) => {
+                              const current = editingStep.decisionConfig?.allowedOutcomes || ['APPROVED', 'APPROVED_WITH_CONDITION', 'WAITING_LIST', 'REJECTED'];
+                              const next = e.target.checked ? [...current, oc as any] : current.filter((x) => x !== oc);
+                              setEditingStep({
+                                ...editingStep,
+                                decisionConfig: {
+                                  allowedOutcomes: next,
+                                  requireHumanConfirmation: editingStep.decisionConfig?.requireHumanConfirmation ?? true,
+                                },
+                              });
+                            }}
+                            className="h-3.5 w-3.5 text-emerald-600 rounded"
+                          />
+                          <span className="text-[10px] font-semibold">{oc.replace(/_/g, ' ')}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  <label className="flex items-center justify-between pt-1 border-t border-emerald-200/60 dark:border-emerald-900/40 text-[11px] cursor-pointer">
+                    <span className="font-semibold text-slate-700 dark:text-slate-300">
+                      Require Human Confirmation (No Auto-Reject)
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={editingStep.decisionConfig?.requireHumanConfirmation ?? true}
+                      onChange={(e) =>
+                        setEditingStep({
+                          ...editingStep,
+                          decisionConfig: {
+                            allowedOutcomes: editingStep.decisionConfig?.allowedOutcomes || ['APPROVED', 'REJECTED'],
+                            requireHumanConfirmation: e.target.checked,
+                          },
+                        })
+                      }
+                      className="h-4 w-4 text-emerald-600 rounded cursor-pointer"
+                    />
+                  </label>
+                </div>
+              )}
+
+              {/* 4E. PARENT CONFIRMATION CONFIGURATION */}
+              {editingStep.stepType === 'PARENT_CONFIRMATION' && (
+                <div className="p-4 rounded-2xl bg-sky-50/50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-900/60 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-sky-900 dark:text-sky-200">
+                      ✉️ Parent Offer Response Settings
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-mono">Offer Lifecycle</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                        Offer Expiry (Days)
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={editingStep.confirmationConfig?.expiryDays ?? 7}
+                        onChange={(e) =>
+                          setEditingStep({
+                            ...editingStep,
+                            confirmationConfig: {
+                              allowedResponses: ['ACCEPT', 'DECLINE', 'NEED_MORE_TIME'],
+                              expiryDays: Number(e.target.value) || 7,
+                              autoReminderEnabled: editingStep.confirmationConfig?.autoReminderEnabled ?? true,
+                            },
+                          })
+                        }
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                        Auto-Reminders
+                      </label>
+                      <select
+                        value={String(editingStep.confirmationConfig?.autoReminderEnabled ?? true)}
+                        onChange={(e) =>
+                          setEditingStep({
+                            ...editingStep,
+                            confirmationConfig: {
+                              allowedResponses: ['ACCEPT', 'DECLINE', 'NEED_MORE_TIME'],
+                              expiryDays: editingStep.confirmationConfig?.expiryDays ?? 7,
+                              autoReminderEnabled: e.target.value === 'true',
+                            },
+                          })
+                        }
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold cursor-pointer"
+                      >
+                        <option value="true">Enabled (48h & 24h Before Expiry)</option>
+                        <option value="false">Disabled</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 4F. Attached Dynamic Form Selection (PRE_ADMISSION & FINAL_ADMISSION_FORM) */}
               {(editingStep.stepType === 'PRE_ADMISSION' || editingStep.stepType === 'FINAL_ADMISSION_FORM') && (
-                <div className="p-3.5 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 space-y-2">
+                <div className="p-4 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-900 dark:text-indigo-200">
-                      {editingStep.stepType === 'PRE_ADMISSION' ? 'Pre-Admission Form *' : 'Admission Form *'}
+                      {editingStep.stepType === 'PRE_ADMISSION' ? 'Pre-Admission Form *' : 'Final Admission Form *'}
                     </span>
                     <span className="text-[10px] text-slate-400 font-mono">Dynamic Form Builder</span>
                   </div>
@@ -1052,6 +1521,28 @@ export default function AdmissionProcessBuilderPage() {
                       </option>
                     ))}
                   </select>
+
+                  {editingStep.stepType === 'FINAL_ADMISSION_FORM' && (
+                    <label className="flex items-center justify-between pt-1 text-[11px] cursor-pointer">
+                      <span className="font-semibold text-indigo-950 dark:text-indigo-200">
+                        Prefill Matching Data from Pre-Admission
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={editingStep.finalAdmissionConfig?.prefillFromPreAdmission ?? true}
+                        onChange={(e) =>
+                          setEditingStep({
+                            ...editingStep,
+                            finalAdmissionConfig: {
+                              attachedFormDefinitionId: editingStep.attachedFormDefinitionId,
+                              prefillFromPreAdmission: e.target.checked,
+                            },
+                          })
+                        }
+                        className="h-4 w-4 text-indigo-600 rounded cursor-pointer"
+                      />
+                    </label>
+                  )}
 
                   <p className="text-[10px] text-slate-400">
                     Only published, eligible forms of matching purpose created in Dynamic Form Builder are selectable.

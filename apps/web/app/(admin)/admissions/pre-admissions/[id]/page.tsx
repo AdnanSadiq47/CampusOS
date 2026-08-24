@@ -7,6 +7,7 @@ import {
   PreAdmissionApplicationDto,
   PreAdmissionStatus,
   PreAdmissionSource,
+  AdmissionDecisionOutcome,
 } from '@campus-os/types';
 
 // Status badge styling helper
@@ -51,29 +52,37 @@ export default function PreAdmissionDetailPage() {
 
   const [application, setApplication] = useState<PreAdmissionApplicationDto | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'FORM' | 'JOURNEY' | 'ASSESSMENT' | 'INTERVIEW' | 'PAYMENTS' | 'ACTIVITY'>('OVERVIEW');
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [selectedProcessId, setSelectedProcessId] = useState('proc_general_k12');
-  const [assignSuccessMsg, setAssignSuccessMsg] = useState<string | null>(null);
+  const [showDecisionModal, setShowDecisionModal] = useState(false);
+  const [decisionOutcome, setDecisionOutcome] = useState<AdmissionDecisionOutcome>('APPROVED');
+  const [decisionNotes, setDecisionNotes] = useState('');
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState(2500);
+  const [paymentType, setPaymentType] = useState<'APPLICATION_FEE' | 'ADMISSION_FEE'>('APPLICATION_FEE');
+  const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
+
+  const fetchDetail = async () => {
+    try {
+      const res = await fetch(`http://localhost:4000/admissions/pre-admissions/${id}`, {
+        headers: {
+          'x-tenant-id': '11111111-1111-1111-1111-111111111111',
+          'x-user-role': 'ADMIN',
+        },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setApplication(data);
+      }
+    } catch (e) {
+      // Fallback
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchDetail = async () => {
-      try {
-        const res = await fetch(`http://localhost:4000/admissions/pre-admissions/${id}`, {
-          headers: {
-            'x-tenant-id': '11111111-1111-1111-1111-111111111111',
-            'x-user-role': 'ADMIN',
-          },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setApplication(data);
-        }
-      } catch (e) {
-        // Fallback
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchDetail();
   }, [id]);
 
@@ -94,11 +103,60 @@ export default function PreAdmissionDetailPage() {
         const updated = await res.json();
         setApplication(updated);
         setShowAssignModal(false);
-        setAssignSuccessMsg(`Admission Process assigned! Journey advanced to first step.`);
-        setTimeout(() => setAssignSuccessMsg(null), 4000);
+        setFeedbackMsg(`Admission Process assigned! Journey advanced to first step.`);
+        setTimeout(() => setFeedbackMsg(null), 4000);
       }
     } catch (e) {
       alert('Failed to assign process.');
+    }
+  };
+
+  const handleRecordDecision = async () => {
+    if (!application) return;
+    try {
+      const res = await fetch(`http://localhost:4000/admissions/pre-admissions/${application.id}/decision`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-id': '11111111-1111-1111-1111-111111111111',
+          'x-user-role': 'ADMIN',
+        },
+        body: JSON.stringify({ outcome: decisionOutcome, remarks: decisionNotes }),
+      });
+
+      if (res.ok) {
+        const updated = await res.json();
+        setApplication(updated);
+        setShowDecisionModal(false);
+        setFeedbackMsg(`Decision "${decisionOutcome}" recorded successfully!`);
+        setTimeout(() => setFeedbackMsg(null), 4000);
+      }
+    } catch (e) {
+      alert('Failed to record decision.');
+    }
+  };
+
+  const handleRecordPayment = async () => {
+    if (!application) return;
+    try {
+      const res = await fetch(`http://localhost:4000/admissions/pre-admissions/${application.id}/fee-payment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-id': '11111111-1111-1111-1111-111111111111',
+          'x-user-role': 'ADMIN',
+        },
+        body: JSON.stringify({ feeType: paymentType, amount: paymentAmount, method: 'ONLINE_GATEWAY' }),
+      });
+
+      if (res.ok) {
+        setShowPaymentModal(false);
+        setFeedbackMsg(`Payment of PKR ${paymentAmount.toLocaleString()} recorded successfully!`);
+        setTimeout(() => setFeedbackMsg(null), 4000);
+        fetchDetail();
+      }
+    } catch (e) {
+      alert('Failed to record payment.');
     }
   };
 
@@ -126,7 +184,7 @@ export default function PreAdmissionDetailPage() {
   const sourceBadge = getSourceBadge(application.source);
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 pb-24">
+    <div className="max-w-6xl mx-auto space-y-6 pb-24">
       {/* 1. Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-5">
         <div>
@@ -138,211 +196,154 @@ export default function PreAdmissionDetailPage() {
             <span className="font-mono font-bold text-indigo-600">{application.applicationNumber}</span>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-black text-slate-900 dark:text-white">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
               {application.studentName}
             </h1>
-            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${statusBadge.bg}`}>
+            <span className={`px-3 py-1 rounded-full text-xs font-bold border ${statusBadge.bg}`}>
               {statusBadge.label}
             </span>
-            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold border ${sourceBadge.bg}`}>
+            <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${sourceBadge.bg} flex items-center gap-1`}>
               <span>{sourceBadge.icon}</span>
               <span>{sourceBadge.label}</span>
             </span>
           </div>
+          <p className="text-xs text-slate-500 mt-1">
+            Applying for <span className="font-bold text-slate-700 dark:text-slate-300">{application.className}</span> at{' '}
+            <span className="font-bold text-slate-700 dark:text-slate-300">{application.campusName}</span> ({application.schoolName})
+          </p>
         </div>
 
-        {/* Action Controls */}
-        <div className="flex items-center gap-2">
-          <Link
-            href="/admissions/pre-admissions"
-            className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 transition-colors"
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setShowPaymentModal(true)}
+            className="px-3.5 py-2 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 text-xs font-bold hover:bg-amber-100 transition-all cursor-pointer flex items-center gap-1.5"
           >
-            ← Back to List
-          </Link>
+            <span>💰</span>
+            <span>Record Payment</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowDecisionModal(true)}
+            className="px-3.5 py-2 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200 text-xs font-bold hover:bg-emerald-100 transition-all cursor-pointer flex items-center gap-1.5"
+          >
+            <span>⚖️</span>
+            <span>Record Decision</span>
+          </button>
+
           {!application.processDefinitionId && (
             <button
               type="button"
               onClick={() => setShowAssignModal(true)}
-              className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm transition-colors cursor-pointer"
+              className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-500/20 transition-all cursor-pointer flex items-center gap-1.5"
             >
-              + Assign Process
+              <span>⚡</span>
+              <span>Assign Process</span>
             </button>
           )}
         </div>
       </div>
 
-      {/* Success Alert */}
-      {assignSuccessMsg && (
+      {/* Feedback Alert */}
+      {feedbackMsg && (
         <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs font-bold flex items-center gap-2 animate-in fade-in">
           <span>✓</span>
-          <span>{assignSuccessMsg}</span>
+          <span>{feedbackMsg}</span>
         </div>
       )}
 
-      {/* Main Grid: Left Details & Form, Right Journey & Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-        {/* Left Column (2 Cols): Summary & Submitted Form */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* SECTION A: APPLICATION SUMMARY */}
-          <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100 dark:border-slate-800 pb-2.5">
-              A. Application Summary
-            </h2>
+      {/* Navigation Tabs */}
+      <div className="flex items-center gap-1.5 border-b border-slate-200 dark:border-slate-800 pb-2 overflow-x-auto text-xs">
+        {[
+          { id: 'OVERVIEW', label: 'Overview', icon: '📋' },
+          { id: 'FORM', label: 'Submitted Form', icon: '📄' },
+          { id: 'JOURNEY', label: 'Journey & Steps', icon: '⚡' },
+          { id: 'ASSESSMENT', label: 'Test & Assessment', icon: '📝' },
+          { id: 'INTERVIEW', label: 'Interview', icon: '👥' },
+          { id: 'PAYMENTS', label: 'Payments & Fees', icon: '💰' },
+          { id: 'ACTIVITY', label: 'Activity Log', icon: '📜' },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setActiveTab(tab.id as any)}
+            className={`px-3.5 py-2 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === tab.id
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50'
+            }`}
+          >
+            <span>{tab.icon}</span>
+            <span>{tab.label}</span>
+          </button>
+        ))}
+      </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-xs">
-              <div>
-                <span className="text-slate-400 text-[11px] block">Application No.</span>
-                <span className="font-mono font-bold text-slate-900 dark:text-white">
-                  {application.applicationNumber}
-                </span>
+      {/* TAB CONTENT */}
+      {activeTab === 'OVERVIEW' && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="md:col-span-2 space-y-6">
+            {/* Basic Info */}
+            <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">Application Information</h2>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-xs">
+                <div>
+                  <span className="text-slate-400 text-[10px] block">Application No.</span>
+                  <span className="font-mono font-bold text-indigo-600">{application.applicationNumber}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 text-[10px] block">Form Name</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">{application.formName}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 text-[10px] block">Submitted On</span>
+                  <span className="font-semibold text-slate-700">{new Date(application.submittedAt).toLocaleDateString('en-GB')}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 text-[10px] block">Father / Guardian</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">{application.fatherOrGuardianName}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 text-[10px] block">Primary Mobile</span>
+                  <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">{application.primaryMobile}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 text-[10px] block">Primary Email</span>
+                  <span className="text-slate-700">{application.primaryEmail || '—'}</span>
+                </div>
               </div>
+            </div>
 
-              <div>
-                <span className="text-slate-400 text-[11px] block">Form Used</span>
-                <span className="font-bold text-slate-900 dark:text-white">
-                  {application.formName} (v{application.formVersionNumber})
-                </span>
-              </div>
-
-              <div>
-                <span className="text-slate-400 text-[11px] block">Applied On</span>
-                <span className="font-semibold text-slate-700 dark:text-slate-300">
-                  {new Date(application.submittedAt).toLocaleDateString('en-GB', {
-                    day: '2-digit',
-                    month: 'short',
-                    year: 'numeric',
-                  })}
-                </span>
-              </div>
-
-              <div>
-                <span className="text-slate-400 text-[11px] block">Applying Class</span>
-                <span className="font-bold text-indigo-600 dark:text-indigo-400">
-                  {application.className}
-                </span>
-              </div>
-
-              <div>
-                <span className="text-slate-400 text-[11px] block">School & Campus</span>
-                <span className="font-semibold text-slate-800 dark:text-slate-200">
-                  {application.campusName}
-                </span>
-                <span className="text-[10px] text-slate-400 block">{application.schoolName}</span>
-              </div>
-
-              <div>
-                <span className="text-slate-400 text-[11px] block">Academic Year</span>
-                <span className="font-semibold text-slate-700 dark:text-slate-300">
-                  {application.academicYearName}
-                </span>
-              </div>
-
-              <div>
-                <span className="text-slate-400 text-[11px] block">Father / Guardian</span>
-                <span className="font-semibold text-slate-800 dark:text-slate-200">
-                  {application.fatherOrGuardianName}
-                </span>
-              </div>
-
-              <div>
-                <span className="text-slate-400 text-[11px] block">Primary Mobile</span>
-                <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">
-                  {application.primaryMobile}
-                </span>
-              </div>
-
-              <div>
-                <span className="text-slate-400 text-[11px] block">Email</span>
-                <span className="font-semibold text-slate-800 dark:text-slate-200">
-                  {application.primaryEmail || '—'}
-                </span>
+            {/* Assessment & Status Summary Card */}
+            <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">Operational Summary</h2>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+                <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700">
+                  <span className="text-slate-400 text-[10px] block">Test Date</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">{application.testDate || 'Not Scheduled'}</span>
+                </div>
+                <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700">
+                  <span className="text-slate-400 text-[10px] block">Test Result</span>
+                  <span className="font-bold text-indigo-600">{application.testResult || '—'}</span>
+                </div>
+                <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700">
+                  <span className="text-slate-400 text-[10px] block">Interview</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">{application.interviewStatus || 'Pending'}</span>
+                </div>
+                <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700">
+                  <span className="text-slate-400 text-[10px] block">Payment Status</span>
+                  <span className="font-bold text-emerald-600">{application.feeStatus || 'UNPAID'}</span>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* SECTION B: SUBMITTED FORM SNAPSHOT */}
+          {/* Right Column: Journey Step Tracker */}
           <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
-              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                B. Submitted Form Snapshot (v{application.formVersionNumber} Read-Only)
-              </h2>
-              <span className="text-[10px] font-mono text-slate-400">Immutable Version Link</span>
-            </div>
-
-            {/* Structured Read-Only Fields */}
-            <div className="space-y-4 text-xs">
-              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 space-y-2">
-                <span className="font-bold text-slate-700 dark:text-slate-300 block text-[11px] uppercase tracking-wider">
-                  Student Basic Information
-                </span>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  <div>
-                    <span className="text-slate-400 text-[10px] block">Student Name</span>
-                    <span className="font-bold text-slate-900 dark:text-white">{application.studentName}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 text-[10px] block">Gender</span>
-                    <span className="font-semibold text-slate-800 dark:text-slate-200">{application.gender}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 text-[10px] block">Date of Birth</span>
-                    <span className="font-semibold text-slate-800 dark:text-slate-200">{application.dateOfBirth}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 space-y-2">
-                <span className="font-bold text-slate-700 dark:text-slate-300 block text-[11px] uppercase tracking-wider">
-                  Guardian & Previous Record
-                </span>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  <div>
-                    <span className="text-slate-400 text-[10px] block">Father / Guardian</span>
-                    <span className="font-bold text-slate-900 dark:text-white">{application.fatherOrGuardianName}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 text-[10px] block">Contact Mobile</span>
-                    <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">{application.primaryMobile}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 text-[10px] block">Previous School</span>
-                    <span className="font-semibold text-slate-800 dark:text-slate-200">
-                      {application.submissionData?.previousSchool || 'Kindergarten Academy'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Custom Fields */}
-              {application.customFieldsData && Object.keys(application.customFieldsData).length > 0 && (
-                <div className="p-3.5 rounded-2xl bg-indigo-50/40 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/60 space-y-2">
-                  <span className="font-bold text-indigo-900 dark:text-indigo-200 block text-[11px] uppercase tracking-wider">
-                    Custom / School-Defined Fields
-                  </span>
-                  <div className="grid grid-cols-2 gap-3 text-[11px]">
-                    {Object.entries(application.customFieldsData).map(([key, val]) => (
-                      <div key={key}>
-                        <span className="text-slate-400 capitalize block">{key.replace(/([A-Z])/g, ' $1')}</span>
-                        <span className="font-bold text-slate-800 dark:text-slate-200">
-                          {typeof val === 'boolean' ? (val ? 'Yes' : 'No') : String(val)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Right Column (1 Col): Journey Progress & Activity Log */}
-        <div className="space-y-6">
-          {/* SECTION C: ADMISSION JOURNEY */}
-          <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
-              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                C. Admission Journey
-              </h2>
+              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">Journey Progress</h2>
               {application.processName && (
                 <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 dark:bg-indigo-950 px-2 py-0.5 rounded-full">
                   v{application.processVersionNumber}
@@ -350,156 +351,396 @@ export default function PreAdmissionDetailPage() {
               )}
             </div>
 
-            {application.journey && application.journey.steps.length > 0 ? (
+            {application.journey ? (
               <div className="space-y-3">
-                <p className="text-[11px] font-bold text-slate-800 dark:text-slate-200">
-                  {application.processName}
-                </p>
-
-                <div className="space-y-2 text-xs">
-                  {application.journey.steps.map((step) => (
-                    <div key={step.stepId} className="flex items-start gap-2.5">
-                      {/* Step Indicator Dot / Icon */}
-                      <div className="mt-0.5">
-                        {step.state === 'COMPLETED' ? (
-                          <div className="w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[10px] font-bold">
-                            ✓
-                          </div>
-                        ) : step.state === 'CURRENT' ? (
-                          <div className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold ring-4 ring-indigo-100 dark:ring-indigo-950 animate-pulse">
-                            ●
-                          </div>
-                        ) : (
-                          <div className="w-5 h-5 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-400 flex items-center justify-center text-[10px] font-bold">
-                            ○
-                          </div>
-                        )}
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">{application.processName}</span>
+                <div className="space-y-2">
+                  {application.journey.steps.map((st, i) => (
+                    <div
+                      key={st.stepId}
+                      className={`p-3 rounded-xl border text-xs flex items-center justify-between ${
+                        st.state === 'CURRENT'
+                          ? 'border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/40 font-bold text-indigo-900 dark:text-indigo-200'
+                          : st.state === 'COMPLETED'
+                          ? 'border-emerald-200 bg-emerald-50/30 text-emerald-800'
+                          : 'border-slate-200 dark:border-slate-800 text-slate-500'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-slate-400">{i + 1}.</span>
+                        <span>{st.displayName}</span>
                       </div>
-
-                      {/* Step Info */}
-                      <div className="space-y-0.5 flex-1">
-                        <div className="flex items-center justify-between">
-                          <span
-                            className={`font-bold ${
-                              step.state === 'CURRENT'
-                                ? 'text-indigo-600 dark:text-indigo-400'
-                                : step.state === 'COMPLETED'
-                                ? 'text-slate-800 dark:text-slate-200'
-                                : 'text-slate-400'
-                            }`}
-                          >
-                            {step.displayName}
-                          </span>
-                          <span
-                            className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded ${
-                              step.state === 'COMPLETED'
-                                ? 'bg-emerald-50 text-emerald-700'
-                                : step.state === 'CURRENT'
-                                ? 'bg-indigo-50 text-indigo-700 font-extrabold'
-                                : 'bg-slate-100 text-slate-400'
-                            }`}
-                          >
-                            {step.state}
-                          </span>
-                        </div>
-                        {step.attachedFormName && (
-                          <span className="text-[10px] text-slate-400 block">
-                            📄 {step.attachedFormName}
-                          </span>
-                        )}
-                      </div>
+                      <span className="text-[10px] uppercase font-bold">
+                        {st.state === 'CURRENT' ? 'Active' : st.state === 'COMPLETED' ? 'Done' : 'Upcoming'}
+                      </span>
                     </div>
                   ))}
                 </div>
               </div>
             ) : (
-              <div className="p-4 rounded-2xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 text-xs space-y-2">
-                <span className="font-bold text-amber-900 dark:text-amber-200 block">
-                  No Admission Process Assigned
-                </span>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  This application was saved as Pre-Admission data intake only. You can assign an active admission journey whenever ready.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setShowAssignModal(true)}
-                  className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm transition-colors cursor-pointer"
-                >
-                  Assign Process
-                </button>
-              </div>
+              <p className="text-xs text-slate-400 italic">No Admission Process assigned. This record is currently in Data Collection Only mode.</p>
             )}
           </div>
+        </div>
+      )}
 
-          {/* SECTION D: ACTIVITY / AUDIT LOG */}
-          <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100 dark:border-slate-800 pb-2.5">
-              D. Activity & Audit Log
-            </h2>
+      {activeTab === 'FORM' && (
+        <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+            <div>
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white">Submitted Form Data (v{application.formVersionNumber})</h2>
+              <p className="text-xs text-slate-400">Complete submitted form responses snapshot.</p>
+            </div>
+            <span className="text-[10px] font-mono px-2 py-1 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-lg">
+              Read-Only Snapshot
+            </span>
+          </div>
 
-            <div className="space-y-3 text-xs">
-              {application.auditEvents?.map((evt) => (
-                <div key={evt.id} className="space-y-0.5 border-l-2 border-slate-200 dark:border-slate-700 pl-3">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-800 dark:text-slate-200 text-[11px]">
-                      {evt.eventType.replace(/_/g, ' ')}
-                    </span>
-                    <span className="text-[10px] font-mono text-slate-400">
-                      {new Date(evt.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">{evt.description}</p>
-                  <span className="text-[10px] text-slate-400 italic">By: {evt.actor}</span>
-                </div>
-              ))}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-xs">
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700">
+              <span className="text-[10px] text-slate-400 block">Student Name</span>
+              <span className="font-bold text-slate-800 dark:text-slate-200">{application.studentName}</span>
+            </div>
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700">
+              <span className="text-[10px] text-slate-400 block">Date of Birth</span>
+              <span className="font-semibold text-slate-800 dark:text-slate-200">{application.dateOfBirth}</span>
+            </div>
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700">
+              <span className="text-[10px] text-slate-400 block">Gender</span>
+              <span className="font-semibold text-slate-800 dark:text-slate-200">{application.gender}</span>
+            </div>
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700">
+              <span className="text-[10px] text-slate-400 block">Father / Guardian</span>
+              <span className="font-bold text-slate-800 dark:text-slate-200">{application.fatherOrGuardianName}</span>
+            </div>
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700">
+              <span className="text-[10px] text-slate-400 block">Primary Mobile</span>
+              <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">{application.primaryMobile}</span>
+            </div>
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700">
+              <span className="text-[10px] text-slate-400 block">Previous School</span>
+              <span className="font-semibold text-slate-800 dark:text-slate-200">{application.submissionData?.previousSchool || 'Kindergarten Academy'}</span>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* ── ASSIGN PROCESS MODAL ── */}
+      {activeTab === 'JOURNEY' && (
+        <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+          <h2 className="text-sm font-bold text-slate-900 dark:text-white">Admission Journey Sequence</h2>
+          {application.journey ? (
+            <div className="space-y-3">
+              {application.journey.steps.map((st, i) => (
+                <div key={st.stepId} className="p-4 rounded-2xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-slate-400 text-xs">{i + 1}.</span>
+                      <span className="font-bold text-slate-900 dark:text-white text-xs">{st.displayName}</span>
+                      <span className="text-[10px] px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded font-semibold">{st.stepType}</span>
+                    </div>
+                    {st.attachedFormName && (
+                      <p className="text-[11px] text-slate-400 pl-4">📄 Attached Form: {st.attachedFormName}</p>
+                    )}
+                  </div>
+                  <span className={`text-xs font-bold px-3 py-1 rounded-full ${st.state === 'CURRENT' ? 'bg-indigo-100 text-indigo-700' : st.state === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                    {st.state}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-slate-400">No journey active.</p>
+          )}
+        </div>
+      )}
+
+      {activeTab === 'ASSESSMENT' && (
+        <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+            <div>
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white">Assessment & Test Management</h2>
+              <p className="text-xs text-slate-400">Candidate examination scheduling and score recording.</p>
+            </div>
+            <span className="text-xs font-bold px-3 py-1 bg-blue-50 text-blue-700 rounded-full">
+              {application.testStatus || 'NOT_SCHEDULED'}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-xs">
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700">
+              <span className="text-slate-400 text-[10px] block">Scheduled Test Date</span>
+              <span className="font-bold text-slate-800 dark:text-slate-200">{application.testDate || 'Pending Assignment'}</span>
+            </div>
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700">
+              <span className="text-slate-400 text-[10px] block">Venue / Room</span>
+              <span className="font-semibold text-slate-800 dark:text-slate-200">Main Hall / Room 204</span>
+            </div>
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700">
+              <span className="text-slate-400 text-[10px] block">Recorded Outcome</span>
+              <span className="font-bold text-indigo-600">{application.testResult || 'Awaiting Test'}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'INTERVIEW' && (
+        <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+            <div>
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white">Interview Schedule & Evaluation</h2>
+              <p className="text-xs text-slate-400">Interaction with student & parent panel.</p>
+            </div>
+            <span className="text-xs font-bold px-3 py-1 bg-purple-50 text-purple-700 rounded-full">
+              {application.interviewStatus || 'NOT_SCHEDULED'}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-xs">
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700">
+              <span className="text-slate-400 text-[10px] block">Interview Date</span>
+              <span className="font-bold text-slate-800 dark:text-slate-200">{application.interviewDate || 'Pending Assignment'}</span>
+            </div>
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700">
+              <span className="text-slate-400 text-[10px] block">Interviewer</span>
+              <span className="font-semibold text-slate-800 dark:text-slate-200">Dr. Tariq Mehmood (Principal)</span>
+            </div>
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700">
+              <span className="text-slate-400 text-[10px] block">Status</span>
+              <span className="font-bold text-emerald-600">{application.interviewStatus || 'Pending'}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'PAYMENTS' && (
+        <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+            <div>
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white">Fees & Payments</h2>
+              <p className="text-xs text-slate-400">Tracking application processing and admission security deposits.</p>
+            </div>
+            <span className="text-xs font-bold px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full">
+              {application.feeStatus || 'UNPAID'}
+            </span>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 space-y-2 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-slate-800 dark:text-slate-200">Registration Fee (Application Fee)</span>
+              <span className="font-mono font-bold text-slate-900 dark:text-white">PKR 2,500</span>
+            </div>
+            <div className="flex items-center justify-between text-slate-500 text-[11px]">
+              <span>Payment Mode: Online Gateway / Counter</span>
+              <span>Status: <strong className="text-emerald-600">{application.feeStatus || 'UNPAID'}</strong></span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'ACTIVITY' && (
+        <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+          <h2 className="text-sm font-bold text-slate-900 dark:text-white">Audit & Activity Log</h2>
+          <div className="space-y-3 text-xs">
+            {(application.auditEvents || []).map((ev) => (
+              <div key={ev.id} className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 flex items-center justify-between">
+                <div>
+                  <span className="font-bold text-slate-800 dark:text-slate-200 block">{ev.description}</span>
+                  <span className="text-[10px] text-slate-400">Actor: {ev.actor}</span>
+                </div>
+                <span className="text-slate-400 font-mono text-[10px]">
+                  {new Date(ev.timestamp).toLocaleString('en-GB')}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: ASSIGN ADMISSION PROCESS ── */}
       {showAssignModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
-            <div className="space-y-1 border-b border-slate-100 dark:border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">Assign Admission Process</h3>
-              <p className="text-xs text-slate-400">Select an active process for {application.studentName}.</p>
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">Assign Admission Process</h3>
+                <p className="text-xs text-slate-400">Select an active journey for this applicant.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAssignModal(false)}
+                className="text-slate-400 hover:text-slate-600 text-base cursor-pointer"
+              >
+                ✕
+              </button>
             </div>
 
             <div className="space-y-3 text-xs">
               <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                  Active Process
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                  Admission Process *
                 </label>
                 <select
                   value={selectedProcessId}
                   onChange={(e) => setSelectedProcessId(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-semibold cursor-pointer"
                 >
-                  <option value="proc_general_k12">General Admission Process (4 Steps)</option>
-                  <option value="proc_simple_adm">Simple Direct Admission (3 Steps)</option>
-                  <option value="proc_alevel_detailed">A-Level Comprehensive Track (8 Steps)</option>
+                  <option value="proc_general_k12">General Admission Process (v1)</option>
+                  <option value="proc_simple_adm">Simple Direct Admission (v1)</option>
+                  <option value="proc_alevel_detailed">A-Level Comprehensive Track (v1)</option>
                 </select>
               </div>
-              <p className="text-[10px] text-slate-400">
-                Assigning will advance the applicant past the initial pre-admission stage to the first actionable step.
-              </p>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2">
+            <div className="pt-2 flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setShowAssignModal(false)}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleAssignProcess}
-                className="px-5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm cursor-pointer"
+                className="px-5 py-2 rounded-xl bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 shadow-sm cursor-pointer"
               >
-                Assign & Start
+                Confirm Assignment
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: RECORD ADMISSION DECISION ── */}
+      {showDecisionModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">Record Admission Decision</h3>
+                <p className="text-xs text-slate-400">Formal committee outcome for this candidate.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDecisionModal(false)}
+                className="text-slate-400 hover:text-slate-600 text-base cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                  Decision Outcome *
+                </label>
+                <select
+                  value={decisionOutcome}
+                  onChange={(e) => setDecisionOutcome(e.target.value as any)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-semibold cursor-pointer"
+                >
+                  <option value="APPROVED">✅ Approved (Offer Admission)</option>
+                  <option value="APPROVED_WITH_CONDITION">⚠️ Approved with Condition</option>
+                  <option value="WAITING_LIST">⏳ Waiting List</option>
+                  <option value="ON_HOLD">⏸️ On Hold</option>
+                  <option value="REJECTED">❌ Rejected</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                  Committee Notes / Rationale
+                </label>
+                <textarea
+                  rows={3}
+                  value={decisionNotes}
+                  onChange={(e) => setDecisionNotes(e.target.value)}
+                  placeholder="Enter committee comments or admission terms..."
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowDecisionModal(false)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleRecordDecision}
+                className="px-5 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 shadow-sm cursor-pointer"
+              >
+                Submit Decision
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: RECORD PAYMENT ── */}
+      {showPaymentModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">Record Fee Payment</h3>
+                <p className="text-xs text-slate-400">Collect application or admission fee.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPaymentModal(false)}
+                className="text-slate-400 hover:text-slate-600 text-base cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                  Fee Type *
+                </label>
+                <select
+                  value={paymentType}
+                  onChange={(e) => setPaymentType(e.target.value as any)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-semibold cursor-pointer"
+                >
+                  <option value="APPLICATION_FEE">Registration / Application Fee (PKR 2,500)</option>
+                  <option value="ADMISSION_FEE">Final Admission Deposit (PKR 25,000)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                  Amount Paid (PKR) *
+                </label>
+                <input
+                  type="number"
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(Number(e.target.value) || 0)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold"
+                />
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowPaymentModal(false)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleRecordPayment}
+                className="px-5 py-2 rounded-xl bg-amber-600 text-white text-xs font-bold hover:bg-amber-700 shadow-sm cursor-pointer"
+              >
+                Record Payment
               </button>
             </div>
           </div>

@@ -33,11 +33,17 @@ export type PreAdmissionSource =
 export type AdmissionGender = 'MALE' | 'FEMALE' | 'OTHER';
 
 export type JourneyStepStatus =
+  | 'NOT_STARTED'
+  | 'READY'
+  | 'SCHEDULED'
+  | 'IN_PROGRESS'
   | 'COMPLETED'
-  | 'CURRENT'
-  | 'UPCOMING'
   | 'SKIPPED'
-  | 'HELD';
+  | 'ON_HOLD'
+  | 'FAILED'
+  | 'CANCELLED'
+  | 'CURRENT' // alias for IN_PROGRESS / active step
+  | 'UPCOMING'; // alias for NOT_STARTED
 
 export interface AdmissionJourneyStepProgress {
   stepId: string;
@@ -111,6 +117,14 @@ export interface PreAdmissionApplicationDto {
   currentStepType?: AdmissionStepType | null;
   journeyStatus: 'NO_PROCESS' | 'IN_PROGRESS' | 'COMPLETED' | 'HELD' | 'CANCELLED';
   journey?: AdmissionJourneyDto | null;
+  // Dynamic Operational / Derived Column Data
+  testDate?: string;
+  testStatus?: string;
+  testResult?: string;
+  interviewDate?: string;
+  interviewStatus?: string;
+  decisionOutcome?: string;
+  feeStatus?: string;
   auditEvents?: {
     id: string;
     eventType: string;
@@ -127,9 +141,13 @@ export type AdmissionApplicationListItemDto = PreAdmissionApplicationDto;
 
 export interface PreAdmissionsSummaryDto {
   totalPreAdmissions: number;
+  totalApplications?: number; // Backward compat
   newSubmitted: number;
   inProcess: number;
   completed: number;
+  pendingReview?: number;
+  approved?: number;
+  enrolled?: number;
 }
 
 // Backward compatibility alias
@@ -187,4 +205,28 @@ export interface CreatePreAdmissionDto {
 
 export interface AssignAdmissionProcessDto {
   processDefinitionId: string;
+}
+
+// Dynamic List View Configuration Models
+export type ListColumnCategory = 'SYSTEM' | 'CANONICAL' | 'CUSTOM' | 'DYNAMIC_STATUS';
+
+export interface ListColumnDefinitionDto {
+  id: string;
+  key: string;
+  label: string;
+  category: ListColumnCategory;
+  isVisible: boolean;
+  isPinned?: boolean;
+  sortOrder: number;
+  width?: string;
+  dataType?: 'string' | 'number' | 'date' | 'badge' | 'boolean';
+}
+
+export interface PreAdmissionsListViewConfigDto {
+  id: string;
+  organizationId: string;
+  viewType: 'ORGANIZATION_DEFAULT' | 'ROLE_DEFAULT' | 'PERSONAL';
+  name: string;
+  columns: ListColumnDefinitionDto[];
+  updatedAt: Date | string;
 }

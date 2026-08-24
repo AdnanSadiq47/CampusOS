@@ -8,6 +8,8 @@ import {
   PreAdmissionStatus,
   PreAdmissionSource,
   FormSchemaPayload,
+  ListColumnDefinitionDto,
+  PreAdmissionsListViewConfigDto,
 } from '@campus-os/types';
 import { FormRuntimeRenderer } from '../../../../components/FormRuntimeRenderer';
 
@@ -87,7 +89,31 @@ function getSourceBadge(source: PreAdmissionSource) {
   }
 }
 
-// Published Form Schema for Staff Entry Dynamic Rendering
+// Default columns configuration
+const INITIAL_COLUMNS: ListColumnDefinitionDto[] = [
+  { id: 'col_app_no', key: 'applicationNumber', label: 'Application No.', category: 'SYSTEM', isVisible: true, isPinned: true, sortOrder: 1, width: '140px', dataType: 'string' },
+  { id: 'col_form', key: 'formName', label: 'Form', category: 'SYSTEM', isVisible: true, sortOrder: 2, dataType: 'string' },
+  { id: 'col_student', key: 'studentName', label: 'Student', category: 'CANONICAL', isVisible: true, sortOrder: 3, dataType: 'string' },
+  { id: 'col_class', key: 'className', label: 'Applying For', category: 'SYSTEM', isVisible: true, sortOrder: 4, dataType: 'string' },
+  { id: 'col_campus', key: 'campusName', label: 'School / Campus', category: 'SYSTEM', isVisible: true, sortOrder: 5, dataType: 'string' },
+  { id: 'col_source', key: 'source', label: 'Source', category: 'SYSTEM', isVisible: true, sortOrder: 6, dataType: 'badge' },
+  { id: 'col_curr_step', key: 'currentStepName', label: 'Current Step', category: 'SYSTEM', isVisible: true, sortOrder: 7, dataType: 'badge' },
+  { id: 'col_status', key: 'status', label: 'Status', category: 'SYSTEM', isVisible: true, sortOrder: 8, dataType: 'badge' },
+  { id: 'col_submitted', key: 'submittedAt', label: 'Submitted On', category: 'SYSTEM', isVisible: true, sortOrder: 9, dataType: 'date' },
+  { id: 'col_dob', key: 'dateOfBirth', label: 'Date of Birth', category: 'CANONICAL', isVisible: false, sortOrder: 10, dataType: 'date' },
+  { id: 'col_gender', key: 'gender', label: 'Gender', category: 'CANONICAL', isVisible: false, sortOrder: 11, dataType: 'string' },
+  { id: 'col_father', key: 'fatherOrGuardianName', label: 'Father Name', category: 'CANONICAL', isVisible: false, sortOrder: 12, dataType: 'string' },
+  { id: 'col_mobile', key: 'primaryMobile', label: 'Mobile Number', category: 'CANONICAL', isVisible: false, sortOrder: 13, dataType: 'string' },
+  { id: 'col_email', key: 'primaryEmail', label: 'Email', category: 'CANONICAL', isVisible: false, sortOrder: 14, dataType: 'string' },
+  { id: 'col_prev_school', key: 'previousSchool', label: 'Previous School', category: 'CANONICAL', isVisible: false, sortOrder: 15, dataType: 'string' },
+  { id: 'col_custom_sibling', key: 'siblingDiscountEligible', label: 'Sibling Discount Eligible', category: 'CUSTOM', isVisible: false, sortOrder: 16, dataType: 'boolean' },
+  { id: 'col_test_status', key: 'testStatus', label: 'Test Status', category: 'DYNAMIC_STATUS', isVisible: false, sortOrder: 17, dataType: 'badge' },
+  { id: 'col_test_date', key: 'testDate', label: 'Test Date', category: 'DYNAMIC_STATUS', isVisible: false, sortOrder: 18, dataType: 'date' },
+  { id: 'col_interview_status', key: 'interviewStatus', label: 'Interview Status', category: 'DYNAMIC_STATUS', isVisible: false, sortOrder: 19, dataType: 'badge' },
+  { id: 'col_decision', key: 'decisionOutcome', label: 'Decision', category: 'DYNAMIC_STATUS', isVisible: false, sortOrder: 20, dataType: 'badge' },
+  { id: 'col_fee_status', key: 'feeStatus', label: 'Payment Status', category: 'DYNAMIC_STATUS', isVisible: false, sortOrder: 21, dataType: 'badge' },
+];
+
 const DEFAULT_PRE_ADM_SCHEMA: FormSchemaPayload = {
   settings: { submitButtonText: 'Submit Pre-Admission', saveDraftEnabled: true },
   rules: [],
@@ -139,6 +165,11 @@ export default function PreAdmissionsListPage() {
   const [processFilter, setProcessFilter] = useState<string>('ALL');
   const [showMoreFilters, setShowMoreFilters] = useState(false);
 
+  // Dynamic List Columns State
+  const [columns, setColumns] = useState<ListColumnDefinitionDto[]>(INITIAL_COLUMNS);
+  const [showConfigModal, setShowConfigModal] = useState(false);
+  const [configCategoryTab, setConfigCategoryTab] = useState<'ALL' | 'SYSTEM' | 'CANONICAL' | 'CUSTOM' | 'DYNAMIC_STATUS'>('ALL');
+
   // New Pre-Admission Staff Modal State
   const [showNewModal, setShowNewModal] = useState(false);
   const [selectedCampusId, setSelectedCampusId] = useState('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb');
@@ -147,6 +178,29 @@ export default function PreAdmissionsListPage() {
   const [selectedFormId, setSelectedFormId] = useState('f_prereg_2026');
   const [staffModalStep, setStaffModalStep] = useState<'CONTEXT' | 'FORM'>('CONTEXT');
   const [createSuccessMsg, setCreateSuccessMsg] = useState<string | null>(null);
+
+  // Fetch list view config
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const res = await fetch('http://localhost:4000/admissions/list-view-config', {
+          headers: {
+            'x-tenant-id': '11111111-1111-1111-1111-111111111111',
+            'x-user-role': 'ADMIN',
+          },
+        });
+        if (res.ok) {
+          const data: PreAdmissionsListViewConfigDto = await res.json();
+          if (data.columns && data.columns.length > 0) {
+            setColumns(data.columns);
+          }
+        }
+      } catch (e) {
+        // Fallback to initial
+      }
+    };
+    fetchConfig();
+  }, []);
 
   // Fetch applications
   const fetchApplications = async () => {
@@ -185,6 +239,54 @@ export default function PreAdmissionsListPage() {
     fetchApplications();
   }, [search, statusFilter, sourceFilter, campusFilter, classFilter, processFilter]);
 
+  const handleSaveColumns = async (newColumns: ListColumnDefinitionDto[]) => {
+    setColumns(newColumns);
+    setShowConfigModal(false);
+    try {
+      await fetch('http://localhost:4000/admissions/list-view-config', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-id': '11111111-1111-1111-1111-111111111111',
+          'x-user-role': 'ADMIN',
+        },
+        body: JSON.stringify({
+          id: 'cfg_default',
+          organizationId: '11111111-1111-1111-1111-111111111111',
+          viewType: 'ORGANIZATION_DEFAULT',
+          name: 'Default Operational View',
+          columns: newColumns,
+        }),
+      });
+    } catch (e) {
+      // Offline fallback
+    }
+  };
+
+  const handleMoveColumn = (index: number, direction: 'UP' | 'DOWN') => {
+    const targetIndex = direction === 'UP' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= columns.length) return;
+    const reordered = [...columns];
+    const temp = reordered[index]!;
+    reordered[index] = reordered[targetIndex]!;
+    reordered[targetIndex] = temp;
+    reordered.forEach((c, idx) => {
+      c.sortOrder = idx + 1;
+    });
+    setColumns(reordered);
+  };
+
+  const handleToggleColumn = (colId: string) => {
+    setColumns(
+      columns.map((c) => {
+        if (c.id === colId) {
+          return { ...c, isVisible: !c.isVisible };
+        }
+        return c;
+      })
+    );
+  };
+
   const handleStaffFormSubmit = async (formData: Record<string, any>) => {
     try {
       const res = await fetch('http://localhost:4000/admissions/pre-admissions', {
@@ -218,6 +320,116 @@ export default function PreAdmissionsListPage() {
     }
   };
 
+  const visibleColumns = columns.filter((c) => c.isVisible);
+
+  // Dynamic cell value resolver
+  const renderCellContent = (app: PreAdmissionApplicationDto, col: ListColumnDefinitionDto) => {
+    switch (col.key) {
+      case 'applicationNumber':
+        return (
+          <Link href={`/admissions/pre-admissions/${app.id}`} className="font-mono font-bold text-indigo-600 dark:text-indigo-400 hover:underline">
+            {app.applicationNumber}
+          </Link>
+        );
+      case 'formName':
+        return <span className="font-semibold text-slate-800 dark:text-slate-200">{app.formName}</span>;
+      case 'studentName':
+        return (
+          <div className="space-y-0.5">
+            <span className="font-bold text-slate-900 dark:text-white block">{app.studentName}</span>
+            <span className="text-[10px] text-slate-400">DOB: {app.dateOfBirth} · {app.gender}</span>
+          </div>
+        );
+      case 'className':
+        return (
+          <div className="space-y-0.5">
+            <span className="font-semibold text-slate-800 dark:text-slate-200 block">{app.className}</span>
+            <span className="text-[10px] text-slate-400">2026–2027</span>
+          </div>
+        );
+      case 'campusName':
+        return (
+          <div className="space-y-0.5">
+            <span className="font-semibold text-slate-800 dark:text-slate-200 block">{app.campusName}</span>
+            <span className="text-[10px] text-slate-400">{app.schoolName}</span>
+          </div>
+        );
+      case 'source': {
+        const sourceBadge = getSourceBadge(app.source);
+        return (
+          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${sourceBadge.bg}`}>
+            <span>{sourceBadge.icon}</span>
+            <span>{sourceBadge.label}</span>
+          </span>
+        );
+      }
+      case 'currentStepName':
+        return app.currentStepName ? (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 font-semibold text-slate-700 dark:text-slate-300 text-[11px]">
+            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
+            <span>{app.currentStepName}</span>
+          </span>
+        ) : (
+          <span className="text-slate-400 italic">No Process</span>
+        );
+      case 'status': {
+        const statusBadge = getStatusBadge(app.status);
+        return (
+          <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${statusBadge.bg}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${statusBadge.dot}`} />
+            <span>{statusBadge.label}</span>
+          </span>
+        );
+      }
+      case 'submittedAt':
+        return (
+          <span className="text-slate-500 font-mono text-[11px]">
+            {new Date(app.submittedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+          </span>
+        );
+      case 'fatherOrGuardianName':
+        return <span className="text-slate-700 dark:text-slate-300 font-medium">{app.fatherOrGuardianName}</span>;
+      case 'primaryMobile':
+        return <span className="font-mono text-slate-700 dark:text-slate-300">{app.primaryMobile}</span>;
+      case 'primaryEmail':
+        return <span className="text-slate-600 dark:text-slate-400">{app.primaryEmail || '—'}</span>;
+      case 'dateOfBirth':
+        return <span className="font-mono text-slate-700">{app.dateOfBirth}</span>;
+      case 'gender':
+        return <span className="text-slate-700 font-medium">{app.gender}</span>;
+      case 'previousSchool':
+        return <span className="text-slate-600">{app.submissionData?.previousSchool || '—'}</span>;
+      case 'siblingDiscountEligible':
+        return (
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${app.customFieldsData?.siblingDiscountEligible ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
+            {app.customFieldsData?.siblingDiscountEligible ? 'Yes' : 'No'}
+          </span>
+        );
+      case 'testStatus':
+        return (
+          <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+            {app.testStatus || '—'}
+          </span>
+        );
+      case 'testDate':
+        return <span className="font-mono text-[11px] text-slate-600">{app.testDate || '—'}</span>;
+      case 'interviewStatus':
+        return <span className="text-[11px] font-semibold text-slate-700">{app.interviewStatus || '—'}</span>;
+      case 'decisionOutcome':
+        return <span className="text-[11px] font-bold text-emerald-600">{app.decisionOutcome || '—'}</span>;
+      case 'feeStatus':
+        return (
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${app.feeStatus === 'PAID' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500'}`}>
+            {app.feeStatus || 'UNPAID'}
+          </span>
+        );
+      default: {
+        const rawVal = (app as any)[col.key] ?? app.submissionData?.[col.key] ?? app.customFieldsData?.[col.key];
+        return <span className="text-slate-600">{rawVal !== undefined ? String(rawVal) : '—'}</span>;
+      }
+    }
+  };
+
   return (
     <div className="space-y-6 pb-20 max-w-7xl mx-auto">
       {/* 1. Header */}
@@ -236,7 +448,16 @@ export default function PreAdmissionsListPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setShowConfigModal(true)}
+            className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 shadow-sm transition-colors cursor-pointer flex items-center gap-1.5"
+          >
+            <span>⚙</span>
+            <span>Configure List</span>
+          </button>
+
           <Link
             href="/admin-config/admission-process"
             className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 shadow-sm transition-colors"
@@ -319,7 +540,6 @@ export default function PreAdmissionsListPage() {
       {/* 3. Filters Toolbar */}
       <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
         <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
-          {/* Search Input */}
           <div className="relative flex-1">
             <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm">🔍</span>
             <input
@@ -331,7 +551,6 @@ export default function PreAdmissionsListPage() {
             />
           </div>
 
-          {/* Quick Filters */}
           <div className="flex items-center gap-2 flex-wrap">
             <select
               value={statusFilter}
@@ -436,22 +655,18 @@ export default function PreAdmissionsListPage() {
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 uppercase font-bold text-slate-400 tracking-wider text-[10px]">
               <tr>
-                <th className="py-3.5 px-4 sm:px-6">Application No.</th>
-                <th className="py-3.5 px-4">Form</th>
-                <th className="py-3.5 px-4">Student</th>
-                <th className="py-3.5 px-4">Applying For</th>
-                <th className="py-3.5 px-4">School / Campus</th>
-                <th className="py-3.5 px-4">Source</th>
-                <th className="py-3.5 px-4">Current Step</th>
-                <th className="py-3.5 px-4">Status</th>
-                <th className="py-3.5 px-4">Submitted On</th>
+                {visibleColumns.map((col) => (
+                  <th key={col.id} className="py-3.5 px-4">
+                    {col.label}
+                  </th>
+                ))}
                 <th className="py-3.5 px-4 sm:px-6 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {loading ? (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-slate-400">
+                  <td colSpan={visibleColumns.length + 1} className="py-12 text-center text-slate-400">
                     <p className="font-semibold text-slate-600 dark:text-slate-300 animate-pulse">
                       Loading pre-admissions...
                     </p>
@@ -459,7 +674,7 @@ export default function PreAdmissionsListPage() {
                 </tr>
               ) : applications.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-slate-400">
+                  <td colSpan={visibleColumns.length + 1} className="py-12 text-center text-slate-400">
                     <span className="text-3xl block mb-2">📋</span>
                     <p className="font-semibold text-slate-600 dark:text-slate-300">
                       No pre-admissions found matching your criteria.
@@ -467,119 +682,149 @@ export default function PreAdmissionsListPage() {
                   </td>
                 </tr>
               ) : (
-                applications.map((app) => {
-                  const statusBadge = getStatusBadge(app.status);
-                  const sourceBadge = getSourceBadge(app.source);
-                  return (
-                    <tr key={app.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                      {/* Application No */}
-                      <td className="py-3.5 px-4 sm:px-6 font-mono font-bold text-indigo-600 dark:text-indigo-400">
-                        <Link href={`/admissions/pre-admissions/${app.id}`} className="hover:underline">
-                          {app.applicationNumber}
+                applications.map((app) => (
+                  <tr key={app.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
+                    {visibleColumns.map((col) => (
+                      <td key={col.id} className="py-3.5 px-4">
+                        {renderCellContent(app, col)}
+                      </td>
+                    ))}
+
+                    <td className="py-3.5 px-4 sm:px-6 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <Link
+                          href={`/admissions/pre-admissions/${app.id}`}
+                          className="px-3 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-950 font-bold transition-colors"
+                        >
+                          View
                         </Link>
-                      </td>
-
-                      {/* Form Name */}
-                      <td className="py-3.5 px-4">
-                        <span className="font-semibold text-slate-800 dark:text-slate-200">
-                          {app.formName}
-                        </span>
-                      </td>
-
-                      {/* Student */}
-                      <td className="py-3.5 px-4">
-                        <div className="space-y-0.5">
-                          <span className="font-bold text-slate-900 dark:text-white block">
-                            {app.studentName}
-                          </span>
-                          <span className="text-[11px] text-slate-400">
-                            DOB: {app.dateOfBirth} · {app.gender}
-                          </span>
-                        </div>
-                      </td>
-
-                      {/* Applying For */}
-                      <td className="py-3.5 px-4">
-                        <div className="space-y-0.5">
-                          <span className="font-semibold text-slate-800 dark:text-slate-200 block">
-                            {app.className}
-                          </span>
-                          <span className="text-[10px] text-slate-400">2026–2027</span>
-                        </div>
-                      </td>
-
-                      {/* School / Campus */}
-                      <td className="py-3.5 px-4">
-                        <div className="space-y-0.5">
-                          <span className="font-semibold text-slate-800 dark:text-slate-200 block">
-                            {app.campusName}
-                          </span>
-                          <span className="text-[10px] text-slate-400">{app.schoolName}</span>
-                        </div>
-                      </td>
-
-                      {/* Source */}
-                      <td className="py-3.5 px-4">
-                        <span
-                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${sourceBadge.bg}`}
-                        >
-                          <span>{sourceBadge.icon}</span>
-                          <span>{sourceBadge.label}</span>
-                        </span>
-                      </td>
-
-                      {/* Current Step */}
-                      <td className="py-3.5 px-4">
-                        {app.currentStepName ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 font-semibold text-slate-700 dark:text-slate-300">
-                            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
-                            <span>{app.currentStepName}</span>
-                          </span>
-                        ) : (
-                          <span className="text-slate-400 italic">No Process</span>
-                        )}
-                      </td>
-
-                      {/* Status */}
-                      <td className="py-3.5 px-4">
-                        <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${statusBadge.bg}`}
-                        >
-                          <span className={`w-1.5 h-1.5 rounded-full ${statusBadge.dot}`} />
-                          <span>{statusBadge.label}</span>
-                        </span>
-                      </td>
-
-                      {/* Submitted On */}
-                      <td className="py-3.5 px-4 text-slate-500 font-mono text-[11px]">
-                        {new Date(app.submittedAt).toLocaleDateString('en-GB', {
-                          day: '2-digit',
-                          month: 'short',
-                          year: 'numeric',
-                        })}
-                      </td>
-
-                      {/* Actions */}
-                      <td className="py-3.5 px-4 sm:px-6 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <Link
-                            href={`/admissions/pre-admissions/${app.id}`}
-                            className="px-3 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-950 font-bold transition-colors"
-                          >
-                            View
-                          </Link>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
+                      </div>
+                    </td>
+                  </tr>
+                ))
               )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* ── NEW PRE-ADMISSION (STAFF FLOW MODAL) ── */}
+      {/* ── 5. CONFIGURE LIST MODAL / DRAWER ── */}
+      {showConfigModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-xl w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 my-8 max-h-[90vh] flex flex-col justify-between">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 shrink-0">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">Configure Pre-Admissions Columns</h3>
+                <p className="text-xs text-slate-400">Choose visible columns and rearrange their display order.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowConfigModal(false)}
+                className="text-slate-400 hover:text-slate-600 text-base cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Category Tabs */}
+            <div className="flex items-center gap-1.5 border-b border-slate-100 dark:border-slate-800 pb-2 shrink-0 overflow-x-auto text-[11px]">
+              {(['ALL', 'SYSTEM', 'CANONICAL', 'CUSTOM', 'DYNAMIC_STATUS'] as const).map((cat) => (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setConfigCategoryTab(cat)}
+                  className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                    configCategoryTab === cat
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
+                  }`}
+                >
+                  {cat === 'ALL' ? 'All Fields' : cat === 'SYSTEM' ? 'System' : cat === 'CANONICAL' ? 'Canonical' : cat === 'CUSTOM' ? 'Custom Fields' : 'Operational Status'}
+                </button>
+              ))}
+            </div>
+
+            {/* Column List */}
+            <div className="flex-1 overflow-y-auto space-y-2 pr-1 text-xs">
+              {columns
+                .filter((c) => configCategoryTab === 'ALL' || c.category === configCategoryTab)
+                .map((col) => {
+                  const globalIdx = columns.findIndex((x) => x.id === col.id);
+                  return (
+                    <div
+                      key={col.id}
+                      className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 flex items-center justify-between gap-2"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <input
+                          type="checkbox"
+                          checked={col.isVisible}
+                          onChange={() => handleToggleColumn(col.id)}
+                          className="h-4 w-4 text-indigo-600 rounded cursor-pointer"
+                        />
+                        <div>
+                          <span className="font-bold text-slate-800 dark:text-slate-200 block">{col.label}</span>
+                          <span className="text-[10px] text-slate-400 font-mono">{col.category} · {col.key}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          disabled={globalIdx === 0}
+                          onClick={() => handleMoveColumn(globalIdx, 'UP')}
+                          className="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-30 cursor-pointer"
+                          title="Move Up"
+                        >
+                          ▲
+                        </button>
+                        <button
+                          type="button"
+                          disabled={globalIdx === columns.length - 1}
+                          onClick={() => handleMoveColumn(globalIdx, 'DOWN')}
+                          className="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-30 cursor-pointer"
+                          title="Move Down"
+                        >
+                          ▼
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+
+            {/* Footer */}
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+              <button
+                type="button"
+                onClick={() => setColumns(INITIAL_COLUMNS)}
+                className="text-xs font-semibold text-slate-500 hover:text-slate-700 cursor-pointer"
+              >
+                Reset to Default
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowConfigModal(false)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSaveColumns(columns)}
+                  className="px-5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm cursor-pointer"
+                >
+                  Save Column View
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 6. NEW PRE-ADMISSION (STAFF FLOW MODAL) ── */}
       {showNewModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-2xl w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 my-8 max-h-[90vh] flex flex-col justify-between">

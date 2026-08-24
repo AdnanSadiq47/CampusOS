@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Patch,
   Param,
   Query,
@@ -16,6 +17,15 @@ import {
   CreatePreAdmissionDto,
   AssignAdmissionProcessDto,
   PreAdmissionStatus,
+  PreAdmissionsListViewConfigDto,
+  TestScheduleDto,
+  TestScheduleAssignmentDto,
+  TestOutcome,
+  InterviewScheduleDto,
+  InterviewAssignmentDto,
+  InterviewOutcome,
+  AdmissionDecisionOutcome,
+  AdmissionChargeDto,
 } from '@campus-os/types';
 
 @Controller('admissions')
@@ -39,7 +49,7 @@ export class AdmissionsController {
     };
   }
 
-  // Pre-Admissions List (and legacy applications alias)
+  // Pre-Admissions List
   @Get('pre-admissions')
   async getPreAdmissions(
     @Query() query: PreAdmissionsFilterDto,
@@ -56,6 +66,22 @@ export class AdmissionsController {
   ): Promise<PaginatedPreAdmissionsDto> {
     const userScope = this.extractUserScope(headers);
     return this.admissionsService.getPreAdmissions(query, userScope);
+  }
+
+  // Dynamic List View Configuration
+  @Get('list-view-config')
+  async getListViewConfig(@Headers() headers: Record<string, any>): Promise<PreAdmissionsListViewConfigDto> {
+    const userScope = this.extractUserScope(headers);
+    return this.admissionsService.getListViewConfig(userScope);
+  }
+
+  @Put('list-view-config')
+  async saveListViewConfig(
+    @Body() body: PreAdmissionsListViewConfigDto,
+    @Headers() headers: Record<string, any>
+  ): Promise<PreAdmissionsListViewConfigDto> {
+    const userScope = this.extractUserScope(headers);
+    return this.admissionsService.saveListViewConfig(body, userScope);
   }
 
   // Single Pre-Admission Detail
@@ -77,7 +103,7 @@ export class AdmissionsController {
     return this.admissionsService.getPreAdmissionById(id, userScope);
   }
 
-  // Create Pre-Admission (Unified Staff Entry & Public Online)
+  // Create Pre-Admission
   @Post('pre-admissions')
   async createPreAdmission(
     @Body() dto: CreatePreAdmissionDto,
@@ -87,7 +113,7 @@ export class AdmissionsController {
     return this.admissionsService.createPreAdmission(dto, userScope);
   }
 
-  // Manual Process Assignment
+  // Process Assignment
   @Post('pre-admissions/:id/assign-process')
   async assignProcess(
     @Param('id') id: string,
@@ -106,6 +132,113 @@ export class AdmissionsController {
     @Headers() headers: Record<string, any>
   ): Promise<PreAdmissionApplicationDto> {
     const userScope = this.extractUserScope(headers);
-    return this.admissionsService.updateStatus(id, body.status, userScope);
+    return this.admissionsService.updateStatus(id, body.status, userScope, body.reviewNotes);
+  }
+
+  // -------------------------------------------------------------
+  // Test Scheduling Endpoints
+  // -------------------------------------------------------------
+  @Get('test-schedules')
+  async getTestSchedules(@Headers() headers: Record<string, any>): Promise<TestScheduleDto[]> {
+    const userScope = this.extractUserScope(headers);
+    return this.admissionsService.getTestSchedules(userScope);
+  }
+
+  @Post('test-schedules')
+  async createTestSchedule(
+    @Body() dto: Partial<TestScheduleDto>,
+    @Headers() headers: Record<string, any>
+  ): Promise<TestScheduleDto> {
+    const userScope = this.extractUserScope(headers);
+    return this.admissionsService.createTestSchedule(dto, userScope);
+  }
+
+  @Post('test-schedules/:id/assign')
+  async assignApplicantsToTestSchedule(
+    @Param('id') scheduleId: string,
+    @Body() body: { applicationIds: string[] },
+    @Headers() headers: Record<string, any>
+  ): Promise<TestScheduleAssignmentDto[]> {
+    const userScope = this.extractUserScope(headers);
+    return this.admissionsService.assignApplicantsToTestSchedule(scheduleId, body.applicationIds, userScope);
+  }
+
+  @Patch('test-assignments/:id/reschedule')
+  async rescheduleApplicantTest(
+    @Param('id') assignmentId: string,
+    @Body() body: { newScheduleId: string; reason: string },
+    @Headers() headers: Record<string, any>
+  ): Promise<TestScheduleAssignmentDto> {
+    const userScope = this.extractUserScope(headers);
+    return this.admissionsService.rescheduleApplicantTest(assignmentId, body.newScheduleId, body.reason, userScope);
+  }
+
+  @Post('test-assignments/:id/result')
+  async recordTestResult(
+    @Param('id') assignmentId: string,
+    @Body() body: { score: number; totalMarks: number; outcome: TestOutcome; publishNow?: boolean },
+    @Headers() headers: Record<string, any>
+  ): Promise<TestScheduleAssignmentDto> {
+    const userScope = this.extractUserScope(headers);
+    return this.admissionsService.recordTestResult(
+      assignmentId,
+      body.score,
+      body.totalMarks,
+      body.outcome,
+      body.publishNow ?? true,
+      userScope
+    );
+  }
+
+  // -------------------------------------------------------------
+  // Interview Scheduling Endpoints
+  // -------------------------------------------------------------
+  @Get('interview-schedules')
+  async getInterviewSchedules(@Headers() headers: Record<string, any>): Promise<InterviewScheduleDto[]> {
+    const userScope = this.extractUserScope(headers);
+    return this.admissionsService.getInterviewSchedules(userScope);
+  }
+
+  @Post('interview-schedules/:id/assign')
+  async assignApplicantToInterview(
+    @Param('id') scheduleId: string,
+    @Body() body: { applicationId: string; slotId?: string },
+    @Headers() headers: Record<string, any>
+  ): Promise<InterviewAssignmentDto> {
+    const userScope = this.extractUserScope(headers);
+    return this.admissionsService.assignApplicantToInterview(scheduleId, body.applicationId, body.slotId, userScope);
+  }
+
+  @Post('interview-assignments/:id/outcome')
+  async recordInterviewOutcome(
+    @Param('id') assignmentId: string,
+    @Body() body: { outcome: InterviewOutcome; notes?: string },
+    @Headers() headers: Record<string, any>
+  ): Promise<InterviewAssignmentDto> {
+    const userScope = this.extractUserScope(headers);
+    return this.admissionsService.recordInterviewOutcome(assignmentId, body.outcome, body.notes, userScope);
+  }
+
+  // -------------------------------------------------------------
+  // Decision & Fee Endpoints
+  // -------------------------------------------------------------
+  @Post('pre-admissions/:id/decision')
+  async recordAdmissionDecision(
+    @Param('id') applicationId: string,
+    @Body() body: { outcome: AdmissionDecisionOutcome; remarks?: string },
+    @Headers() headers: Record<string, any>
+  ): Promise<PreAdmissionApplicationDto> {
+    const userScope = this.extractUserScope(headers);
+    return this.admissionsService.recordAdmissionDecision(applicationId, body.outcome, body.remarks, userScope);
+  }
+
+  @Post('pre-admissions/:id/fee-payment')
+  async recordFeePayment(
+    @Param('id') applicationId: string,
+    @Body() body: { feeType: 'APPLICATION_FEE' | 'ADMISSION_FEE'; amount: number; method?: string },
+    @Headers() headers: Record<string, any>
+  ): Promise<AdmissionChargeDto> {
+    const userScope = this.extractUserScope(headers);
+    return this.admissionsService.recordFeePayment(applicationId, body.feeType, body.amount, body.method || 'ONLINE_GATEWAY', userScope);
   }
 }

@@ -9,6 +9,18 @@ import {
   AdmissionJourneyDto,
   AdmissionJourneyStepProgress,
   AdmissionStepType,
+  PreAdmissionsListViewConfigDto,
+  ListColumnDefinitionDto,
+  TestScheduleDto,
+  TestScheduleAssignmentDto,
+  TestOutcome,
+  InterviewScheduleDto,
+  InterviewAssignmentDto,
+  InterviewOutcome,
+  AdmissionChargeDto,
+  AdmissionDecisionOutcome,
+  AdmissionProcessDomainEvent,
+  AdmissionProcessStepConfig,
 } from '@campus-os/types';
 
 export interface UserScopeContext {
@@ -31,14 +43,7 @@ interface ActiveProcessRegistryItem {
   applyTo: 'ALL_CAMPUSES' | 'SELECTED_CAMPUSES';
   branchIds: string[];
   schoolId?: string;
-  steps: {
-    id: string;
-    stepType: AdmissionStepType;
-    displayName: string;
-    isRequired: boolean;
-    sortOrder: number;
-    attachedFormName?: string;
-  }[];
+  steps: AdmissionProcessStepConfig[];
 }
 
 const ACTIVE_PROCESS_CATALOG: ActiveProcessRegistryItem[] = [
@@ -52,10 +57,10 @@ const ACTIVE_PROCESS_CATALOG: ActiveProcessRegistryItem[] = [
     applyTo: 'ALL_CAMPUSES',
     branchIds: [],
     steps: [
-      { id: 's1', stepType: 'PRE_ADMISSION', displayName: 'Pre-Admission Application', isRequired: true, sortOrder: 1, attachedFormName: 'Online Pre-Registration 2026–2027' },
-      { id: 's2', stepType: 'APPLICATION_REVIEW', displayName: 'Application Review', isRequired: true, sortOrder: 2 },
-      { id: 's3', stepType: 'FINAL_ADMISSION_FORM', displayName: 'Final Admission Form', isRequired: true, sortOrder: 3, attachedFormName: 'Formal Admission Package 2026–27' },
-      { id: 's4', stepType: 'STUDENT_REGISTRATION', displayName: 'Student Registration', isRequired: true, sortOrder: 4 },
+      { id: 's1', stepType: 'PRE_ADMISSION', displayName: 'Pre-Admission Application', category: 'APPLICATION', isRequired: true, sortOrder: 1, attachedFormName: 'Online Pre-Registration 2026–2027' },
+      { id: 's2', stepType: 'APPLICATION_REVIEW', displayName: 'Application Review', category: 'APPLICATION', isRequired: true, sortOrder: 2 },
+      { id: 's3', stepType: 'FINAL_ADMISSION_FORM', displayName: 'Final Admission Form', category: 'CONFIRMATION', isRequired: true, sortOrder: 3, attachedFormName: 'Formal Admission Package 2026–27' },
+      { id: 's4', stepType: 'STUDENT_REGISTRATION', displayName: 'Student Registration', category: 'SYSTEM', isRequired: true, sortOrder: 4, isSystemTerminal: true },
     ],
   },
   // 2. Simple Direct Admission (Clifton & PECHS)
@@ -68,9 +73,9 @@ const ACTIVE_PROCESS_CATALOG: ActiveProcessRegistryItem[] = [
     applyTo: 'SELECTED_CAMPUSES',
     branchIds: ['bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'dddddddd-dddd-dddd-dddd-dddddddddddd'],
     steps: [
-      { id: 's_smp_1', stepType: 'PRE_ADMISSION', displayName: 'Online Pre-Admission', isRequired: true, sortOrder: 1, attachedFormName: 'Online Pre-Registration 2026–2027' },
-      { id: 's_smp_2', stepType: 'FINAL_ADMISSION_FORM', displayName: 'Final Admission Form', isRequired: true, sortOrder: 2, attachedFormName: 'Formal Admission Package 2026–27' },
-      { id: 's_smp_3', stepType: 'STUDENT_REGISTRATION', displayName: 'Student Registration', isRequired: true, sortOrder: 3 },
+      { id: 's_smp_1', stepType: 'PRE_ADMISSION', displayName: 'Online Pre-Admission', category: 'APPLICATION', isRequired: true, sortOrder: 1, attachedFormName: 'Online Pre-Registration 2026–2027' },
+      { id: 's_smp_2', stepType: 'FINAL_ADMISSION_FORM', displayName: 'Final Admission Form', category: 'CONFIRMATION', isRequired: true, sortOrder: 2, attachedFormName: 'Formal Admission Package 2026–27' },
+      { id: 's_smp_3', stepType: 'STUDENT_REGISTRATION', displayName: 'Student Registration', category: 'SYSTEM', isRequired: true, sortOrder: 3, isSystemTerminal: true },
     ],
   },
   // 3. A-Level Comprehensive Admission (Main Campus Gulshan & DHA Phase 6)
@@ -83,25 +88,110 @@ const ACTIVE_PROCESS_CATALOG: ActiveProcessRegistryItem[] = [
     applyTo: 'SELECTED_CAMPUSES',
     branchIds: ['aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'cccccccc-cccc-cccc-cccc-cccccccccccc'],
     steps: [
-      { id: 'ad1', stepType: 'PRE_ADMISSION', displayName: 'Pre-Admission Application', isRequired: true, sortOrder: 1, attachedFormName: 'Online Pre-Registration 2026–2027' },
-      { id: 'ad2', stepType: 'APPLICATION_REVIEW', displayName: 'Application Review', isRequired: true, sortOrder: 2 },
-      { id: 'ad3', stepType: 'DOCUMENT_VERIFICATION', displayName: 'Document Verification', isRequired: true, sortOrder: 3 },
-      { id: 'ad4', stepType: 'ASSESSMENT_TEST', displayName: 'Entrance Test', isRequired: true, sortOrder: 4 },
-      { id: 'ad5', stepType: 'INTERVIEW', displayName: 'Interview', isRequired: false, sortOrder: 5 },
-      { id: 'ad6', stepType: 'APPROVAL', displayName: 'Admission Approval', isRequired: true, sortOrder: 6 },
-      { id: 'ad7', stepType: 'FINAL_ADMISSION_FORM', displayName: 'Final Admission Form', isRequired: true, sortOrder: 7, attachedFormName: 'Formal Admission Package 2026–27' },
-      { id: 'ad8', stepType: 'STUDENT_REGISTRATION', displayName: 'Student Registration', isRequired: true, sortOrder: 8 },
+      { id: 'ad1', stepType: 'PRE_ADMISSION', displayName: 'Pre-Admission Application', category: 'APPLICATION', isRequired: true, sortOrder: 1, attachedFormName: 'Online Pre-Registration 2026–2027' },
+      { id: 'ad2', stepType: 'APPLICATION_FEE', displayName: 'Application Fee', category: 'PAYMENT', isRequired: true, sortOrder: 2, feeConfig: { feeRequired: true, feeName: 'Registration Fee', amount: 2500, currency: 'PKR', paymentRequiredBeforeNextStep: true, allowWaiver: true, allowDiscount: false, receiptRequired: true } },
+      { id: 'ad3', stepType: 'DOCUMENT_VERIFICATION', displayName: 'Document Verification', category: 'APPLICATION', isRequired: true, sortOrder: 3 },
+      { id: 'ad4', stepType: 'ASSESSMENT_TEST', displayName: 'Entrance Test', category: 'ASSESSMENT', isRequired: true, sortOrder: 4, testConfig: { testRequired: true, assessmentName: 'A-Level Diagnostic', mode: 'PAPER_BASED', resultPublishingRule: 'AFTER_STAFF_APPROVAL', passMarks: 60, totalMarks: 100 } },
+      { id: 'ad5', stepType: 'INTERVIEW', displayName: 'Panel Interview', category: 'ASSESSMENT', isRequired: false, sortOrder: 5, interviewConfig: { interviewRequired: true, mode: 'PHYSICAL', durationMinutes: 20 } },
+      { id: 'ad6', stepType: 'ADMISSION_DECISION', displayName: 'Admission Committee Decision', category: 'DECISION', isRequired: true, sortOrder: 6, decisionConfig: { allowedOutcomes: ['APPROVED', 'APPROVED_WITH_CONDITION', 'WAITING_LIST', 'REJECTED'], requireHumanConfirmation: true } },
+      { id: 'ad7', stepType: 'PARENT_CONFIRMATION', displayName: 'Parent Offer Confirmation', category: 'CONFIRMATION', isRequired: true, sortOrder: 7, confirmationConfig: { allowedResponses: ['ACCEPT', 'DECLINE', 'NEED_MORE_TIME'], expiryDays: 7 } },
+      { id: 'ad8', stepType: 'ADMISSION_FEE', displayName: 'Admission & Tuition Fee', category: 'CONFIRMATION', isRequired: true, sortOrder: 8, feeConfig: { feeRequired: true, feeName: 'Admission Deposit', amount: 45000, currency: 'PKR', paymentRequiredBeforeNextStep: true, allowWaiver: false, allowDiscount: true, receiptRequired: true } },
+      { id: 'ad9', stepType: 'FINAL_ADMISSION_FORM', displayName: 'Final Admission Package', category: 'CONFIRMATION', isRequired: true, sortOrder: 9, attachedFormName: 'Formal Admission Package 2026–27' },
+      { id: 'ad10', stepType: 'STUDENT_REGISTRATION', displayName: 'Student Registration', category: 'SYSTEM', isRequired: true, sortOrder: 10, isSystemTerminal: true },
     ],
   },
+];
+
+const DEFAULT_LIST_COLUMNS: ListColumnDefinitionDto[] = [
+  { id: 'col_app_no', key: 'applicationNumber', label: 'Application No.', category: 'SYSTEM', isVisible: true, isPinned: true, sortOrder: 1, width: '140px', dataType: 'string' },
+  { id: 'col_form', key: 'formName', label: 'Form', category: 'SYSTEM', isVisible: true, sortOrder: 2, dataType: 'string' },
+  { id: 'col_student', key: 'studentName', label: 'Student', category: 'CANONICAL', isVisible: true, sortOrder: 3, dataType: 'string' },
+  { id: 'col_class', key: 'className', label: 'Applying For', category: 'SYSTEM', isVisible: true, sortOrder: 4, dataType: 'string' },
+  { id: 'col_campus', key: 'campusName', label: 'School / Campus', category: 'SYSTEM', isVisible: true, sortOrder: 5, dataType: 'string' },
+  { id: 'col_source', key: 'source', label: 'Source', category: 'SYSTEM', isVisible: true, sortOrder: 6, dataType: 'badge' },
+  { id: 'col_curr_step', key: 'currentStepName', label: 'Current Step', category: 'SYSTEM', isVisible: true, sortOrder: 7, dataType: 'badge' },
+  { id: 'col_status', key: 'status', label: 'Status', category: 'SYSTEM', isVisible: true, sortOrder: 8, dataType: 'badge' },
+  { id: 'col_submitted', key: 'submittedAt', label: 'Submitted On', category: 'SYSTEM', isVisible: true, sortOrder: 9, dataType: 'date' },
+  // Available non-default columns
+  { id: 'col_dob', key: 'dateOfBirth', label: 'Date of Birth', category: 'CANONICAL', isVisible: false, sortOrder: 10, dataType: 'date' },
+  { id: 'col_gender', key: 'gender', label: 'Gender', category: 'CANONICAL', isVisible: false, sortOrder: 11, dataType: 'string' },
+  { id: 'col_father', key: 'fatherOrGuardianName', label: 'Father Name', category: 'CANONICAL', isVisible: false, sortOrder: 12, dataType: 'string' },
+  { id: 'col_mobile', key: 'primaryMobile', label: 'Mobile Number', category: 'CANONICAL', isVisible: false, sortOrder: 13, dataType: 'string' },
+  { id: 'col_email', key: 'primaryEmail', label: 'Email', category: 'CANONICAL', isVisible: false, sortOrder: 14, dataType: 'string' },
+  { id: 'col_prev_school', key: 'previousSchool', label: 'Previous School', category: 'CANONICAL', isVisible: false, sortOrder: 15, dataType: 'string' },
+  { id: 'col_custom_sibling', key: 'siblingDiscountEligible', label: 'Sibling Discount Eligible', category: 'CUSTOM', isVisible: false, sortOrder: 16, dataType: 'boolean' },
+  { id: 'col_test_status', key: 'testStatus', label: 'Test Status', category: 'DYNAMIC_STATUS', isVisible: false, sortOrder: 17, dataType: 'badge' },
+  { id: 'col_test_date', key: 'testDate', label: 'Test Date', category: 'DYNAMIC_STATUS', isVisible: false, sortOrder: 18, dataType: 'date' },
+  { id: 'col_interview_status', key: 'interviewStatus', label: 'Interview Status', category: 'DYNAMIC_STATUS', isVisible: false, sortOrder: 19, dataType: 'badge' },
+  { id: 'col_decision', key: 'decisionOutcome', label: 'Decision', category: 'DYNAMIC_STATUS', isVisible: false, sortOrder: 20, dataType: 'badge' },
+  { id: 'col_fee_status', key: 'feeStatus', label: 'Payment Status', category: 'DYNAMIC_STATUS', isVisible: false, sortOrder: 21, dataType: 'badge' },
 ];
 
 @Injectable()
 export class AdmissionsService {
   private applications: PreAdmissionApplicationDto[] = [];
   private appSeq = 130;
+  private listViewConfigs: Map<string, PreAdmissionsListViewConfigDto> = new Map();
+  private testSchedules: TestScheduleDto[] = [];
+  private testAssignments: TestScheduleAssignmentDto[] = [];
+  private interviewSchedules: InterviewScheduleDto[] = [];
+  private interviewAssignments: InterviewAssignmentDto[] = [];
+  private charges: AdmissionChargeDto[] = [];
+  private emittedEvents: { event: AdmissionProcessDomainEvent; payload: Record<string, any>; timestamp: Date }[] = [];
 
   constructor() {
     this.seedDefaultApplications();
+    this.seedDefaultSchedules();
+  }
+
+  private seedDefaultSchedules() {
+    const orgId = '11111111-1111-1111-1111-111111111111';
+    const now = new Date();
+
+    // Seed a Test Schedule for Clifton Campus
+    this.testSchedules.push({
+      id: 'ts_clifton_g6',
+      organizationId: orgId,
+      assessmentName: 'Grade 6 Entry Diagnostic',
+      date: '2026-09-05',
+      startTime: '10:00',
+      endTime: '11:30',
+      durationMinutes: 90,
+      campusId: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+      campusName: 'Clifton Campus',
+      venueRoom: 'Main Hall / Room 204',
+      mode: 'PAPER_BASED',
+      capacity: 40,
+      instructions: 'Please arrive 15 minutes prior with candidate admit slip.',
+      assignedApplicantCount: 2,
+      createdAt: now,
+    });
+
+    // Seed an Interview Schedule
+    this.interviewSchedules.push({
+      id: 'is_clifton_panel',
+      organizationId: orgId,
+      date: '2026-09-08',
+      startTime: '09:00',
+      endTime: '12:00',
+      campusId: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+      campusName: 'Clifton Campus',
+      venueRoom: 'Executive Conference Room',
+      mode: 'PHYSICAL',
+      interviewerRole: 'Principal / Vice Principal',
+      interviewerName: 'Dr. Tariq Mehmood',
+      totalSlots: 6,
+      bookedSlots: 1,
+      slots: [
+        { id: 'slot_1', startTime: '09:00', endTime: '09:20', isBooked: true, applicationId: 'app_121', studentName: 'Ahmed Ali' },
+        { id: 'slot_2', startTime: '09:20', endTime: '09:40', isBooked: false },
+        { id: 'slot_3', startTime: '09:40', endTime: '10:00', isBooked: false },
+        { id: 'slot_4', startTime: '10:00', endTime: '10:20', isBooked: false },
+        { id: 'slot_5', startTime: '10:20', endTime: '10:40', isBooked: false },
+        { id: 'slot_6', startTime: '10:40', endTime: '11:00', isBooked: false },
+      ],
+      createdAt: now,
+    });
   }
 
   private seedDefaultApplications() {
@@ -314,6 +404,13 @@ export class AdmissionsService {
         currentStepType,
         journeyStatus,
         journey,
+        testDate: idx % 2 === 0 ? '2026-09-05' : undefined,
+        testStatus: idx % 2 === 0 ? 'SCHEDULED' : undefined,
+        testResult: idx === 0 ? 'PASSED (85%)' : undefined,
+        interviewDate: idx === 0 ? '2026-09-08' : undefined,
+        interviewStatus: idx === 0 ? 'SCHEDULED' : undefined,
+        decisionOutcome: p.status === 'APPROVED' ? 'APPROVED' : undefined,
+        feeStatus: p.status === 'COMPLETED' ? 'PAID' : 'UNPAID',
         auditEvents: [
           {
             id: `aud_1_${legacyId}`,
@@ -330,6 +427,54 @@ export class AdmissionsService {
   }
 
   /**
+   * Process Definition Invariant Validation
+   */
+  public validateProcessDefinition(steps: AdmissionProcessStepConfig[]) {
+    if (!steps || steps.length === 0) {
+      throw new BadRequestException('An Admission Process must contain at least one step.');
+    }
+
+    // 1. Student Registration must be unique and the final step if present
+    const studentRegSteps = steps.filter((s) => s.stepType === 'STUDENT_REGISTRATION');
+    if (studentRegSteps.length > 1) {
+      throw new BadRequestException('Student Registration can only appear once in an admission process.');
+    }
+    if (studentRegSteps.length === 1) {
+      const lastStep = steps[steps.length - 1]!;
+      if (lastStep.stepType !== 'STUDENT_REGISTRATION') {
+        throw new BadRequestException('Student Registration must be the final terminal step of the admission process.');
+      }
+    }
+
+    // 2. Pre-Admission must have PRE_ADMISSION form purpose when attached
+    const preAdmSteps = steps.filter((s) => s.stepType === 'PRE_ADMISSION');
+    if (preAdmSteps.length > 1) {
+      throw new BadRequestException('Pre-Admission step can only appear once at the beginning of the journey.');
+    }
+
+    // 3. Application Fee & Admission Fee Validation
+    for (const step of steps) {
+      if (step.stepType === 'APPLICATION_FEE' || step.stepType === 'ADMISSION_FEE') {
+        if (step.feeConfig?.feeRequired && (step.feeConfig.amount === undefined || step.feeConfig.amount < 0)) {
+          throw new BadRequestException(`Fee step "${step.displayName}" requires a valid non-negative amount.`);
+        }
+      }
+      if (step.stepType === 'ASSESSMENT_TEST' && step.testConfig?.testRequired) {
+        if (!step.testConfig.mode) {
+          throw new BadRequestException(`Test step "${step.displayName}" requires an assessment mode.`);
+        }
+      }
+      if (step.stepType === 'INTERVIEW' && step.interviewConfig?.interviewRequired) {
+        if (!step.interviewConfig.mode) {
+          throw new BadRequestException(`Interview step "${step.displayName}" requires an interview mode.`);
+        }
+      }
+    }
+
+    return true;
+  }
+
+  /**
    * Resolve best-matching active admission process for a given campus/school
    */
   public resolveProcessForCampus(campusId: string, schoolId?: string): ActiveProcessRegistryItem | undefined {
@@ -339,7 +484,7 @@ export class AdmissionsService {
     );
     if (specificCampusMatch) return specificCampusMatch;
 
-    // 2. Priority: School-Level Match (if schoolId is explicitly matched by a selective process)
+    // 2. Priority: School-Level Match
     if (schoolId) {
       const schoolMatch = ACTIVE_PROCESS_CATALOG.find(
         (p) => p.applyTo === 'SELECTED_CAMPUSES' && p.schoolId === schoolId
@@ -362,25 +507,18 @@ export class AdmissionsService {
     let scoped = this.applications.filter((app) => {
       if (userScope.isSuperAdmin) return true;
 
-      // Campus scope
       if (userScope.authorizedCampusIds && userScope.authorizedCampusIds.length > 0) {
         return userScope.authorizedCampusIds.includes(app.campusId);
       }
-
-      // School scope
       if (userScope.authorizedSchoolIds && userScope.authorizedSchoolIds.length > 0) {
         return userScope.authorizedSchoolIds.includes(app.schoolId);
       }
-
-      // Region scope
       if (userScope.authorizedRegionIds && userScope.authorizedRegionIds.length > 0) {
         return app.regionId ? userScope.authorizedRegionIds.includes(app.regionId) : false;
       }
-
       return true;
     });
 
-    // Summary KPIs
     const pendingCount = scoped.filter((a) => a.status === 'SUBMITTED' || a.status === 'IN_PROGRESS').length;
     const approvedCount = scoped.filter((a) => a.status === 'APPROVED').length;
     const completedCount = scoped.filter((a) => a.status === 'COMPLETED').length;
@@ -396,7 +534,6 @@ export class AdmissionsService {
       enrolled: completedCount,
     };
 
-    // Search query
     if (filter.search && filter.search.trim()) {
       const q = filter.search.trim().toLowerCase();
       scoped = scoped.filter(
@@ -413,7 +550,6 @@ export class AdmissionsService {
       );
     }
 
-    // Secondary filters
     if (filter.status && filter.status !== 'ALL') {
       scoped = scoped.filter((a) => a.status === filter.status);
     }
@@ -443,7 +579,6 @@ export class AdmissionsService {
       }
     }
 
-    // Sorting
     const sortBy = filter.sortBy || 'submittedAt';
     const sortOrder = filter.sortOrder || 'desc';
 
@@ -464,7 +599,6 @@ export class AdmissionsService {
       return 0;
     });
 
-    // Pagination
     const page = Math.max(1, Number(filter.page) || 1);
     const limit = Math.max(1, Number(filter.limit) || 25);
     const total = scoped.length;
@@ -496,7 +630,6 @@ export class AdmissionsService {
       throw new NotFoundException(`Pre-Admission record "${id}" not found.`);
     }
 
-    // Data-scope check
     if (
       userScope.authorizedCampusIds &&
       userScope.authorizedCampusIds.length > 0 &&
@@ -506,6 +639,41 @@ export class AdmissionsService {
     }
 
     return app;
+  }
+
+  /**
+   * Dynamic List View Configuration Management
+   */
+  public async getListViewConfig(userScope: UserScopeContext): Promise<PreAdmissionsListViewConfigDto> {
+    const key = `view_${userScope.organizationId}`;
+    if (this.listViewConfigs.has(key)) {
+      return this.listViewConfigs.get(key)!;
+    }
+
+    const defaultConfig: PreAdmissionsListViewConfigDto = {
+      id: 'cfg_default',
+      organizationId: userScope.organizationId,
+      viewType: 'ORGANIZATION_DEFAULT',
+      name: 'Default Operational View',
+      columns: DEFAULT_LIST_COLUMNS,
+      updatedAt: new Date(),
+    };
+    this.listViewConfigs.set(key, defaultConfig);
+    return defaultConfig;
+  }
+
+  public async saveListViewConfig(
+    config: PreAdmissionsListViewConfigDto,
+    userScope: UserScopeContext
+  ): Promise<PreAdmissionsListViewConfigDto> {
+    const key = `view_${userScope.organizationId}`;
+    const saved: PreAdmissionsListViewConfigDto = {
+      ...config,
+      organizationId: userScope.organizationId,
+      updatedAt: new Date(),
+    };
+    this.listViewConfigs.set(key, saved);
+    return saved;
   }
 
   /**
@@ -528,7 +696,6 @@ export class AdmissionsService {
     const id = `preadm_${appNo.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
     const now = new Date();
 
-    // Canonical extraction
     const raw = dto.formData || {};
     const studentFirstName = raw.studentFirstName || raw.STUDENT_FIRST_NAME || dto.studentName?.split(' ')[0] || 'Applicant';
     const studentLastName = raw.studentLastName || raw.STUDENT_LAST_NAME || dto.studentName?.split(' ').slice(1).join(' ') || 'Student';
@@ -539,7 +706,6 @@ export class AdmissionsService {
     const primaryMobile = dto.primaryMobile || raw.primaryMobile || raw.FATHER_MOBILE || raw.FAT_MOBILE || '0300-0000000';
     const primaryEmail = dto.primaryEmail || raw.primaryEmail || raw.EMAIL;
 
-    // Campus / School resolution
     const campusMap: Record<string, { name: string; schoolId: string; schoolName: string; regionId: string; regionName: string }> = {
       'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa': { name: 'Main Campus (Gulshan)', schoolId: 'sch-1', schoolName: 'Beacon Horizon Public School', regionId: 'reg_south', regionName: 'Southern Region' },
       'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb': { name: 'Clifton Campus', schoolId: 'sch-1', schoolName: 'Beacon Horizon Public School', regionId: 'reg_south', regionName: 'Southern Region' },
@@ -556,7 +722,6 @@ export class AdmissionsService {
       regionName: 'Southern Region',
     };
 
-    // Class resolution
     const classMap: Record<string, string> = {
       'cls-ey1': 'Playgroup (EY-1)',
       'cls-kg': 'Kindergarten (KG)',
@@ -569,7 +734,6 @@ export class AdmissionsService {
     };
     const className = classMap[dto.classId] || 'Grade 1';
 
-    // Process Resolution
     const processMatch = this.resolveProcessForCampus(dto.campusId, campusInfo.schoolId);
 
     let journey: AdmissionJourneyDto | null = null;
@@ -584,7 +748,7 @@ export class AdmissionsService {
       const stepsProgress: AdmissionJourneyStepProgress[] = processMatch.steps.map((st, idx) => {
         let state: 'COMPLETED' | 'CURRENT' | 'UPCOMING' = 'UPCOMING';
         if (idx === 0) {
-          state = 'COMPLETED'; // Intake form submission completes step 1
+          state = 'COMPLETED';
         } else if (idx === 1) {
           state = 'CURRENT';
           currentStepId = st.id;
@@ -672,38 +836,13 @@ export class AdmissionsService {
           actor: source === 'ONLINE' ? 'Applicant (Public Online)' : 'Staff Entry',
           timestamp: now,
         },
-        ...(processMatch
-          ? [
-              {
-                id: `aud_2_${appNo}`,
-                eventType: 'JOURNEY_STARTED',
-                description: `Admission Journey initialized with ${processMatch.name} (v${processMatch.versionNumber})`,
-                actor: 'CampusOS Admission Engine',
-                timestamp: now,
-              },
-              {
-                id: `aud_3_${appNo}`,
-                eventType: 'STEP_STARTED',
-                description: `First executable step started: ${currentStepName}`,
-                actor: 'CampusOS Admission Engine',
-                timestamp: now,
-              },
-            ]
-          : [
-              {
-                id: `aud_2_${appNo}`,
-                eventType: 'AWAITING_PROCESS_ASSIGNMENT',
-                description: 'Saved as Pre-Admission data only. No active Admission Process assigned.',
-                actor: 'CampusOS Admission Engine',
-                timestamp: now,
-              },
-            ]),
       ],
       createdAt: now,
       updatedAt: now,
     };
 
     this.applications.unshift(newRecord);
+    this.emitAdmissionEvent('PRE_ADMISSION_SUBMITTED', { applicationId: newRecord.id, applicationNumber: newRecord.applicationNumber });
     return newRecord;
   }
 
@@ -781,6 +920,298 @@ export class AdmissionsService {
 
     app.updatedAt = now;
     return app;
+  }
+
+  // -------------------------------------------------------------
+  // Test Scheduling & Assignment Foundation
+  // -------------------------------------------------------------
+  public async getTestSchedules(userScope: UserScopeContext): Promise<TestScheduleDto[]> {
+    return this.testSchedules.filter((s) => {
+      if (userScope.isSuperAdmin) return true;
+      if (userScope.authorizedCampusIds && userScope.authorizedCampusIds.length > 0) {
+        return userScope.authorizedCampusIds.includes(s.campusId);
+      }
+      return true;
+    });
+  }
+
+  public async createTestSchedule(
+    dto: Partial<TestScheduleDto>,
+    userScope: UserScopeContext
+  ): Promise<TestScheduleDto> {
+    if (!dto.date || !dto.startTime || !dto.campusId) {
+      throw new BadRequestException('Date, start time, and campus are required for a test schedule.');
+    }
+
+    const schedule: TestScheduleDto = {
+      id: `ts_${Date.now()}`,
+      organizationId: userScope.organizationId,
+      assessmentName: dto.assessmentName || 'Admission Diagnostic Test',
+      date: dto.date,
+      startTime: dto.startTime,
+      endTime: dto.endTime || '11:30',
+      durationMinutes: dto.durationMinutes || 90,
+      campusId: dto.campusId,
+      campusName: dto.campusName || 'Selected Campus',
+      venueRoom: dto.venueRoom || 'Main Exam Hall',
+      mode: dto.mode || 'PAPER_BASED',
+      capacity: dto.capacity || 50,
+      instructions: dto.instructions || 'Arrive with candidate admit slip.',
+      assignedApplicantCount: 0,
+      createdAt: new Date(),
+    };
+
+    this.testSchedules.push(schedule);
+    return schedule;
+  }
+
+  public async assignApplicantsToTestSchedule(
+    scheduleId: string,
+    applicationIds: string[],
+    userScope: UserScopeContext
+  ): Promise<TestScheduleAssignmentDto[]> {
+    const schedule = this.testSchedules.find((s) => s.id === scheduleId);
+    if (!schedule) throw new NotFoundException('Test schedule not found.');
+
+    const assignments: TestScheduleAssignmentDto[] = [];
+    const now = new Date();
+
+    for (const appId of applicationIds) {
+      const app = await this.getPreAdmissionById(appId, userScope);
+
+      // Verify user has scope to target this applicant
+      if (
+        userScope.authorizedCampusIds &&
+        userScope.authorizedCampusIds.length > 0 &&
+        !userScope.authorizedCampusIds.includes(app.campusId)
+      ) {
+        throw new ForbiddenException(`Cannot assign applicant from unauthorized campus "${app.campusName}".`);
+      }
+
+      const assignment: TestScheduleAssignmentDto = {
+        id: `ta_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+        scheduleId: schedule.id,
+        applicationId: app.id,
+        applicationNumber: app.applicationNumber,
+        studentName: app.studentName,
+        applicantCampusId: app.campusId,
+        applicantCampusName: app.campusName,
+        scheduleCampusId: schedule.campusId,
+        scheduleCampusName: schedule.campusName,
+        venueRoom: schedule.venueRoom,
+        scheduledDate: schedule.date,
+        scheduledTime: schedule.startTime,
+        status: 'SCHEDULED',
+        resultStatus: 'DRAFT',
+      };
+
+      this.testAssignments.push(assignment);
+      assignments.push(assignment);
+
+      // Update applicant operational fields
+      app.testDate = schedule.date;
+      app.testStatus = 'SCHEDULED';
+      app.updatedAt = now;
+      schedule.assignedApplicantCount++;
+
+      this.emitAdmissionEvent('TEST_SCHEDULED', { assignmentId: assignment.id, applicationId: app.id, scheduleId: schedule.id });
+    }
+
+    return assignments;
+  }
+
+  public async rescheduleApplicantTest(
+    assignmentId: string,
+    newScheduleId: string,
+    reason: string,
+    userScope: UserScopeContext
+  ): Promise<TestScheduleAssignmentDto> {
+    const assignment = this.testAssignments.find((a) => a.id === assignmentId);
+    if (!assignment) throw new NotFoundException('Test assignment not found.');
+
+    const newSchedule = this.testSchedules.find((s) => s.id === newScheduleId);
+    if (!newSchedule) throw new NotFoundException('New target schedule not found.');
+
+    const originalScheduleId = assignment.scheduleId;
+    assignment.rescheduledFromScheduleId = originalScheduleId;
+    assignment.rescheduledReason = reason;
+    assignment.scheduleId = newSchedule.id;
+    assignment.scheduleCampusId = newSchedule.campusId;
+    assignment.scheduleCampusName = newSchedule.campusName;
+    assignment.venueRoom = newSchedule.venueRoom;
+    assignment.scheduledDate = newSchedule.date;
+    assignment.scheduledTime = newSchedule.startTime;
+    assignment.status = 'RESCHEDULED';
+
+    this.emitAdmissionEvent('TEST_RESCHEDULED', { assignmentId: assignment.id, reason, newScheduleId });
+    return assignment;
+  }
+
+  public async recordTestResult(
+    assignmentId: string,
+    score: number,
+    totalMarks: number,
+    outcome: TestOutcome,
+    publishNow: boolean,
+    userScope: UserScopeContext
+  ): Promise<TestScheduleAssignmentDto> {
+    const assignment = this.testAssignments.find((a) => a.id === assignmentId);
+    if (!assignment) throw new NotFoundException('Test assignment not found.');
+
+    assignment.score = score;
+    assignment.totalMarks = totalMarks;
+    assignment.percentage = Math.round((score / totalMarks) * 100);
+    assignment.outcome = outcome;
+    assignment.resultStatus = publishNow ? 'PUBLISHED' : 'READY';
+    if (publishNow) {
+      assignment.publishedAt = new Date();
+      this.emitAdmissionEvent('TEST_RESULT_PUBLISHED', { assignmentId, outcome, score });
+    }
+
+    const app = this.applications.find((a) => a.id === assignment.applicationId);
+    if (app) {
+      app.testResult = `${outcome} (${assignment.percentage}%)`;
+      app.testStatus = 'COMPLETED';
+    }
+
+    return assignment;
+  }
+
+  // -------------------------------------------------------------
+  // Interview Scheduling Foundation
+  // -------------------------------------------------------------
+  public async getInterviewSchedules(userScope: UserScopeContext): Promise<InterviewScheduleDto[]> {
+    return this.interviewSchedules;
+  }
+
+  public async assignApplicantToInterview(
+    scheduleId: string,
+    applicationId: string,
+    slotId?: string,
+    userScope?: UserScopeContext
+  ): Promise<InterviewAssignmentDto> {
+    const schedule = this.interviewSchedules.find((s) => s.id === scheduleId);
+    if (!schedule) throw new NotFoundException('Interview schedule not found.');
+
+    const app = this.applications.find((a) => a.id === applicationId);
+    if (!app) throw new NotFoundException('Application not found.');
+
+    const assignment: InterviewAssignmentDto = {
+      id: `ia_${Date.now()}`,
+      scheduleId: schedule.id,
+      slotId,
+      applicationId: app.id,
+      applicationNumber: app.applicationNumber,
+      studentName: app.studentName,
+      date: schedule.date,
+      time: schedule.startTime,
+      mode: schedule.mode,
+      venueOrMeetingLink: schedule.mode === 'ONLINE' ? schedule.meetingLink : schedule.venueRoom,
+      interviewerName: schedule.interviewerName,
+      status: 'SCHEDULED',
+    };
+
+    this.interviewAssignments.push(assignment);
+    app.interviewDate = schedule.date;
+    app.interviewStatus = 'SCHEDULED';
+    schedule.bookedSlots++;
+
+    this.emitAdmissionEvent('INTERVIEW_SCHEDULED', { assignmentId: assignment.id, applicationId: app.id });
+    return assignment;
+  }
+
+  public async recordInterviewOutcome(
+    assignmentId: string,
+    outcome: InterviewOutcome,
+    notes?: string,
+    userScope?: UserScopeContext
+  ): Promise<InterviewAssignmentDto> {
+    const assignment = this.interviewAssignments.find((a) => a.id === assignmentId);
+    if (!assignment) throw new NotFoundException('Interview assignment not found.');
+
+    assignment.outcome = outcome;
+    assignment.feedbackNotes = notes;
+    assignment.status = 'COMPLETED';
+
+    const app = this.applications.find((a) => a.id === assignment.applicationId);
+    if (app) {
+      app.interviewStatus = outcome;
+    }
+
+    this.emitAdmissionEvent('INTERVIEW_RESULT_PUBLISHED', { assignmentId, outcome });
+    return assignment;
+  }
+
+  // -------------------------------------------------------------
+  // Decision & Fee Management
+  // -------------------------------------------------------------
+  public async recordAdmissionDecision(
+    applicationId: string,
+    outcome: AdmissionDecisionOutcome,
+    remarks?: string,
+    userScope?: UserScopeContext
+  ): Promise<PreAdmissionApplicationDto> {
+    const app = await this.getPreAdmissionById(applicationId, userScope || { organizationId: '11111111-1111-1111-1111-111111111111', isSuperAdmin: true });
+    app.decisionOutcome = outcome;
+    if (outcome === 'APPROVED') {
+      app.status = 'APPROVED';
+      this.emitAdmissionEvent('ADMISSION_APPROVED', { applicationId: app.id });
+    } else if (outcome === 'REJECTED') {
+      app.status = 'REJECTED';
+      this.emitAdmissionEvent('ADMISSION_REJECTED', { applicationId: app.id });
+    } else if (outcome === 'WAITING_LIST') {
+      this.emitAdmissionEvent('WAITLISTED', { applicationId: app.id });
+    }
+    app.updatedAt = new Date();
+    return app;
+  }
+
+  public async recordFeePayment(
+    applicationId: string,
+    feeType: 'APPLICATION_FEE' | 'ADMISSION_FEE',
+    amountPaid: number,
+    method: string,
+    userScope: UserScopeContext
+  ): Promise<AdmissionChargeDto> {
+    const app = await this.getPreAdmissionById(applicationId, userScope);
+
+    const charge: AdmissionChargeDto = {
+      id: `chg_${Date.now()}`,
+      applicationId: app.id,
+      applicationNumber: app.applicationNumber,
+      feeType,
+      feeName: feeType === 'APPLICATION_FEE' ? 'Registration Processing Fee' : 'Final Admission Fee',
+      amount: amountPaid,
+      currency: 'PKR',
+      status: 'PAID',
+      paidAmount: amountPaid,
+      paidAt: new Date(),
+      paymentMethod: 'ONLINE_GATEWAY',
+      transactionReference: `TXN_${Date.now()}`,
+      receiptNumber: `REC-${Math.floor(10000 + Math.random() * 90000)}`,
+    };
+
+    this.charges.push(charge);
+    app.feeStatus = 'PAID';
+    app.updatedAt = new Date();
+
+    this.emitAdmissionEvent(feeType === 'APPLICATION_FEE' ? 'APPLICATION_FEE_PAID' : 'ADMISSION_FEE_PAID', { chargeId: charge.id, applicationId: app.id, amount: amountPaid });
+    return charge;
+  }
+
+  /**
+   * Domain Notification Event Emitter (Foundation)
+   */
+  public emitAdmissionEvent(event: AdmissionProcessDomainEvent, payload: Record<string, any>) {
+    this.emittedEvents.push({
+      event,
+      payload,
+      timestamp: new Date(),
+    });
+  }
+
+  public getEmittedEvents() {
+    return this.emittedEvents;
   }
 
   // Backward compatibility aliases

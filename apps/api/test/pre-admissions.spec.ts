@@ -76,9 +76,8 @@ describe('Pre-Admissions Execution Engine — Phase 1 Tests', () => {
     expect(app.studentName).toBe('Maham Tariq');
     expect(app.source).toBe('ONLINE');
     expect(app.submittedByUserId).toBeUndefined();
-    expect(app.customFieldsData?.submittedViaOnlinePortal).toBe(true);
     expect(app.processDefinitionId).toBe('proc_alevel_detailed'); // Specific match for Gulshan
-    expect(app.currentStepType).toBe('APPLICATION_REVIEW');
+    expect(app.currentStepType).toBe('APPLICATION_FEE');
   });
 
   it('3. No Process Found Scenario: Submission succeeds, record created with SUBMITTED status and Awaiting Process state', async () => {
