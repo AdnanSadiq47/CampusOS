@@ -4,7 +4,6 @@ import {
   ConflictException,
   BadRequestException,
   ForbiddenException,
-  OnModuleInit,
 } from '@nestjs/common';
 import {
   TenantTransactionManager,
@@ -37,89 +36,11 @@ import { provisionOrLinkAccountTx, resolveLinkedAccountTx } from '../../core/iam
 import { validateAndResolveGeographyHierarchy } from '../geography/geography-validation.util.js';
 
 @Injectable()
-export class RegionsService implements OnModuleInit {
+export class RegionsService {
   constructor(
     private readonly txManager: TenantTransactionManager,
     private readonly auditService: AuditService
   ) {}
-
-  async onModuleInit() {
-    const orgId = '11111111-1111-1111-1111-111111111111';
-    await this.txManager.runInTenantContext(orgId, async (tx) => {
-      const [existing] = await tx
-        .select({ count: sql<number>`COUNT(*)` })
-        .from(regions)
-        .where(eq(regions.organizationId, orgId));
-
-      if (Number(existing?.count || 0) > 0) return;
-
-      // Find Head Office or root node to anchor the default region
-      const [ho] = await tx
-        .select()
-        .from(headOffices)
-        .where(eq(headOffices.organizationId, orgId))
-        .limit(1);
-
-      let parentNodeId: string | null = null;
-      let parentPath = 'root.ho_main';
-
-      if (ho) {
-        parentNodeId = ho.hierarchyNodeId;
-        const [hoNode] = await tx
-          .select()
-          .from(hierarchyNodes)
-          .where(eq(hierarchyNodes.id, ho.hierarchyNodeId))
-          .limit(1);
-        if (hoNode) parentPath = hoNode.path;
-      } else {
-        const [rootNode] = await tx
-          .select()
-          .from(hierarchyNodes)
-          .where(and(eq(hierarchyNodes.organizationId, orgId), sql`${hierarchyNodes.parentId} IS NULL`))
-          .limit(1);
-        if (rootNode) {
-          parentNodeId = rootNode.id;
-          parentPath = rootNode.path;
-        }
-      }
-
-      if (!parentNodeId) return;
-
-      const regionNodeType = await this.ensureRegionNodeType(tx, orgId);
-
-      const [node] = await tx
-        .insert(hierarchyNodes)
-        .values({
-          organizationId: orgId,
-          nodeTypeId: regionNodeType.id,
-          parentId: parentNodeId,
-          code: 'REG_SOUTH_01',
-          name: 'South Regional Directorate',
-          path: `${parentPath}.reg_south_01`,
-          isActive: true,
-        })
-        .returning();
-
-      await tx.insert(regions).values({
-        organizationId: orgId,
-        hierarchyNodeId: node!.id,
-        parentId: parentNodeId,
-        code: 'REG_SOUTH_01',
-        name: 'South Regional Directorate',
-        shortName: 'South Region',
-        directorName: 'Mr. Ahmed Raza Khan',
-        email: 'south.directorate@beaconhorizon.edu.pk',
-        phone: '+92 21 34567891',
-        country: 'Pakistan',
-        province: 'Sindh',
-        city: 'Karachi',
-        address: 'Plot 12-C, Commercial Zone, Clifton Block 4',
-        isActive: true,
-        createdBy: '00000000-0000-0000-0000-000000000000',
-        updatedBy: '00000000-0000-0000-0000-000000000000',
-      });
-    });
-  }
 
   /**
    * Helper to resolve an array of user UUIDs to full human-readable UserSummaryDtos

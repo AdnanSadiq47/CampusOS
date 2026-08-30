@@ -20,9 +20,14 @@
     }
   },
   "scripts": {
-    "build": "tsup src/index.ts src/schema/index.ts src/seed/cli.ts src/safety/lock-cli.ts --format cjs,esm --dts --external @electric-sql/pglite",
-    "dev": "tsup src/index.ts src/schema/index.ts src/seed/cli.ts src/safety/lock-cli.ts --format cjs,esm --dts --external @electric-sql/pglite --watch",
+    "build": "tsup src/index.ts src/schema/index.ts src/seed/cli.ts src/safety/lock-cli.ts src/recovery/recovery-cli.ts --format cjs,esm --dts --external @electric-sql/pglite",
+    "dev": "tsup src/index.ts src/schema/index.ts src/seed/cli.ts src/safety/lock-cli.ts src/recovery/recovery-cli.ts --format cjs,esm --dts --external @electric-sql/pglite --watch",
     "db:seed": "node dist/seed/cli.js",
+    "db:identity:init": "node dist/safety/lock-cli.js identity:init",
+    "db:recovery:export": "node dist/recovery/recovery-cli.js export",
+    "db:recovery:create-staging": "node dist/recovery/recovery-cli.js create-staging",
+    "db:recovery:restore-staging": "node dist/recovery/recovery-cli.js restore-staging",
+    "db:recovery:verify-staging": "node dist/recovery/recovery-cli.js verify-staging",
     "verify:locks": "node dist/safety/lock-cli.js verify",
     "lock:page": "node dist/safety/lock-cli.js lock",
     "unlock:page": "node dist/safety/lock-cli.js unlock",

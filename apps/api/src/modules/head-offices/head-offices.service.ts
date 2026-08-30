@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException, BadRequestException, ForbiddenException, OnModuleInit } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import {
   TenantTransactionManager,
   headOffices,
@@ -29,55 +29,11 @@ import { provisionOrLinkAccountTx, resolveLinkedAccountTx } from '../../core/iam
 import { validateAndResolveGeographyHierarchy } from '../geography/geography-validation.util.js';
 
 @Injectable()
-export class HeadOfficesService implements OnModuleInit {
+export class HeadOfficesService {
   constructor(
     private readonly txManager: TenantTransactionManager,
     private readonly auditService: AuditService
   ) {}
-
-  async onModuleInit() {
-    const orgId = '11111111-1111-1111-1111-111111111111';
-    await this.txManager.runInTenantContext(orgId, async (tx) => {
-      const [existing] = await tx
-        .select({ count: sql<number>`COUNT(*)` })
-        .from(headOffices)
-        .where(eq(headOffices.organizationId, orgId));
-
-      if (Number(existing?.count || 0) > 0) return;
-
-      const hoNodeType = await this.ensureHeadOfficeNodeType(tx, orgId);
-
-      const [rootNode] = await tx
-        .insert(hierarchyNodes)
-        .values({
-          organizationId: orgId,
-          nodeTypeId: hoNodeType.id,
-          code: 'HO-MAIN',
-          name: 'Main Executive Head Office',
-          path: 'root.ho_main',
-          isActive: true,
-        })
-        .returning();
-
-      await tx.insert(headOffices).values({
-        organizationId: orgId,
-        hierarchyNodeId: rootNode!.id,
-        code: 'HO-MAIN',
-        name: 'Main Executive Head Office',
-        shortName: 'Central HQ',
-        description: 'Central Administrative and Governance Headquarters',
-        directorName: 'Dr. Tariq Mehmood',
-        email: 'headoffice@beaconhorizon.edu.pk',
-        phone: '+92 21 34567890',
-        city: 'Karachi',
-        province: 'Sindh',
-        country: 'Pakistan',
-        isActive: true,
-        createdBy: '00000000-0000-0000-0000-000000000000',
-        updatedBy: '00000000-0000-0000-0000-000000000000',
-      });
-    });
-  }
 
   // ─────────────────────────────────────────────────────────────────
   //  CREATE

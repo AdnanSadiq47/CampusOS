@@ -4,7 +4,6 @@ import {
   NotFoundException,
   ConflictException,
   ForbiddenException,
-  OnModuleInit,
 } from '@nestjs/common';
 import {
   TenantTransactionManager,
@@ -47,125 +46,11 @@ import { provisionOrLinkAccountTx, resolveLinkedAccountTx } from '../../core/iam
 import { validateAndResolveGeographyHierarchy } from '../geography/geography-validation.util.js';
 
 @Injectable()
-export class SchoolsService implements OnModuleInit {
+export class SchoolsService {
   constructor(
     private readonly txManager: TenantTransactionManager,
     private readonly auditService: AuditService
   ) {}
-
-  async onModuleInit() {
-    const orgId = '11111111-1111-1111-1111-111111111111';
-    try {
-      await this.txManager.runInTenantContext(orgId, async (tx) => {
-        const [existing] = await tx
-          .select({ count: sql<number>`COUNT(*)` })
-          .from(schools)
-          .where(eq(schools.organizationId, orgId));
-
-        if (Number(existing?.count || 0) > 0) return;
-
-        // Find or create Head Office
-        let [ho] = await tx
-          .select()
-          .from(headOffices)
-          .where(eq(headOffices.organizationId, orgId))
-          .limit(1);
-
-        if (!ho) {
-          const hoNodeType = await this.ensureNodeType(tx, orgId, 'HEAD_OFFICE', 'Head Office', 10);
-          const [hoNode] = await tx
-            .insert(hierarchyNodes)
-            .values({
-              organizationId: orgId,
-              nodeTypeId: hoNodeType.id,
-              code: 'HO-MAIN',
-              name: 'Main Executive Head Office',
-              path: 'root.ho_main',
-              isActive: true,
-            })
-            .returning();
-
-          [ho] = await tx
-            .insert(headOffices)
-            .values({
-              organizationId: orgId,
-              hierarchyNodeId: hoNode!.id,
-              code: 'HO-MAIN',
-              name: 'Main Executive Head Office',
-              shortName: 'Central HQ',
-              description: 'Central Administrative and Governance Headquarters',
-              directorName: 'Dr. Tariq Mehmood',
-              email: 'headoffice@beaconhorizon.edu.pk',
-              phone: '+92 21 34567890',
-              city: 'Karachi',
-              province: 'Sindh',
-              country: 'Pakistan',
-              isActive: true,
-              createdBy: '00000000-0000-0000-0000-000000000000',
-              updatedBy: '00000000-0000-0000-0000-000000000000',
-            })
-            .returning();
-        }
-
-        const schoolNodeType = await this.ensureNodeType(tx, orgId, 'SCHOOL', 'School', 30);
-
-        const [schoolNode] = await tx
-          .insert(hierarchyNodes)
-          .values({
-            organizationId: orgId,
-            nodeTypeId: schoolNodeType.id,
-            parentId: ho!.hierarchyNodeId,
-            code: 'SCH_KHI_01',
-            name: 'Beacon Horizon Public School',
-            path: `root.ho_main.sch_khi_01`,
-            address: {
-              address: 'Plot 42, Block 6, PECHS',
-              area: 'PECHS',
-              city: 'Karachi',
-              province: 'Sindh',
-              postalCode: '75400',
-            },
-            contactInfo: {
-              principalName: 'Dr. Tariq Mehmood',
-              email: 'principal.horizon@beacon.edu.pk',
-              phone: '+92 21 34567890',
-              website: 'https://beaconhorizon.edu.pk',
-            },
-            isActive: true,
-          })
-          .returning();
-
-        await tx.insert(schools).values({
-          organizationId: orgId,
-          hierarchyNodeId: schoolNode!.id,
-          parentId: ho!.hierarchyNodeId,
-          headOfficeId: ho!.id,
-          regionId: null,
-          code: 'SCH_KHI_01',
-          name: 'Beacon Horizon Public School',
-          shortName: 'Beacon Horizon',
-          description: 'Premier K-12 campus network institution',
-          schoolType: 'K12',
-          registrationNumber: 'REG-KHI-2024-889',
-          educationBoard: 'BISE Karachi / Cambridge',
-          principalName: 'Dr. Tariq Mehmood',
-          email: 'principal.horizon@beacon.edu.pk',
-          phone: '+92 21 34567890',
-          address: 'Plot 42, Block 6, PECHS',
-          area: 'PECHS',
-          city: 'Karachi',
-          province: 'Sindh',
-          country: 'Pakistan',
-          postalCode: '75400',
-          website: 'https://beaconhorizon.edu.pk',
-          currency: 'PKR',
-          isActive: true,
-          createdBy: '00000000-0000-0000-0000-000000000000',
-          updatedBy: '00000000-0000-0000-0000-000000000000',
-        });
-      });
-    } catch {}
-  }
 
   // ─────────────────────────────────────────────────────────────────
   //  FAIL-CLOSED PERMISSION CHECKER

@@ -813,13 +813,17 @@ export function createTenantManager(pool?: pg.Pool | any): TenantTransactionMana
     logger.info(`Initialized embedded PostgreSQL (PGlite) engine at ${dataDir}`);
   }
 
-  // Asynchronously ensure schema is ready
-  const bootstrapPromise = bootstrapPgLiteSchema(sharedPgLiteInstance).catch((err) => {
-    logger.error('Failed to bootstrap PGlite schema', {
+  // Asynchronously ensure database identity & schema compatibility (Strictly Read-Only, Zero Mutation)
+  const verifyPromise = (async () => {
+    await sharedPgLiteInstance!.waitReady;
+    await verifySchemaCompatibility(sharedPgLiteInstance!);
+  })().catch((err) => {
+    logger.error('Failed to verify database schema compatibility on startup', {
       error: err instanceof Error ? err.message : String(err),
     });
+    throw err;
   });
-  (sharedPgLiteInstance as any).__bootstrapPromise = bootstrapPromise;
+  (sharedPgLiteInstance as any).__bootstrapPromise = verifyPromise;
 
   return new TenantTransactionManager(sharedPgLiteInstance);
 }
