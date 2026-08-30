@@ -1,110 +1,227 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import {
+  CountryListItemDto,
+  StateListItemDto,
+  CityListItemDto,
+  AreaListItemDto,
+} from '@campus-os/types';
+
+const CANONICAL_TENANT_ID = '11111111-1111-1111-1111-111111111111';
+const CANONICAL_USER_ID = '99999999-9999-9999-9999-999999999999';
+
+const AUTH_HEADERS = {
+  'x-tenant-id': CANONICAL_TENANT_ID,
+  'x-organization-id': CANONICAL_TENANT_ID,
+  'x-user-id': CANONICAL_USER_ID,
+};
 
 export interface LocationSelectorProps {
   country?: string;
+  countryId?: string;
   province?: string;
+  stateId?: string;
   city?: string;
+  cityId?: string;
   area?: string;
+  areaId?: string;
   postalCode?: string;
   onCountryChange?: (country: string) => void;
+  onCountryIdChange?: (countryId: string) => void;
   onProvinceChange?: (province: string) => void;
+  onStateIdChange?: (stateId: string) => void;
   onCityChange?: (city: string) => void;
+  onCityIdChange?: (cityId: string) => void;
   onAreaChange?: (area: string) => void;
+  onAreaIdChange?: (areaId: string) => void;
   onPostalCodeChange?: (postalCode: string) => void;
   showAreaAndPostal?: boolean;
   className?: string;
 }
 
-const DEFAULT_COUNTRIES = [
-  'Pakistan',
-  'United States',
-  'United Kingdom',
-  'United Arab Emirates',
-  'Saudi Arabia',
-  'Canada',
-  'Australia',
-  'Malaysia',
-  'Qatar',
-  'Oman',
-];
-
-const DEFAULT_PROVINCES: Record<string, string[]> = {
-  Pakistan: [
-    'Sindh',
-    'Punjab',
-    'Khyber Pakhtunkhwa',
-    'Balochistan',
-    'Islamabad Capital Territory',
-    'Gilgit-Baltistan',
-    'Azad Jammu & Kashmir',
-  ],
-  'United States': ['California', 'Texas', 'New York', 'Florida', 'Illinois', 'Washington'],
-  'United Arab Emirates': ['Dubai', 'Abu Dhabi', 'Sharjah', 'Ajman', 'Ras Al Khaimah', 'Fujairah', 'Umm Al Quwain'],
-  'Saudi Arabia': ['Riyadh Province', 'Makkah Province', 'Eastern Province', 'Madinah Province'],
-  'United Kingdom': ['England', 'Scotland', 'Wales', 'Northern Ireland'],
-};
-
-const DEFAULT_CITIES: Record<string, string[]> = {
-  Sindh: ['Karachi', 'Hyderabad', 'Sukkur', 'Larkana', 'Mirpur Khas', 'Nawabshah'],
-  Punjab: ['Lahore', 'Faisalabad', 'Rawalpindi', 'Multan', 'Gujranwala', 'Sialkot', 'Bahawalpur'],
-  'Khyber Pakhtunkhwa': ['Peshawar', 'Mardan', 'Abbottabad', 'Swat', 'Dera Ismail Khan'],
-  'Islamabad Capital Territory': ['Islamabad'],
-  California: ['Los Angeles', 'San Francisco', 'San Diego', 'San Jose', 'Sacramento'],
-  Texas: ['Houston', 'Dallas', 'Austin', 'San Antonio'],
-  Dubai: ['Dubai City', 'Deira', 'Jumeirah', 'Downtown'],
-  'Abu Dhabi': ['Abu Dhabi City', 'Al Ain'],
-  'Riyadh Province': ['Riyadh'],
-  'Makkah Province': ['Jeddah', 'Makkah'],
-  England: ['London', 'Manchester', 'Birmingham', 'Leeds'],
-};
-
-const DEFAULT_AREAS: Record<string, { name: string; postalCode: string }[]> = {
-  Karachi: [
-    { name: 'Gulshan-e-Iqbal', postalCode: '75300' },
-    { name: 'Clifton & DHA', postalCode: '75600' },
-    { name: 'North Nazimabad', postalCode: '74700' },
-    { name: 'PECHS / Tariq Road', postalCode: '75400' },
-  ],
-  Lahore: [
-    { name: 'Gulberg & Model Town', postalCode: '54660' },
-    { name: 'DHA Phase 1-6', postalCode: '54792' },
-    { name: 'Johar Town', postalCode: '54770' },
-  ],
-  Islamabad: [
-    { name: 'Sector F-6 / F-7', postalCode: '44000' },
-    { name: 'Sector G-9 / G-10', postalCode: '44080' },
-    { name: 'Sector H-8 / H-9', postalCode: '44090' },
-  ],
-  'Los Angeles': [
-    { name: 'Downtown & Civic Center', postalCode: '90012' },
-    { name: 'Hollywood', postalCode: '90028' },
-  ],
-};
-
 export function GeographyLocationFields({
   country = 'Pakistan',
+  countryId = '',
   province = '',
+  stateId = '',
   city = '',
+  cityId = '',
   area = '',
+  areaId = '',
   postalCode = '',
   onCountryChange,
+  onCountryIdChange,
   onProvinceChange,
+  onStateIdChange,
   onCityChange,
+  onCityIdChange,
   onAreaChange,
+  onAreaIdChange,
   onPostalCodeChange,
   showAreaAndPostal = false,
 }: LocationSelectorProps) {
-  const currentProvinces = DEFAULT_PROVINCES[country] || [];
-  const currentCities = DEFAULT_CITIES[province] || [];
-  const currentAreas = DEFAULT_AREAS[city] || [];
+  const [countriesList, setCountriesList] = useState<CountryListItemDto[]>([]);
+  const [statesList, setStatesList] = useState<StateListItemDto[]>([]);
+  const [citiesList, setCitiesList] = useState<CityListItemDto[]>([]);
+  const [areasList, setAreasList] = useState<AreaListItemDto[]>([]);
 
-  const handleAreaSelect = (areaName: string) => {
+  // 1. Fetch Countries on Mount
+  useEffect(() => {
+    async function fetchCountries() {
+      try {
+        const res = await fetch('/api/geography/countries?status=ACTIVE', {
+          headers: AUTH_HEADERS,
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data)) {
+            setCountriesList(data);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load canonical countries:', err);
+      }
+    }
+    fetchCountries();
+  }, []);
+
+  // Resolve current active country ID
+  const selectedCountryObj = countriesList.find(
+    (c) => (countryId && c.id === countryId) || (country && c.name.toLowerCase() === country.toLowerCase())
+  );
+  const activeCountryId = selectedCountryObj?.id || countryId;
+
+  // 2. Fetch States when Country changes
+  useEffect(() => {
+    async function fetchStates() {
+      if (!activeCountryId) {
+        setStatesList([]);
+        return;
+      }
+      try {
+        const res = await fetch(`/api/geography/states?countryId=${activeCountryId}&status=ACTIVE`, {
+          headers: AUTH_HEADERS,
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data)) {
+            setStatesList(data);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load canonical states:', err);
+      }
+    }
+    fetchStates();
+  }, [activeCountryId]);
+
+  // Resolve current active state ID
+  const selectedStateObj = statesList.find(
+    (s) => (stateId && s.id === stateId) || (province && s.name.toLowerCase() === province.toLowerCase())
+  );
+  const activeStateId = selectedStateObj?.id || stateId;
+
+  // 3. Fetch Cities when State changes
+  useEffect(() => {
+    async function fetchCities() {
+      if (!activeCountryId) {
+        setCitiesList([]);
+        return;
+      }
+      const url = activeStateId
+        ? `/api/geography/cities?countryId=${activeCountryId}&stateId=${activeStateId}&status=ACTIVE`
+        : `/api/geography/cities?countryId=${activeCountryId}&status=ACTIVE`;
+
+      try {
+        const res = await fetch(url, { headers: AUTH_HEADERS });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data)) {
+            setCitiesList(data);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load canonical cities:', err);
+      }
+    }
+    fetchCities();
+  }, [activeCountryId, activeStateId]);
+
+  // Resolve current active city ID
+  const selectedCityObj = citiesList.find(
+    (ct) => (cityId && ct.id === cityId) || (city && ct.name.toLowerCase() === city.toLowerCase())
+  );
+  const activeCityId = selectedCityObj?.id || cityId;
+
+  // 4. Fetch Areas when City changes
+  useEffect(() => {
+    async function fetchAreas() {
+      if (!activeCityId) {
+        setAreasList([]);
+        return;
+      }
+      try {
+        const res = await fetch(`/api/geography/areas?cityId=${activeCityId}&status=ACTIVE`, {
+          headers: AUTH_HEADERS,
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data)) {
+            setAreasList(data);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load canonical areas:', err);
+      }
+    }
+    if (showAreaAndPostal) {
+      fetchAreas();
+    }
+  }, [activeCityId, showAreaAndPostal]);
+
+  // Resolve current active area ID
+  const selectedAreaObj = areasList.find(
+    (a) => (areaId && a.id === areaId) || (area && a.name.toLowerCase() === area.toLowerCase())
+  );
+
+  // Handlers
+  const handleCountryChange = (cName: string) => {
+    onCountryChange?.(cName);
+    const match = countriesList.find((c) => c.name === cName);
+    onCountryIdChange?.(match ? match.id : '');
+    onProvinceChange?.('');
+    onStateIdChange?.('');
+    onCityChange?.('');
+    onCityIdChange?.('');
+    onAreaChange?.('');
+    onAreaIdChange?.('');
+  };
+
+  const handleStateChange = (sName: string) => {
+    onProvinceChange?.(sName);
+    const match = statesList.find((s) => s.name === sName);
+    onStateIdChange?.(match ? match.id : '');
+    onCityChange?.('');
+    onCityIdChange?.('');
+    onAreaChange?.('');
+    onAreaIdChange?.('');
+  };
+
+  const handleCityChange = (cityName: string) => {
+    onCityChange?.(cityName);
+    const match = citiesList.find((ct) => ct.name === cityName);
+    onCityIdChange?.(match ? match.id : '');
+    onAreaChange?.('');
+    onAreaIdChange?.('');
+  };
+
+  const handleAreaChange = (areaName: string) => {
     onAreaChange?.(areaName);
-    const matched = currentAreas.find((a) => a.name.toLowerCase() === areaName.toLowerCase());
-    if (matched && matched.postalCode && onPostalCodeChange) {
-      onPostalCodeChange(matched.postalCode);
+    const match = areasList.find((a) => a.name === areaName);
+    onAreaIdChange?.(match ? match.id : '');
+    if (match?.postalCode && onPostalCodeChange) {
+      onPostalCodeChange(match.postalCode);
     }
   };
 
@@ -114,22 +231,17 @@ export function GeographyLocationFields({
         {/* Country Field */}
         <div>
           <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-            Country
+            Country <span className="text-rose-500">*</span>
           </label>
           <select
             value={country}
-            onChange={(e) => {
-              const nextCountry = e.target.value;
-              onCountryChange?.(nextCountry);
-              if (onProvinceChange) onProvinceChange('');
-              if (onCityChange) onCityChange('');
-              if (onAreaChange) onAreaChange('');
-            }}
+            onChange={(e) => handleCountryChange(e.target.value)}
             className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
           >
-            {DEFAULT_COUNTRIES.map((c) => (
-              <option key={c} value={c}>
-                {c}
+            <option value="">Select Country</option>
+            {countriesList.map((c) => (
+              <option key={c.id} value={c.name}>
+                {c.name} ({c.iso2})
               </option>
             ))}
           </select>
@@ -140,21 +252,16 @@ export function GeographyLocationFields({
           <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
             State / Province
           </label>
-          {currentProvinces.length > 0 ? (
+          {statesList.length > 0 ? (
             <select
               value={province}
-              onChange={(e) => {
-                const nextProvince = e.target.value;
-                onProvinceChange?.(nextProvince);
-                if (onCityChange) onCityChange('');
-                if (onAreaChange) onAreaChange('');
-              }}
+              onChange={(e) => handleStateChange(e.target.value)}
               className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
             >
               <option value="">Select State / Province</option>
-              {currentProvinces.map((p) => (
-                <option key={p} value={p}>
-                  {p}
+              {statesList.map((p) => (
+                <option key={p.id} value={p.name}>
+                  {p.name} {p.code ? `(${p.code})` : ''}
                 </option>
               ))}
             </select>
@@ -174,19 +281,16 @@ export function GeographyLocationFields({
           <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
             City
           </label>
-          {currentCities.length > 0 ? (
+          {citiesList.length > 0 ? (
             <select
               value={city}
-              onChange={(e) => {
-                onCityChange?.(e.target.value);
-                if (onAreaChange) onAreaChange('');
-              }}
+              onChange={(e) => handleCityChange(e.target.value)}
               className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
             >
               <option value="">Select City</option>
-              {currentCities.map((ct) => (
-                <option key={ct} value={ct}>
-                  {ct}
+              {citiesList.map((ct) => (
+                <option key={ct.id} value={ct.name}>
+                  {ct.name}
                 </option>
               ))}
             </select>
@@ -209,16 +313,16 @@ export function GeographyLocationFields({
             <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
               Area / Sector
             </label>
-            {currentAreas.length > 0 ? (
+            {areasList.length > 0 ? (
               <select
-                value={area}
-                onChange={(e) => handleAreaSelect(e.target.value)}
+                value={area || selectedAreaObj?.name || ''}
+                onChange={(e) => handleAreaChange(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
               >
                 <option value="">Select Area / Sector</option>
-                {currentAreas.map((ar) => (
-                  <option key={ar.name} value={ar.name}>
-                    {ar.name} ({ar.postalCode})
+                {areasList.map((ar) => (
+                  <option key={ar.id} value={ar.name}>
+                    {ar.name} {ar.postalCode ? `(${ar.postalCode})` : ''}
                   </option>
                 ))}
               </select>

@@ -38,3 +38,11 @@ yarn-error.log*
 # Testing & Coverage
 coverage
 .nyc_output
+
+# CampusOS local database - NEVER commit
+.pglite-data/
+.pglite-data-*/
+apps/api/.pglite_data/
+.backups/
+chrome-capture-data/
+chrome-capture-data-*/

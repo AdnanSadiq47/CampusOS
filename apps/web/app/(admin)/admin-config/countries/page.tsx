@@ -1,116 +1,46 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
-import { CountryListItemDto, CreateCountryDto } from '@campus-os/types';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import {
+  CountryListItemDto,
+  CreateCountryDto,
+  GeographyDependenciesDto,
+} from '@campus-os/types';
 import { AdminConfigPageHeader, LOCATION_GEOGRAPHY_NAV } from '../../../../components/AdminConfigPageHeader';
+import {
+  StatCard,
+  StatusBadge,
+  RowActions,
+  ViewAction,
+  EditAction,
+  StatusAction,
+  DeleteAction,
+} from '../../../../design-system';
+import { AdminModal } from '../../../../components/ui/AdminModal';
+import { Globe, CheckCircle2, AlertCircle, Search, RefreshCw } from 'lucide-react';
 
-/* ─── Mock initial fallback dataset for offline/client preview ─── */
-const DEFAULT_COUNTRIES: CountryListItemDto[] = [
-  {
-    id: 'c1111111-1111-1111-1111-111111111111',
-    organizationId: '11111111-1111-1111-1111-111111111111',
-    name: 'Pakistan',
-    iso2: 'PK',
-    iso3: 'PAK',
-    numericCode: '586',
-    dialCode: '+92',
-    currencyCode: 'PKR',
-    currencySymbol: 'Rs',
-    nationality: 'Pakistani',
-    sortOrder: 1,
-    isActive: true,
-    stateCount: 5,
-    cityCount: 140,
-    createdAt: new Date('2026-01-01'),
-    updatedAt: new Date('2026-01-01'),
-  },
-  {
-    id: 'c2222222-2222-2222-2222-222222222222',
-    organizationId: '11111111-1111-1111-1111-111111111111',
-    name: 'United States',
-    iso2: 'US',
-    iso3: 'USA',
-    numericCode: '840',
-    dialCode: '+1',
-    currencyCode: 'USD',
-    currencySymbol: '$',
-    nationality: 'American',
-    sortOrder: 2,
-    isActive: true,
-    stateCount: 50,
-    cityCount: 300,
-    createdAt: new Date('2026-01-01'),
-    updatedAt: new Date('2026-01-01'),
-  },
-  {
-    id: 'c3333333-3333-3333-3333-333333333333',
-    organizationId: '11111111-1111-1111-1111-111111111111',
-    name: 'United Kingdom',
-    iso2: 'GB',
-    iso3: 'GBR',
-    numericCode: '826',
-    dialCode: '+44',
-    currencyCode: 'GBP',
-    currencySymbol: '£',
-    nationality: 'British',
-    sortOrder: 3,
-    isActive: true,
-    stateCount: 4,
-    cityCount: 80,
-    createdAt: new Date('2026-01-01'),
-    updatedAt: new Date('2026-01-01'),
-  },
-  {
-    id: 'c4444444-4444-4444-4444-444444444444',
-    organizationId: '11111111-1111-1111-1111-111111111111',
-    name: 'United Arab Emirates',
-    iso2: 'AE',
-    iso3: 'ARE',
-    numericCode: '784',
-    dialCode: '+971',
-    currencyCode: 'AED',
-    currencySymbol: 'د.إ',
-    nationality: 'Emirati',
-    sortOrder: 4,
-    isActive: true,
-    stateCount: 7,
-    cityCount: 25,
-    createdAt: new Date('2026-01-01'),
-    updatedAt: new Date('2026-01-01'),
-  },
-  {
-    id: 'c5555555-5555-5555-5555-555555555555',
-    organizationId: '11111111-1111-1111-1111-111111111111',
-    name: 'Saudi Arabia',
-    iso2: 'SA',
-    iso3: 'SAU',
-    numericCode: '682',
-    dialCode: '+966',
-    currencyCode: 'SAR',
-    currencySymbol: '﷼',
-    nationality: 'Saudi',
-    sortOrder: 5,
-    isActive: true,
-    stateCount: 13,
-    cityCount: 45,
-    createdAt: new Date('2026-01-01'),
-    updatedAt: new Date('2026-01-01'),
-  },
-];
+const TENANT_ID = '11111111-1111-1111-1111-111111111111';
+const USER_ID = '99999999-9999-9999-9999-999999999999';
 
 export default function CountriesPage() {
-  const [countriesList, setCountriesList] = useState<CountryListItemDto[]>(DEFAULT_COUNTRIES);
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [countries, setCountries] = useState<CountryListItemDto[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Modal States
-  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
-  const [isViewModalOpen, setIsViewModalOpen] = useState<boolean>(false);
+  // Search & Filter
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
+
+  // Modals state
+  const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [editingCountry, setEditingCountry] = useState<CountryListItemDto | null>(null);
   const [viewingCountry, setViewingCountry] = useState<CountryListItemDto | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
-  const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Delete modal state
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [countryToDelete, setCountryToDelete] = useState<CountryListItemDto | null>(null);
+  const [deleteDeps, setDeleteDeps] = useState<GeographyDependenciesDto | null>(null);
+  const [loadingDeps, setLoadingDeps] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Form State
   const [formData, setFormData] = useState<CreateCountryDto>({
@@ -125,39 +55,48 @@ export default function CountriesPage() {
     sortOrder: 1,
     isActive: true,
   });
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const showNotification = (type: 'success' | 'error', message: string) => {
-    setNotification({ type, message });
-    setTimeout(() => setNotification(null), 3000);
-  };
+  // 1. Fetch Countries from real DB
+  const loadCountries = useCallback(async () => {
+    setLoading(true);
+    try {
+      const queryParams = new URLSearchParams();
+      if (searchQuery) queryParams.append('search', searchQuery);
+      if (statusFilter !== 'ALL') queryParams.append('status', statusFilter);
 
-  // KPI Calculations
-  const totalCount = countriesList.length;
-  const activeCount = useMemo(() => countriesList.filter((c) => c.isActive).length, [countriesList]);
+      const res = await fetch(`/api/geography/countries?${queryParams.toString()}`, {
+        headers: {
+          'x-tenant-id': TENANT_ID,
+          'x-user-id': USER_ID,
+        },
+      });
+
+      if (!res.ok) {
+        throw new Error(`Failed to fetch countries: ${res.statusText}`);
+      }
+      const data = await res.json();
+      setCountries(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Error fetching countries:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [searchQuery, statusFilter]);
+
+  useEffect(() => {
+    loadCountries();
+  }, [loadCountries]);
+
+  // Statistics
+  const totalCount = countries.length;
+  const activeCount = useMemo(() => countries.filter((c) => c.isActive).length, [countries]);
   const inactiveCount = totalCount - activeCount;
 
-  // Filtered List
-  const filteredCountries = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    return countriesList.filter((c) => {
-      if (statusFilter !== 'ALL') {
-        const wantActive = statusFilter === 'ACTIVE';
-        if (c.isActive !== wantActive) return false;
-      }
-      if (!query) return true;
-      return (
-        c.name.toLowerCase().includes(query) ||
-        c.iso2.toLowerCase().includes(query) ||
-        (c.iso3 && c.iso3.toLowerCase().includes(query)) ||
-        (c.dialCode && c.dialCode.toLowerCase().includes(query)) ||
-        (c.currencyCode && c.currencyCode.toLowerCase().includes(query))
-      );
-    });
-  }, [countriesList, searchQuery, statusFilter]);
-
-  const openCreateModal = () => {
+  // Open Form for Add
+  const handleOpenAddModal = () => {
     setEditingCountry(null);
-    const maxSort = countriesList.reduce((max, c) => Math.max(max, c.sortOrder || 0), 0);
     setFormData({
       name: '',
       iso2: '',
@@ -167,62 +106,117 @@ export default function CountriesPage() {
       currencyCode: '',
       currencySymbol: '',
       nationality: '',
-      sortOrder: maxSort + 1,
+      sortOrder: (totalCount + 1) * 10,
       isActive: true,
     });
     setFormErrors({});
-    setIsModalOpen(true);
+    setIsFormModalOpen(true);
   };
 
-  const openEditModal = (country: CountryListItemDto) => {
-    setEditingCountry(country);
+  // Open Form for Edit
+  const handleOpenEditModal = (c: CountryListItemDto) => {
+    setEditingCountry(c);
     setFormData({
-      name: country.name,
-      iso2: country.iso2,
-      iso3: country.iso3 || '',
-      numericCode: country.numericCode || '',
-      dialCode: country.dialCode || '',
-      currencyCode: country.currencyCode || '',
-      currencySymbol: country.currencySymbol || '',
-      nationality: country.nationality || '',
-      sortOrder: country.sortOrder,
-      isActive: country.isActive,
+      name: c.name,
+      iso2: c.iso2,
+      iso3: c.iso3 || '',
+      numericCode: c.numericCode || '',
+      dialCode: c.dialCode || '',
+      currencyCode: c.currencyCode || '',
+      currencySymbol: c.currencySymbol || '',
+      nationality: c.nationality || '',
+      sortOrder: c.sortOrder,
+      isActive: c.isActive,
     });
     setFormErrors({});
-    setIsModalOpen(true);
+    setIsFormModalOpen(true);
   };
 
-  const openViewModal = (country: CountryListItemDto) => {
-    setViewingCountry(country);
-    setIsViewModalOpen(true);
+  // View Details
+  const handleOpenViewModal = (c: CountryListItemDto) => {
+    setViewingCountry(c);
   };
 
-  const handleToggleStatus = (country: CountryListItemDto) => {
-    const updated = countriesList.map((c) =>
-      c.id === country.id ? { ...c, isActive: !c.isActive, updatedAt: new Date() } : c
-    );
-    setCountriesList(updated);
-    showNotification(
-      'success',
-      `Country '${country.name}' ${country.isActive ? 'deactivated' : 'activated'} successfully.`
-    );
+  // Toggle Status
+  const handleToggleStatus = async (c: CountryListItemDto) => {
+    try {
+      const res = await fetch(`/api/geography/countries/${c.id}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-id': TENANT_ID,
+          'x-user-id': USER_ID,
+        },
+        body: JSON.stringify({ isActive: !c.isActive }),
+      });
+      if (res.ok) {
+        loadCountries();
+      }
+    } catch (err) {
+      console.error('Failed to toggle status:', err);
+    }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Open Delete Modal
+  const handleOpenDeleteModal = async (c: CountryListItemDto) => {
+    setCountryToDelete(c);
+    setIsDeleteModalOpen(true);
+    setLoadingDeps(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/geography/countries/${c.id}/dependencies`, {
+        headers: {
+          'x-tenant-id': TENANT_ID,
+          'x-user-id': USER_ID,
+        },
+      });
+      if (res.ok) {
+        const deps = await res.json();
+        setDeleteDeps(deps);
+      } else {
+        throw new Error('Failed to inspect country dependencies');
+      }
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Error checking dependencies');
+    } finally {
+      setLoadingDeps(false);
+    }
+  };
+
+  // Execute Safe Delete
+  const handleConfirmDelete = async () => {
+    if (!countryToDelete) return;
+    setIsSubmitting(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/geography/countries/${countryToDelete.id}`, {
+        method: 'DELETE',
+        headers: {
+          'x-tenant-id': TENANT_ID,
+          'x-user-id': USER_ID,
+        },
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.message || 'Failed to delete country');
+      }
+      setIsDeleteModalOpen(false);
+      setCountryToDelete(null);
+      loadCountries();
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Error deleting country');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Form Submit (Create / Edit)
+  const handleSubmitForm = async (e: React.FormEvent) => {
     e.preventDefault();
     const errors: Record<string, string> = {};
-
-    if (!formData.name.trim()) errors.name = 'Country name is required.';
-    if (!formData.iso2.trim()) errors.iso2 = 'ISO Alpha-2 code is required.';
-    else if (formData.iso2.trim().length !== 2) errors.iso2 = 'ISO-2 code must be exactly 2 characters.';
-
-    // Duplicate ISO2 check
-    const duplicate = countriesList.find(
-      (c) =>
-        c.iso2.toUpperCase() === formData.iso2.trim().toUpperCase() &&
-        (!editingCountry || c.id !== editingCountry.id)
-    );
-    if (duplicate) errors.iso2 = `Country with ISO-2 code '${formData.iso2.toUpperCase()}' already exists.`;
+    if (!formData.name?.trim()) errors.name = 'Country name is required.';
+    if (!formData.iso2?.trim()) errors.iso2 = 'ISO Alpha-2 code is required.';
+    else if (formData.iso2.trim().length !== 2) errors.iso2 = 'ISO Alpha-2 code must be exactly 2 letters.';
 
     if (Object.keys(errors).length > 0) {
       setFormErrors(errors);
@@ -230,141 +224,102 @@ export default function CountriesPage() {
     }
 
     setIsSubmitting(true);
-    setTimeout(() => {
-      if (editingCountry) {
-        setCountriesList((prev) =>
-          prev.map((c) =>
-            c.id === editingCountry.id
-              ? {
-                  ...c,
-                  name: formData.name.trim(),
-                  iso2: formData.iso2.trim().toUpperCase(),
-                  iso3: formData.iso3?.trim().toUpperCase() || null,
-                  numericCode: formData.numericCode?.trim() || null,
-                  dialCode: formData.dialCode?.trim() || null,
-                  currencyCode: formData.currencyCode?.trim().toUpperCase() || null,
-                  currencySymbol: formData.currencySymbol?.trim() || null,
-                  nationality: formData.nationality?.trim() || null,
-                  sortOrder: Number(formData.sortOrder) || 1,
-                  isActive: formData.isActive ?? true,
-                  updatedAt: new Date(),
-                }
-              : c
-          )
-        );
-        showNotification('success', `Country '${formData.name}' updated successfully.`);
-      } else {
-        const newCountry: CountryListItemDto = {
-          id: `c_${Date.now()}`,
-          organizationId: '11111111-1111-1111-1111-111111111111',
-          name: formData.name.trim(),
-          iso2: formData.iso2.trim().toUpperCase(),
-          iso3: formData.iso3?.trim().toUpperCase() || null,
-          numericCode: formData.numericCode?.trim() || null,
-          dialCode: formData.dialCode?.trim() || null,
-          currencyCode: formData.currencyCode?.trim().toUpperCase() || null,
-          currencySymbol: formData.currencySymbol?.trim() || null,
-          nationality: formData.nationality?.trim() || null,
-          sortOrder: Number(formData.sortOrder) || 1,
-          isActive: formData.isActive ?? true,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
-        setCountriesList((prev) => [...prev, newCountry].sort((a, b) => a.sortOrder - b.sortOrder));
-        showNotification('success', `Country '${formData.name}' created successfully.`);
+    try {
+      const url = editingCountry
+        ? `/api/geography/countries/${editingCountry.id}`
+        : '/api/geography/countries';
+      const method = editingCountry ? 'PATCH' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-id': TENANT_ID,
+          'x-user-id': USER_ID,
+        },
+        body: JSON.stringify(formData),
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.message || 'Failed to save country');
       }
+
+      setIsFormModalOpen(false);
+      loadCountries();
+    } catch (err) {
+      setFormErrors({ submit: err instanceof Error ? err.message : 'Failed to save country' });
+    } finally {
       setIsSubmitting(false);
-      setIsModalOpen(false);
-    }, 200);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50/50 dark:bg-slate-950 p-6 space-y-6 max-w-7xl mx-auto">
-      {/* Toast Notification */}
-      {notification && (
-        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white dark:bg-white dark:text-slate-900 px-4 py-2.5 rounded-xl shadow-xl text-xs font-semibold flex items-center gap-2 animate-in fade-in">
-          <span>{notification.type === 'success' ? '✅' : '❌'}</span>
-          <span>{notification.message}</span>
-        </div>
-      )}
-
-      {/* ── 1. Page Header ─────────────────────────────────────────── */}
+    <div className="p-4 sm:p-6 space-y-6 max-w-7xl mx-auto">
+      {/* 1. Header */}
       <AdminConfigPageHeader
-        section="Administration Configuration"
-        group="Location & Geography"
-        title="Countries"
-        description="Manage international sovereign countries, ISO codes, dial codes, and currency standards."
+        title="Location & Geography — Sovereign Countries"
+        description="Manage sovereign country masters, ISO codes, currencies, and global phone standards."
         categoryNav={LOCATION_GEOGRAPHY_NAV}
         actionButtonText="+ Add Country"
-        onAction={openCreateModal}
+        onAction={handleOpenAddModal}
       />
 
-      {/* ── 2. KPI Cards ───────────────────────────────────────────── */}
+      {/* 2. Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm flex items-center gap-4">
-          <div className="h-11 w-11 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-100 dark:border-indigo-900 flex items-center justify-center text-xl">
-            🌍
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Countries</p>
-            <p className="text-2xl font-bold text-slate-900 dark:text-white mt-0.5">{totalCount}</p>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm flex items-center gap-4">
-          <div className="h-11 w-11 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-100 dark:border-emerald-900 flex items-center justify-center text-xl">
-            ✅
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Active</p>
-            <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">{activeCount}</p>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm flex items-center gap-4">
-          <div className="h-11 w-11 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-xl">
-            ⏸️
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Inactive</p>
-            <p className="text-2xl font-bold text-slate-600 dark:text-slate-400 mt-0.5">{inactiveCount}</p>
-          </div>
-        </div>
+        <StatCard
+          label="Total Sovereign Countries"
+          value={totalCount}
+          icon={<Globe className="w-5 h-5 text-indigo-500" />}
+          variant="primary"
+        />
+        <StatCard
+          label="Active Countries"
+          value={activeCount}
+          icon={<CheckCircle2 className="w-5 h-5 text-emerald-500" />}
+          variant="success"
+        />
+        <StatCard
+          label="Inactive / Archived"
+          value={inactiveCount}
+          icon={<AlertCircle className="w-5 h-5 text-slate-400" />}
+          variant="default"
+        />
       </div>
 
-      {/* ── 3. Search & Filter Bar ─────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-        <div className="relative flex-1">
-          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span>
+      {/* 3. Search and Filters */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white dark:bg-slate-900 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+        <div className="relative w-full sm:w-80">
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
+            placeholder="Search by country name, ISO, or dial code..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by country name, ISO code, dial code, currency..."
-            className="w-full pl-9 pr-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+            className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none"
           />
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+            onChange={(e) => setStatusFilter(e.target.value as any)}
+            className="w-full sm:w-auto px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-700 dark:text-slate-300 focus:outline-none"
           >
-            <option value="ALL">All Statuses ({totalCount})</option>
-            <option value="ACTIVE">Active ({activeCount})</option>
-            <option value="INACTIVE">Inactive ({inactiveCount})</option>
+            <option value="ALL">All Statuses</option>
+            <option value="ACTIVE">Active Only</option>
+            <option value="INACTIVE">Inactive Only</option>
           </select>
         </div>
       </div>
 
-      {/* ── 4. Main Data Table ─────────────────────────────────────── */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+      {/* 4. Table */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/75 dark:bg-slate-950/75 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                <th className="py-3 px-4 w-16 text-center">Sort</th>
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-50 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 font-semibold text-slate-600 dark:text-slate-400">
+              <tr>
+                <th className="py-3 px-4">Sort</th>
                 <th className="py-3 px-4">Country Name</th>
                 <th className="py-3 px-4">ISO-2 / ISO-3</th>
                 <th className="py-3 px-4">Dial Code</th>
@@ -374,89 +329,65 @@ export default function CountriesPage() {
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
-              {filteredCountries.length > 0 ? (
-                filteredCountries.map((country) => (
-                  <tr key={country.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                    <td className="py-3 px-4 text-center">
-                      <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
-                        #{country.sortOrder}
-                      </span>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-800 dark:text-slate-200">
+              {loading ? (
+                <tr>
+                  <td colSpan={8} className="py-12 text-center text-slate-400">
+                    <div className="flex items-center justify-center gap-2">
+                      <RefreshCw className="w-4 h-4 animate-spin text-indigo-500" />
+                      <span>Loading canonical countries...</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : countries.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-12 text-center text-slate-400">
+                    No countries found matching your criteria.
+                  </td>
+                </tr>
+              ) : (
+                countries.map((c) => (
+                  <tr key={c.id} className="hover:bg-slate-50/75 dark:hover:bg-slate-800/50 transition-colors">
+                    <td className="py-3 px-4 text-slate-400 font-mono">{c.sortOrder}</td>
+                    <td className="py-3 px-4 font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                      <Globe className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                      {c.name}
                     </td>
-                    <td className="py-3 px-4 font-bold text-slate-900 dark:text-white">
-                      {country.name}
+                    <td className="py-3 px-4 font-mono font-medium text-indigo-600 dark:text-indigo-400">
+                      {c.iso2} {c.iso3 ? `(${c.iso3})` : ''}
                     </td>
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-1.5 font-mono">
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">
-                          {country.iso2}
-                        </span>
-                        {country.iso3 && (
-                          <span className="text-[10px] text-slate-400">({country.iso3})</span>
-                        )}
-                      </div>
+                    <td className="py-3 px-4 font-mono text-slate-600 dark:text-slate-400">
+                      {c.dialCode || '—'}
                     </td>
-                    <td className="py-3 px-4 font-mono text-slate-700 dark:text-slate-300">
-                      {country.dialCode || '—'}
-                    </td>
-                    <td className="py-3 px-4 font-mono text-slate-700 dark:text-slate-300">
-                      {country.currencyCode ? `${country.currencyCode} (${country.currencySymbol || ''})` : '—'}
+                    <td className="py-3 px-4 text-slate-700 dark:text-slate-300">
+                      {c.currencyCode ? `${c.currencyCode} (${c.currencySymbol || ''})` : '—'}
                     </td>
                     <td className="py-3 px-4 text-slate-600 dark:text-slate-400">
-                      {country.nationality || '—'}
+                      {c.nationality || '—'}
                     </td>
                     <td className="py-3 px-4 text-center">
                       <button
                         type="button"
-                        onClick={() => handleToggleStatus(country)}
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer ${
-                          country.isActive
-                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100'
-                            : 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800 hover:bg-rose-100'
-                        }`}
-                        title="Toggle Active/Inactive"
+                        onClick={() => handleToggleStatus(c)}
+                        title="Click to toggle status"
+                        className="cursor-pointer"
                       >
-                        <span className={`h-1.5 w-1.5 rounded-full ${country.isActive ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                        <span>{country.isActive ? 'Active' : 'Inactive'}</span>
+                        <StatusBadge status={c.isActive ? 'ACTIVE' : 'INACTIVE'} />
                       </button>
                     </td>
                     <td className="py-3 px-4 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => openViewModal(country)}
-                          className="px-2.5 py-1 text-xs font-medium rounded-md border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
-                        >
-                          View
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => openEditModal(country)}
-                          className="px-2.5 py-1 text-xs font-medium rounded-md bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 border border-indigo-200 dark:border-indigo-800 transition-colors cursor-pointer"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleToggleStatus(country)}
-                          className={`px-2.5 py-1 text-xs font-medium rounded-md border transition-colors cursor-pointer ${
-                            country.isActive
-                              ? 'border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50'
-                              : 'border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50'
-                          }`}
-                        >
-                          {country.isActive ? 'Deactivate' : 'Activate'}
-                        </button>
-                      </div>
+                      <RowActions>
+                        <ViewAction onClick={() => handleOpenViewModal(c)} />
+                        <EditAction onClick={() => handleOpenEditModal(c)} />
+                        <StatusAction
+                          status={c.isActive ? 'ACTIVE' : 'INACTIVE'}
+                          onClick={() => handleToggleStatus(c)}
+                        />
+                        <DeleteAction onClick={() => handleOpenDeleteModal(c)} />
+                      </RowActions>
                     </td>
                   </tr>
                 ))
-              ) : (
-                <tr>
-                  <td colSpan={8} className="py-8 text-center text-slate-400 text-xs">
-                    No countries found matching your search.
-                  </td>
-                </tr>
               )}
             </tbody>
           </table>
@@ -464,267 +395,293 @@ export default function CountriesPage() {
       </div>
 
       {/* ── 5. Add / Edit Modal ────────────────────────────────────── */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="relative z-10 w-full max-w-xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="flex items-center justify-between p-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50">
-              <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                  {editingCountry ? `Edit Country: ${editingCountry.name}` : 'Add New Country'}
-                </h3>
-                <p className="text-xs text-slate-500">Configure sovereign country ISO standards and currency.</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsModalOpen(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-              >
-                ✕
-              </button>
+      <AdminModal
+        isOpen={isFormModalOpen}
+        onClose={() => setIsFormModalOpen(false)}
+        title={editingCountry ? `Edit Country: ${editingCountry.name}` : 'Add Sovereign Country'}
+        subtitle="Configure sovereign country ISO standards, dial codes, and currency."
+        maxWidth="lg"
+      >
+        <form onSubmit={handleSubmitForm} className="p-5 space-y-4 text-xs">
+          {formErrors.submit && (
+            <div className="p-3 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 rounded-xl text-rose-600 dark:text-rose-400">
+              {formErrors.submit}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="sm:col-span-2 space-y-1">
+              <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                Country Name <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="e.g. Pakistan, United States"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+              />
+              {formErrors.name && <p className="text-rose-500 text-[10px]">{formErrors.name}</p>}
             </div>
 
-            <form onSubmit={handleSubmit} className="p-5 space-y-4 overflow-y-auto max-h-[65vh] text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="sm:col-span-2 space-y-1">
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300">
-                    Country Name <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="e.g. Pakistan, United States"
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                  />
-                  {formErrors.name && <p className="text-rose-500 text-[10px]">{formErrors.name}</p>}
-                </div>
+            <div className="space-y-1">
+              <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                ISO Alpha-2 Code <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="text"
+                maxLength={2}
+                value={formData.iso2}
+                onChange={(e) => setFormData({ ...formData, iso2: e.target.value.toUpperCase() })}
+                placeholder="e.g. PK, US, GB"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-mono uppercase"
+              />
+              {formErrors.iso2 && <p className="text-rose-500 text-[10px]">{formErrors.iso2}</p>}
+            </div>
 
-                <div className="space-y-1">
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300">
-                    ISO Alpha-2 Code <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    maxLength={2}
-                    value={formData.iso2}
-                    onChange={(e) => setFormData({ ...formData, iso2: e.target.value.toUpperCase() })}
-                    placeholder="e.g. PK, US, GB"
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono uppercase text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                  />
-                  {formErrors.iso2 && <p className="text-rose-500 text-[10px]">{formErrors.iso2}</p>}
-                </div>
+            <div className="space-y-1">
+              <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                ISO Alpha-3 Code
+              </label>
+              <input
+                type="text"
+                maxLength={3}
+                value={formData.iso3 || ''}
+                onChange={(e) => setFormData({ ...formData, iso3: e.target.value.toUpperCase() })}
+                placeholder="e.g. PAK, USA, GBR"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-mono uppercase"
+              />
+            </div>
 
-                <div className="space-y-1">
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300">
-                    ISO Alpha-3 Code
-                  </label>
-                  <input
-                    type="text"
-                    maxLength={3}
-                    value={formData.iso3 || ''}
-                    onChange={(e) => setFormData({ ...formData, iso3: e.target.value.toUpperCase() })}
-                    placeholder="e.g. PAK, USA, GBR"
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono uppercase text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                  />
-                </div>
+            <div className="space-y-1">
+              <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                Dial Code
+              </label>
+              <input
+                type="text"
+                value={formData.dialCode || ''}
+                onChange={(e) => setFormData({ ...formData, dialCode: e.target.value })}
+                placeholder="e.g. +92, +1"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-mono"
+              />
+            </div>
 
-                <div className="space-y-1">
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300">
-                    Dial Code
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.dialCode || ''}
-                    onChange={(e) => setFormData({ ...formData, dialCode: e.target.value })}
-                    placeholder="e.g. +92, +1, +44"
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                  />
-                </div>
+            <div className="space-y-1">
+              <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                Numeric Code
+              </label>
+              <input
+                type="text"
+                value={formData.numericCode || ''}
+                onChange={(e) => setFormData({ ...formData, numericCode: e.target.value })}
+                placeholder="e.g. 586, 840"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-mono"
+              />
+            </div>
 
-                <div className="space-y-1">
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300">
-                    Currency Code
-                  </label>
-                  <input
-                    type="text"
-                    maxLength={10}
-                    value={formData.currencyCode || ''}
-                    onChange={(e) => setFormData({ ...formData, currencyCode: e.target.value.toUpperCase() })}
-                    placeholder="e.g. PKR, USD, GBP"
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono uppercase text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                  />
-                </div>
+            <div className="space-y-1">
+              <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                Currency Code
+              </label>
+              <input
+                type="text"
+                maxLength={3}
+                value={formData.currencyCode || ''}
+                onChange={(e) => setFormData({ ...formData, currencyCode: e.target.value.toUpperCase() })}
+                placeholder="e.g. PKR, USD"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-mono uppercase"
+              />
+            </div>
 
-                <div className="space-y-1">
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300">
-                    Currency Symbol
-                  </label>
-                  <input
-                    type="text"
-                    maxLength={10}
-                    value={formData.currencySymbol || ''}
-                    onChange={(e) => setFormData({ ...formData, currencySymbol: e.target.value })}
-                    placeholder="e.g. Rs, $, £, د.إ"
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                  />
-                </div>
+            <div className="space-y-1">
+              <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                Currency Symbol
+              </label>
+              <input
+                type="text"
+                value={formData.currencySymbol || ''}
+                onChange={(e) => setFormData({ ...formData, currencySymbol: e.target.value })}
+                placeholder="e.g. Rs, $, £"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
+              />
+            </div>
 
-                <div className="space-y-1">
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300">
-                    Nationality Name
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.nationality || ''}
-                    onChange={(e) => setFormData({ ...formData, nationality: e.target.value })}
-                    placeholder="e.g. Pakistani, American"
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                  />
-                </div>
+            <div className="space-y-1">
+              <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                Nationality
+              </label>
+              <input
+                type="text"
+                value={formData.nationality || ''}
+                onChange={(e) => setFormData({ ...formData, nationality: e.target.value })}
+                placeholder="e.g. Pakistani, American"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
+              />
+            </div>
 
-                <div className="space-y-1">
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300">
-                    Sort Order
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={formData.sortOrder}
-                    onChange={(e) => setFormData({ ...formData, sortOrder: Number(e.target.value) })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300">
-                    Status
-                  </label>
-                  <select
-                    value={formData.isActive ? 'ACTIVE' : 'INACTIVE'}
-                    onChange={(e) => setFormData({ ...formData, isActive: e.target.value === 'ACTIVE' })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs focus:ring-2 focus:ring-indigo-500/20"
-                  >
-                    <option value="ACTIVE">Active</option>
-                    <option value="INACTIVE">Inactive</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-100 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-sm transition-colors cursor-pointer disabled:opacity-60"
-                >
-                  {isSubmitting ? 'Saving...' : editingCountry ? 'Save Changes' : 'Create Country'}
-                </button>
-              </div>
-            </form>
+            <div className="space-y-1">
+              <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                Sort Order
+              </label>
+              <input
+                type="number"
+                value={formData.sortOrder || 1}
+                onChange={(e) => setFormData({ ...formData, sortOrder: parseInt(e.target.value) || 1 })}
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-mono"
+              />
+            </div>
           </div>
-        </div>
-      )}
+
+          <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-100 dark:border-slate-800">
+            <button
+              type="button"
+              onClick={() => setIsFormModalOpen(false)}
+              className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl disabled:opacity-50"
+            >
+              {isSubmitting ? 'Saving...' : editingCountry ? 'Update Country' : 'Create Country'}
+            </button>
+          </div>
+        </form>
+      </AdminModal>
 
       {/* ── 6. View Details Modal ──────────────────────────────────── */}
-      {isViewModalOpen && viewingCountry && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="relative z-10 w-full max-w-lg bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[85vh]">
-            <div className="flex items-start justify-between p-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50">
+      {viewingCountry && (
+        <AdminModal
+          isOpen={!!viewingCountry}
+          onClose={() => setViewingCountry(null)}
+          title={`Country Details: ${viewingCountry.name}`}
+          subtitle="Authoritative canonical sovereign country master record."
+          maxWidth="lg"
+        >
+          <div className="p-6 space-y-6 text-xs">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 p-4 bg-slate-50 dark:bg-slate-950 rounded-2xl border border-slate-200/60 dark:border-slate-800/60">
               <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">
-                    {viewingCountry.iso2}
-                  </span>
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                    viewingCountry.isActive
-                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                      : 'bg-rose-50 text-rose-700 border border-rose-200'
-                  }`}>
-                    {viewingCountry.isActive ? 'Active' : 'Inactive'}
-                  </span>
-                </div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">{viewingCountry.name}</h3>
+                <span className="text-[10px] text-slate-400 uppercase tracking-wider block">ISO Alpha-2</span>
+                <span className="font-mono font-bold text-sm text-indigo-600 dark:text-indigo-400">{viewingCountry.iso2}</span>
               </div>
-              <button
-                type="button"
-                onClick={() => setIsViewModalOpen(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-              >
-                ✕
-              </button>
+              <div>
+                <span className="text-[10px] text-slate-400 uppercase tracking-wider block">ISO Alpha-3</span>
+                <span className="font-mono font-bold text-sm">{viewingCountry.iso3 || '—'}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 uppercase tracking-wider block">Dial Code</span>
+                <span className="font-mono font-bold text-sm">{viewingCountry.dialCode || '—'}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 uppercase tracking-wider block">Numeric Code</span>
+                <span className="font-mono font-bold text-sm">{viewingCountry.numericCode || '—'}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 uppercase tracking-wider block">Currency</span>
+                <span className="font-semibold text-sm">{viewingCountry.currencyCode ? `${viewingCountry.currencyCode} (${viewingCountry.currencySymbol || ''})` : '—'}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 uppercase tracking-wider block">Nationality</span>
+                <span className="font-semibold text-sm">{viewingCountry.nationality || '—'}</span>
+              </div>
             </div>
 
-            <div className="p-5 space-y-3 overflow-y-auto max-h-[60vh] text-xs">
-              <div className="grid grid-cols-2 gap-2.5">
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950/40 border border-slate-100 dark:border-slate-800">
-                  <p className="text-[10px] font-semibold text-slate-400 uppercase">ISO Alpha-3</p>
-                  <p className="text-sm font-bold text-slate-800 dark:text-slate-200 font-mono mt-0.5">
-                    {viewingCountry.iso3 || '—'}
-                  </p>
-                </div>
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950/40 border border-slate-100 dark:border-slate-800">
-                  <p className="text-[10px] font-semibold text-slate-400 uppercase">Dial Code</p>
-                  <p className="text-sm font-bold text-slate-800 dark:text-slate-200 font-mono mt-0.5">
-                    {viewingCountry.dialCode || '—'}
-                  </p>
-                </div>
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950/40 border border-slate-100 dark:border-slate-800">
-                  <p className="text-[10px] font-semibold text-slate-400 uppercase">Currency</p>
-                  <p className="text-sm font-bold text-slate-800 dark:text-slate-200 font-mono mt-0.5">
-                    {viewingCountry.currencyCode ? `${viewingCountry.currencyCode} (${viewingCountry.currencySymbol || ''})` : '—'}
-                  </p>
-                </div>
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950/40 border border-slate-100 dark:border-slate-800">
-                  <p className="text-[10px] font-semibold text-slate-400 uppercase">Nationality</p>
-                  <p className="text-sm font-bold text-slate-800 dark:text-slate-200 mt-0.5">
-                    {viewingCountry.nationality || '—'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="p-3 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/40 flex items-center justify-between">
+            <div className="space-y-2">
+              <h4 className="font-bold text-slate-900 dark:text-white">Master Configuration</h4>
+              <div className="grid grid-cols-2 gap-3 p-3.5 bg-slate-50/50 dark:bg-slate-950/50 rounded-xl border border-slate-100 dark:border-slate-800">
                 <div>
-                  <p className="text-[10px] font-semibold text-indigo-600 uppercase">Sort Sequence</p>
-                  <p className="text-base font-bold text-indigo-700 dark:text-indigo-300 font-mono">
-                    #{viewingCountry.sortOrder}
-                  </p>
+                  <span className="text-slate-500 block">Record UUID:</span>
+                  <span className="font-mono text-[11px] text-slate-700 dark:text-slate-300 select-all">{viewingCountry.id}</span>
                 </div>
-                <div className="text-right">
-                  <p className="text-[10px] font-semibold text-slate-400 uppercase">Last Updated</p>
-                  <p className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                    {new Date(viewingCountry.updatedAt).toLocaleDateString()}
-                  </p>
+                <div>
+                  <span className="text-slate-500 block">Sort Order:</span>
+                  <span className="font-semibold">{viewingCountry.sortOrder}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block">Operational Status:</span>
+                  <StatusBadge status={viewingCountry.isActive ? 'ACTIVE' : 'INACTIVE'} />
                 </div>
               </div>
             </div>
 
-            <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex items-center justify-end gap-2">
+            <div className="flex justify-end pt-3 border-t border-slate-100 dark:border-slate-800">
               <button
                 type="button"
-                onClick={() => {
-                  setIsViewModalOpen(false);
-                  openEditModal(viewingCountry);
-                }}
-                className="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-sm transition-colors cursor-pointer"
-              >
-                Edit Country
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsViewModalOpen(false)}
-                className="px-4 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                onClick={() => setViewingCountry(null)}
+                className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-xl font-medium"
               >
                 Close
               </button>
             </div>
           </div>
-        </div>
+        </AdminModal>
+      )}
+
+      {/* ── 7. Safe Delete Modal ────────────────────────────────────── */}
+      {isDeleteModalOpen && countryToDelete && (
+        <AdminModal
+          isOpen={isDeleteModalOpen}
+          onClose={() => setIsDeleteModalOpen(false)}
+          title={`Delete Country: ${countryToDelete.name}`}
+          subtitle="Dependency breakdown check before deletion."
+          maxWidth="md"
+        >
+          <div className="p-6 space-y-4 text-xs">
+            {loadingDeps ? (
+              <div className="py-8 text-center text-slate-400">
+                <RefreshCw className="w-5 h-5 animate-spin mx-auto text-indigo-500 mb-2" />
+                <span>Checking linked records and dependencies...</span>
+              </div>
+            ) : deleteDeps ? (
+              <>
+                {deleteDeps.canDelete ? (
+                  <div className="p-4 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 rounded-xl text-emerald-800 dark:text-emerald-200">
+                    <p className="font-semibold">Safe to Delete</p>
+                    <p className="text-[11px] mt-1">This country master has 0 active dependencies and can be safely deleted.</p>
+                  </div>
+                ) : (
+                  <div className="p-4 bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 rounded-xl text-amber-900 dark:text-amber-200 space-y-2">
+                    <div className="flex items-center gap-2 font-bold text-amber-800 dark:text-amber-300">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                      <span>Deletion Blocked — Active Dependencies Exist</span>
+                    </div>
+                    <ul className="list-disc pl-5 space-y-1 text-[11px]">
+                      {deleteDeps.reasons.map((r, i) => (
+                        <li key={i}>{r}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {deleteError && (
+                  <div className="p-3 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 rounded-xl text-rose-600 dark:text-rose-400">
+                    {deleteError}
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-100 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setIsDeleteModalOpen(false)}
+                    className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmDelete}
+                    disabled={!deleteDeps.canDelete || isSubmitting}
+                    className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-medium rounded-xl disabled:opacity-40"
+                  >
+                    {isSubmitting ? 'Deleting...' : 'Confirm Delete'}
+                  </button>
+                </div>
+              </>
+            ) : null}
+          </div>
+        </AdminModal>
       )}
     </div>
   );

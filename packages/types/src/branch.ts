@@ -1,3 +1,14 @@
+import { UserSummaryDto } from './head-office.js';
+import { ProvisionAccountDto, LinkedAccountSummaryDto } from './iam.js';
+
+export enum BranchPermissions {
+  CREATE = 'BRANCH_CREATE',
+  VIEW = 'BRANCH_VIEW',
+  EDIT = 'BRANCH_EDIT',
+  STATUS_CHANGE = 'BRANCH_STATUS_CHANGE',
+  DELETE = 'BRANCH_DELETE',
+}
+
 /**
  * Branch DTOs & Interfaces
  */
@@ -23,17 +34,23 @@ export interface CreateBranchDto {
   email?: string;
   website?: string;
   country?: string;
+  countryId?: string | null;
   province?: string;
+  stateId?: string | null;
   city?: string;
+  cityId?: string | null;
   area?: string;
+  areaId?: string | null;
   address?: string;
   postalCode?: string;
   notes?: string;
   status?: boolean; // isActive
   adminUser?: CreateBranchAdminUserDto;
+  account?: ProvisionAccountDto;
 }
 
 export interface UpdateBranchDto {
+  schoolId?: string;
   name?: string;
   shortName?: string;
   description?: string;
@@ -44,13 +61,18 @@ export interface UpdateBranchDto {
   email?: string;
   website?: string;
   country?: string;
+  countryId?: string | null;
   province?: string;
+  stateId?: string | null;
   city?: string;
+  cityId?: string | null;
   area?: string;
+  areaId?: string | null;
   address?: string;
   postalCode?: string;
   notes?: string;
   isActive?: boolean;
+  account?: ProvisionAccountDto;
 }
 
 export interface ReorderBranchesDto {
@@ -71,6 +93,8 @@ export interface BranchListItemDto {
   schoolId: string;
   schoolName: string;
   schoolCode: string;
+  headOfficeName?: string | null;
+  regionName?: string | null;
   code: string;
   name: string;
   shortName?: string | null;
@@ -78,12 +102,21 @@ export interface BranchListItemDto {
   logoUrl?: string | null;
   phone?: string | null;
   email?: string | null;
-  city?: string | null;
-  province?: string | null;
   country?: string | null;
+  countryId?: string | null;
+  province?: string | null;
+  stateId?: string | null;
+  city?: string | null;
+  cityId?: string | null;
+  area?: string | null;
+  areaId?: string | null;
   adminUsername?: string | null;
   adminEmail?: string | null;
   isActive: boolean;
+  createdBy?: string | null;
+  createdByUser?: UserSummaryDto | null;
+  updatedBy?: string | null;
+  updatedByUser?: UserSummaryDto | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -92,8 +125,22 @@ export interface BranchDetailDto extends BranchListItemDto {
   description?: string | null;
   alternatePhone?: string | null;
   website?: string | null;
-  area?: string | null;
   address?: string | null;
   postalCode?: string | null;
   notes?: string | null;
+  linkedAccount?: LinkedAccountSummaryDto | null;
+}
+
+export interface BranchDependenciesDto {
+  canDelete: boolean;
+  branchName: string;
+  branchCode: string;
+  totalDependencies: number;
+  reasons: string[];
+  breakdown: {
+    classes: number;
+    sections: number;
+    academicYears: number;
+    staffAssignments: number;
+  };
 }

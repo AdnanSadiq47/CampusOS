@@ -459,25 +459,49 @@ export default function PreAdmissionDetailPage() {
           <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
             <div>
               <h2 className="text-sm font-bold text-slate-900 dark:text-white">Assessment & Test Management</h2>
-              <p className="text-xs text-slate-400">Candidate examination scheduling and score recording.</p>
+              <p className="text-xs text-slate-400">Candidate examination scheduling, venue details, and score recording.</p>
             </div>
-            <span className="text-xs font-bold px-3 py-1 bg-blue-50 text-blue-700 rounded-full">
-              {application.testStatus || 'NOT_SCHEDULED'}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className={`text-xs font-bold px-3 py-1 rounded-full ${
+                application.testStatus === 'RESCHEDULED'
+                  ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                  : application.testStatus === 'SCHEDULED'
+                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                  : 'bg-blue-50 text-blue-700'
+              }`}>
+                {application.testStatus || 'NOT_SCHEDULED'}
+              </span>
+              <Link
+                href="/admissions/tests"
+                className="px-3 py-1 text-xs font-bold rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors"
+              >
+                View in Tests Module ›
+              </Link>
+            </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-xs">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
             <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700">
-              <span className="text-slate-400 text-[10px] block">Scheduled Test Date</span>
-              <span className="font-bold text-slate-800 dark:text-slate-200">{application.testDate || 'Pending Assignment'}</span>
+              <span className="text-slate-400 text-[10px] block uppercase font-semibold">Test Date & Time</span>
+              <span className="font-bold text-slate-800 dark:text-slate-200">
+                {application.testDate ? `${application.testDate} · 10:00 AM` : 'Pending Assignment'}
+              </span>
             </div>
             <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700">
-              <span className="text-slate-400 text-[10px] block">Venue / Room</span>
-              <span className="font-semibold text-slate-800 dark:text-slate-200">Main Hall / Room 204</span>
+              <span className="text-slate-400 text-[10px] block uppercase font-semibold">Examination Venue</span>
+              <span className="font-semibold text-slate-800 dark:text-slate-200">
+                {application.campusName} · Room 204
+              </span>
             </div>
             <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700">
-              <span className="text-slate-400 text-[10px] block">Recorded Outcome</span>
-              <span className="font-bold text-indigo-600">{application.testResult || 'Awaiting Test'}</span>
+              <span className="text-slate-400 text-[10px] block uppercase font-semibold">Test Mode</span>
+              <span className="font-semibold text-slate-800 dark:text-slate-200">
+                📄 Paper Based (90 Mins)
+              </span>
+            </div>
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700">
+              <span className="text-slate-400 text-[10px] block uppercase font-semibold">Recorded Outcome</span>
+              <span className="font-bold text-indigo-600">{application.testResult || 'Awaiting Assessment'}</span>
             </div>
           </div>
         </div>

@@ -28,6 +28,34 @@ export interface HierarchyNodeDTO {
   updatedAt: Date;
 }
 
+export type WorkingContextNodeType = 'HEAD_OFFICE' | 'REGION' | 'SCHOOL' | 'CAMPUS';
+
+export interface WorkingContextDto {
+  nodeId: string;
+  nodeType: WorkingContextNodeType;
+  nodeName: string;
+  nodeCode?: string;
+  subtitle?: string;
+  organizationId: string;
+  effectiveCampusIds?: string[];
+  effectiveSchoolIds?: string[];
+  effectiveRegionIds?: string[];
+  effectiveHeadOfficeIds?: string[];
+}
+
+export interface EffectiveScopeDto {
+  organizationId: string;
+  selectedNodeId: string;
+  selectedNodeType: WorkingContextNodeType;
+  nodeType?: WorkingContextNodeType;
+  selectedNodeName: string;
+  isAllCampuses: boolean;
+  effectiveCampusIds: string[];
+  effectiveSchoolIds: string[];
+  effectiveRegionIds: string[];
+  effectiveHeadOfficeIds: string[];
+}
+
 export const CreateHierarchyNodeTypeSchema = z.object({
   code: z.string().min(2).max(64),
   name: z.string().min(2).max(128),

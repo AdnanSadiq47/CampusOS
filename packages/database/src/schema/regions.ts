@@ -41,17 +41,24 @@ export const regions = pgTable('regions', {
   website: varchar('website', { length: 255 }),
 
   // ── Location ──────────────────────────────────────────────────────
+  country: varchar('country', { length: 128 }).default('Pakistan'),
   address: text('address'),
   area: varchar('area', { length: 128 }),
   city: varchar('city', { length: 128 }),
   province: varchar('province', { length: 128 }),
   postalCode: varchar('postal_code', { length: 32 }),
+  countryId: uuid('country_id'),
+  stateId: uuid('state_id'),
+  cityId: uuid('city_id'),
+  areaId: uuid('area_id'),
 
   // ── Configuration ─────────────────────────────────────────────────
   notes: text('notes'),
 
-  // ── Status ────────────────────────────────────────────────────────
+  // ── Status & Audit Standard (at END of table) ─────────────────────
   isActive: boolean('is_active').default(true).notNull(),
+  createdBy: uuid('created_by'),
+  updatedBy: uuid('updated_by'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });

@@ -19,8 +19,8 @@ export class TenantMiddleware implements NestMiddleware {
   constructor(private readonly tenantService: TenantService) {}
 
   async use(req: Request, _res: Response, next: NextFunction) {
-    // 1. Check header X-Organization-ID / X-Tenant-Code
-    const headerOrg = req.headers['x-organization-id'] || req.headers['x-tenant-code'];
+    // 1. Check header X-Organization-ID / X-Tenant-Code / x-tenant-id
+    const headerOrg = req.headers['x-organization-id'] || req.headers['x-tenant-code'] || req.headers['x-tenant-id'];
 
     // 2. Or parse subdomain from Host header
     let identifier: string | undefined = typeof headerOrg === 'string' ? headerOrg.trim() : undefined;

@@ -3,12 +3,17 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { Star, Zap } from 'lucide-react';
 import { useAdminPreferences, findConfigItemByRoute } from '../lib/use-admin-preferences';
 import { CONFIG_REGISTRY, ConfigItem } from '../lib/admin-config-registry';
+import { SectionNavigation } from './SectionNavigation';
+import { SECTION_NAV_REGISTRY } from '../lib/navigation-registry';
 
 export interface CategoryNavItem {
   label: string;
   href: string;
+  icon?: string;
+  soon?: boolean;
   active?: boolean;
 }
 
@@ -29,12 +34,42 @@ interface AdminConfigPageHeaderProps {
   children?: React.ReactNode;
 }
 
+// Standard category navigation sets derived from centralized navigation registry
+export const LOCATION_GEOGRAPHY_NAV: CategoryNavItem[] = SECTION_NAV_REGISTRY.location_geography.items.map((i) => ({
+  label: i.label,
+  href: i.href,
+  icon: i.icon,
+  soon: i.soon,
+}));
+
+export const ORGANIZATION_SETUP_NAV: CategoryNavItem[] = SECTION_NAV_REGISTRY.org_setup.items.map((i) => ({
+  label: i.label,
+  href: i.href,
+  icon: i.icon,
+  soon: i.soon,
+}));
+
+export const ACADEMIC_SETUP_NAV: CategoryNavItem[] = SECTION_NAV_REGISTRY.academic_setup.items.map((i) => ({
+  label: i.label,
+  href: i.href,
+  icon: i.icon,
+  soon: i.soon,
+}));
+
+export const FORMS_SETUP_NAV: CategoryNavItem[] = SECTION_NAV_REGISTRY.forms_setup.items.map((i) => ({
+  label: i.label,
+  href: i.href,
+  icon: i.icon,
+  soon: i.soon,
+}));
+
 // Map common group names to category filter keys in /admin-config
 const GROUP_TO_CATEGORY_KEY: Record<string, string> = {
   'Organization Setup': 'org_setup',
   'Location & Geography': 'location_geography',
   'Academic Setup': 'academic_setup',
   'Forms Setup': 'forms_setup',
+  'Forms & Admission Setup': 'forms_setup',
   'Student Setup': 'student_setup',
   'HR & Employee Setup': 'hr_setup',
   'Fee & Billing Setup': 'fee_billing_setup',
@@ -48,42 +83,10 @@ const GROUP_TO_CATEGORY_KEY: Record<string, string> = {
   'Users & Access': 'users_access',
 };
 
-// Standard category navigation sets
-export const LOCATION_GEOGRAPHY_NAV: CategoryNavItem[] = [
-  { label: 'Countries', href: '/admin-config/countries' },
-  { label: 'States / Provinces', href: '/admin-config/states' },
-  { label: 'Cities', href: '/admin-config/cities' },
-  { label: 'Areas / Zones', href: '/admin-config/areas' },
-];
-
-export const ORGANIZATION_SETUP_NAV: CategoryNavItem[] = [
-  { label: 'Head Offices', href: '/admin-config/head-offices' },
-  { label: 'Regional Offices', href: '/admin-config/regions' },
-  { label: 'School Types', href: '/admin-config/school-types' },
-  { label: 'Schools', href: '/admin-config/schools' },
-  { label: 'Branches / Campuses', href: '/admin-config/branches' },
-];
-
-export const ACADEMIC_SETUP_NAV: CategoryNavItem[] = [
-  { label: 'Academic Years', href: '/admin-config/academic-years' },
-  { label: 'Boards', href: '/admin-config/boards' },
-  { label: 'Academic Levels / Stages', href: '/admin-config/academic-levels' },
-  { label: 'Subjects', href: '/admin-config/subjects' },
-  { label: 'Classes / Grades', href: '/admin-config/classes' },
-  { label: 'Sections', href: '/admin-config/sections' },
-  { label: 'Languages', href: '/admin-config/languages' },
-];
-
-export const FORMS_SETUP_NAV: CategoryNavItem[] = [
-  { label: 'Form Builder', href: '/admin-config/form-builder' },
-  { label: 'Form Templates', href: '/admin-config/form-templates' },
-  { label: 'Field Library', href: '/admin-config/field-library' },
-];
-
 export function AdminConfigPageHeader({
   section = 'Administration Configuration',
   sectionHref = '/admin-config',
-  group = 'Organization Setup',
+  group = 'Forms & Admission Setup',
   groupHref,
   title,
   description,
@@ -156,7 +159,7 @@ export function AdminConfigPageHeader({
       : '/admin-config');
 
   return (
-    <div className="space-y-3.5 sm:space-y-4 border-b border-slate-200 dark:border-slate-800 pb-4 sm:pb-5">
+    <div className="space-y-2.5 sm:space-y-3 border-b border-slate-200 dark:border-slate-800 pb-3 sm:pb-4">
       {/* Toast popup */}
       {toastMsg && (
         <div className="fixed bottom-6 right-6 z-50 px-4 py-2.5 rounded-xl shadow-xl bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-xs font-semibold flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2">
@@ -164,50 +167,48 @@ export function AdminConfigPageHeader({
         </div>
       )}
 
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3.5 sm:gap-4">
-        <div className="space-y-1">
-          {/* Clickable Breadcrumbs (Responsive) */}
-          <nav className="flex items-center gap-1.5 text-[11px] sm:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex-wrap">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="space-y-0.5">
+          {/* Clickable Breadcrumbs (Compact) */}
+          <nav className="flex items-center gap-1.5 text-[10px] sm:text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider flex-wrap">
             <Link
               href={sectionHref}
-              className="text-indigo-600 dark:text-indigo-400 hover:underline hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors truncate max-w-[140px] sm:max-w-none"
+              className="text-indigo-600 dark:text-indigo-400 hover:underline hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
             >
               {section}
             </Link>
-            <span className="text-slate-300 dark:text-slate-700">/</span>
+            <span>/</span>
             <Link
               href={resolvedGroupHref}
-              className="text-slate-600 dark:text-slate-300 hover:underline hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors truncate max-w-[140px] sm:max-w-none"
+              className="text-slate-600 dark:text-slate-300 hover:underline hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
             >
               {group}
             </Link>
-            <span className="text-slate-300 dark:text-slate-700">/</span>
-            <span className="text-slate-900 dark:text-slate-100 font-bold truncate">{title}</span>
+            <span>/</span>
+            <span className="text-slate-900 dark:text-slate-100 font-black">{title}</span>
           </nav>
 
           {/* Title and Personalization Badges */}
-          <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap">
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <h1 className="text-lg sm:text-xl font-black text-slate-900 dark:text-slate-100 tracking-tight">
               {title}
             </h1>
 
             {/* Personalization Badges (Favorites & Quick Actions) */}
             {showPersonalization && configItem && (
-              <div className="flex items-center gap-1.5 pt-0.5">
+              <div className="flex items-center gap-1">
                 {/* Favorite Toggle Button */}
                 <button
                   type="button"
                   onClick={handleFavoriteClick}
                   title={isFavorited ? 'Remove from Favorites' : 'Add to Favorites'}
-                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-semibold transition-all cursor-pointer border min-h-[30px] ${
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold transition-all cursor-pointer border ${
                     isFavorited
-                      ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800 hover:bg-amber-100 shadow-sm'
-                      : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:text-amber-600 hover:border-amber-300 dark:hover:border-amber-700'
+                      ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+                      : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:text-amber-600'
                   }`}
                 >
-                  <span className={isFavorited ? 'text-amber-500' : 'text-slate-400'}>
-                    {isFavorited ? '★' : '☆'}
-                  </span>
+                  <Star className={`w-3 h-3 ${isFavorited ? 'text-amber-500 fill-amber-400' : 'text-slate-400'}`} />
                   <span>{isFavorited ? 'Favorited' : 'Favorite'}</span>
                 </button>
 
@@ -216,33 +217,33 @@ export function AdminConfigPageHeader({
                   type="button"
                   onClick={handleQuickActionClick}
                   title={isInQuickActions ? 'Remove from Quick Actions' : 'Add to Quick Actions'}
-                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-semibold transition-all cursor-pointer border min-h-[30px] ${
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold transition-all cursor-pointer border ${
                     isInQuickActions
-                      ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 shadow-sm'
-                      : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:text-indigo-600 hover:border-indigo-300 dark:hover:border-indigo-700'
+                      ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800'
+                      : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:text-indigo-600'
                   }`}
                 >
-                  <span className={isInQuickActions ? 'text-indigo-500' : 'text-slate-400'}>⚡</span>
+                  <Zap className={`w-3 h-3 ${isInQuickActions ? 'text-indigo-500 fill-indigo-400' : 'text-slate-400'}`} />
                   <span>{isInQuickActions ? 'In Quick Actions' : 'Quick Action'}</span>
                 </button>
               </div>
             )}
           </div>
 
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed max-w-3xl">
+          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-2xl leading-normal">
             {description}
           </p>
         </div>
 
-        {/* Action Buttons (Responsive Wrapping) */}
-        <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap">
+        {/* Action Buttons (Compact) */}
+        <div className="flex items-center gap-2 flex-wrap">
           {children}
 
           {secondaryActionText && onSecondaryAction && (
             <button
               type="button"
               onClick={onSecondaryAction}
-              className="inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs sm:text-sm font-medium transition-all cursor-pointer shadow-sm min-h-[38px]"
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-bold transition-all cursor-pointer shadow-xs"
             >
               {secondaryActionText}
             </button>
@@ -252,7 +253,7 @@ export function AdminConfigPageHeader({
             <button
               type="button"
               onClick={onAction}
-              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs sm:text-sm font-medium shadow-sm shadow-indigo-600/20 transition-all cursor-pointer min-h-[38px]"
+              className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
             >
               <span>{actionButtonText.startsWith('+') ? actionButtonText : `+ ${actionButtonText}`}</span>
             </button>
@@ -260,33 +261,8 @@ export function AdminConfigPageHeader({
         </div>
       </div>
 
-      {/* Context-Aware Secondary Navigation Strip (Smooth Horizontal Scroll on Mobile) */}
-      {categoryNav && categoryNav.length > 0 && (
-        <div className="pt-1 overflow-x-auto scrollbar-none -mx-1 px-1">
-          <div className="inline-flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 flex-nowrap">
-            {categoryNav.map((item) => {
-              const isActive =
-                item.active ??
-                (pathname
-                  ? pathname.replace(/\/$/, '') === item.href.replace(/\/$/, '')
-                  : item.label.toLowerCase() === title.toLowerCase());
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all min-h-[32px] flex items-center ${
-                    isActive
-                      ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm border border-slate-200/60 dark:border-slate-700/60'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-white/50 dark:hover:bg-slate-800/50'
-                  }`}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-      )}
+      {/* Context-Aware Secondary Navigation Strip */}
+      <SectionNavigation items={categoryNav} />
     </div>
   );
 }

@@ -272,7 +272,7 @@ export class AcademicService {
 
   async listAcademicYears(
     tenantId: string,
-    campusId?: string,
+    effectiveCampusIds?: string[] | string,
     search?: string,
     status?: string,
     userRole: string = 'SCHOOL_ADMIN'
@@ -293,14 +293,14 @@ export class AcademicService {
               : undefined
           )
         )
-        .orderBy(asc(academicYears.sortOrder), asc(academicYears.startDate));
+        .orderBy(asc(academicYears.sortOrder), asc(academicYears.name));
 
       const entityIds = rows.map((r: any) => r.id);
       const branchMap = await this.loadScopeBranchInfo(tx, tenantId, 'academic_year', entityIds);
 
       let result: AcademicYearListItemDto[] = rows.map((r: any) => {
         const scope = branchMap.get(r.id);
-        const gov = this.tagEffectiveGovernance(r, userRole, campusId);
+        const gov = this.tagEffectiveGovernance(r, userRole, undefined);
         return {
           id: r.id,
           organizationId: r.organizationId,
@@ -311,7 +311,7 @@ export class AcademicService {
           isCurrent: r.isCurrent,
           sortOrder: r.sortOrder,
           description: r.description,
-          ownerType: (r.ownerType as ConfigOwnerType) || 'SCHOOL',
+          ownerType: gov.ownerType,
           ownerId: r.ownerId,
           applyTo: r.applyTo as ConfigScopeType,
           branchIds: scope?.branchIds || [],
@@ -327,12 +327,14 @@ export class AcademicService {
         };
       });
 
-      if (campusId && campusId !== 'ALL') {
-        result = result.filter((ay) => {
-          if (ay.ownerType === 'CAMPUS' && ay.ownerId === campusId) return true;
-          if (ay.applyTo === 'ALL_CAMPUSES') return true;
-          return ay.branchIds?.includes(campusId);
-        });
+      // Working Context enforcement: filter by effectiveCampusIds when context is active
+      const campusIds = typeof effectiveCampusIds === 'string' ? [effectiveCampusIds] : effectiveCampusIds;
+      if (campusIds && campusIds.length > 0) {
+        result = result.filter((ay) =>
+          ay.applyTo === 'ALL_CAMPUSES' ||
+          (ay.ownerType === 'CAMPUS' && ay.ownerId && campusIds.includes(ay.ownerId)) ||
+          ay.branchIds?.some((bid) => campusIds.includes(bid))
+        );
       } else if (userRole === 'HEAD_OFFICE_ADMIN') {
         result = result.filter((ay) => ay.ownerType !== 'CAMPUS');
       }
@@ -620,7 +622,7 @@ export class AcademicService {
 
   async listBoards(
     tenantId: string,
-    campusId?: string,
+    effectiveCampusIds?: string[] | string,
     search?: string,
     status?: string,
     userRole: string = 'SCHOOL_ADMIN'
@@ -649,7 +651,7 @@ export class AcademicService {
 
       let result: BoardListItemDto[] = rows.map((r: any) => {
         const scope = branchMap.get(r.id);
-        const gov = this.tagEffectiveGovernance(r, userRole, campusId);
+        const gov = this.tagEffectiveGovernance(r, userRole, undefined);
         return {
           id: r.id,
           organizationId: r.organizationId,
@@ -669,12 +671,14 @@ export class AcademicService {
         };
       });
 
-      if (campusId && campusId !== 'ALL') {
-        result = result.filter((b) => {
-          if (b.ownerType === 'CAMPUS' && b.ownerId === campusId) return true;
-          if (b.applyTo === 'ALL_CAMPUSES') return true;
-          return b.branchIds?.includes(campusId);
-        });
+      // Working Context enforcement
+      const campusIds = typeof effectiveCampusIds === 'string' ? [effectiveCampusIds] : effectiveCampusIds;
+      if (campusIds && campusIds.length > 0) {
+        result = result.filter((b) =>
+          b.applyTo === 'ALL_CAMPUSES' ||
+          (b.ownerType === 'CAMPUS' && b.ownerId && campusIds.includes(b.ownerId)) ||
+          b.branchIds?.some((bid) => campusIds.includes(bid))
+        );
       } else if (userRole === 'HEAD_OFFICE_ADMIN') {
         result = result.filter((b) => b.ownerType !== 'CAMPUS');
       }
@@ -933,7 +937,7 @@ export class AcademicService {
 
   async listAcademicLevels(
     tenantId: string,
-    campusId?: string,
+    effectiveCampusIds?: string[] | string,
     search?: string,
     status?: string,
     userRole: string = 'SCHOOL_ADMIN'
@@ -973,7 +977,7 @@ export class AcademicService {
 
       let result: AcademicLevelListItemDto[] = rows.map((r: any) => {
         const scope = branchMap.get(r.id);
-        const gov = this.tagEffectiveGovernance(r, userRole, campusId);
+        const gov = this.tagEffectiveGovernance(r, userRole, undefined);
         return {
           id: r.id,
           organizationId: r.organizationId,
@@ -993,12 +997,14 @@ export class AcademicService {
         };
       });
 
-      if (campusId && campusId !== 'ALL') {
-        result = result.filter((l) => {
-          if (l.ownerType === 'CAMPUS' && l.ownerId === campusId) return true;
-          if (l.applyTo === 'ALL_CAMPUSES') return true;
-          return l.branchIds?.includes(campusId);
-        });
+      // Working Context enforcement
+      const campusIds = typeof effectiveCampusIds === 'string' ? [effectiveCampusIds] : effectiveCampusIds;
+      if (campusIds && campusIds.length > 0) {
+        result = result.filter((l) =>
+          l.applyTo === 'ALL_CAMPUSES' ||
+          (l.ownerType === 'CAMPUS' && l.ownerId && campusIds.includes(l.ownerId)) ||
+          l.branchIds?.some((bid) => campusIds.includes(bid))
+        );
       } else if (userRole === 'HEAD_OFFICE_ADMIN') {
         result = result.filter((l) => l.ownerType !== 'CAMPUS');
       }
@@ -1256,7 +1262,7 @@ export class AcademicService {
 
   async listSubjects(
     tenantId: string,
-    campusId?: string,
+    effectiveCampusIds?: string[] | string,
     search?: string,
     status?: string,
     type?: string,
@@ -1289,7 +1295,7 @@ export class AcademicService {
 
       let result: SubjectListItemDto[] = rows.map((r: any) => {
         const scope = branchMap.get(r.id);
-        const gov = this.tagEffectiveGovernance(r, userRole, campusId);
+        const gov = this.tagEffectiveGovernance(r, userRole, undefined);
         return {
           id: r.id,
           organizationId: r.organizationId,
@@ -1316,12 +1322,14 @@ export class AcademicService {
         };
       });
 
-      if (campusId && campusId !== 'ALL') {
-        result = result.filter((s) => {
-          if (s.ownerType === 'CAMPUS' && s.ownerId === campusId) return true;
-          if (s.applyTo === 'ALL_CAMPUSES') return true;
-          return s.branchIds?.includes(campusId);
-        });
+      // Working Context enforcement
+      const campusIds = typeof effectiveCampusIds === 'string' ? [effectiveCampusIds] : effectiveCampusIds;
+      if (campusIds && campusIds.length > 0) {
+        result = result.filter((s) =>
+          s.applyTo === 'ALL_CAMPUSES' ||
+          (s.ownerType === 'CAMPUS' && s.ownerId && campusIds.includes(s.ownerId)) ||
+          s.branchIds?.some((bid) => campusIds.includes(bid))
+        );
       } else if (userRole === 'HEAD_OFFICE_ADMIN') {
         result = result.filter((s) => s.ownerType !== 'CAMPUS');
       }
@@ -1742,7 +1750,7 @@ export class AcademicService {
 
   async listClasses(
     tenantId: string,
-    campusId?: string,
+    effectiveCampusIds?: string[] | string,
     search?: string,
     status?: string,
     levelId?: string,
@@ -1795,7 +1803,7 @@ export class AcademicService {
       let result: ClassListItemDto[] = rows.map((r: any) => {
         const scope = branchMap.get(r.id);
         const subData = subjectMap.get(r.id);
-        const gov = this.tagEffectiveGovernance(r, userRole, campusId);
+        const gov = this.tagEffectiveGovernance(r, userRole, undefined);
         return {
           id: r.id,
           organizationId: r.organizationId,
@@ -1824,12 +1832,14 @@ export class AcademicService {
         };
       });
 
-      if (campusId && campusId !== 'ALL') {
-        result = result.filter((c) => {
-          if (c.ownerType === 'CAMPUS' && c.ownerId === campusId) return true;
-          if (c.applyTo === 'ALL_CAMPUSES') return true;
-          return c.branchIds?.includes(campusId);
-        });
+      // Working Context enforcement
+      const campusIds = typeof effectiveCampusIds === 'string' ? [effectiveCampusIds] : effectiveCampusIds;
+      if (campusIds && campusIds.length > 0) {
+        result = result.filter((c) =>
+          c.applyTo === 'ALL_CAMPUSES' ||
+          (c.ownerType === 'CAMPUS' && c.ownerId && campusIds.includes(c.ownerId)) ||
+          c.branchIds?.some((bid) => campusIds.includes(bid))
+        );
       } else if (userRole === 'HEAD_OFFICE_ADMIN') {
         result = result.filter((c) => c.ownerType !== 'CAMPUS');
       }
@@ -2238,7 +2248,7 @@ export class AcademicService {
 
   async listSections(
     tenantId: string,
-    campusId?: string,
+    effectiveCampusIds?: string[] | string,
     search?: string,
     status?: string,
     userRole: string = 'SCHOOL_ADMIN'
@@ -2261,7 +2271,7 @@ export class AcademicService {
 
       let result: SectionListItemDto[] = rows.map((r: any) => {
         const scope = branchMap.get(r.id);
-        const gov = this.tagEffectiveGovernance(r, userRole, campusId);
+        const gov = this.tagEffectiveGovernance(r, userRole, undefined);
         return {
           id: r.id,
           organizationId: r.organizationId,
@@ -2279,12 +2289,14 @@ export class AcademicService {
         };
       });
 
-      if (campusId && campusId !== 'ALL') {
-        result = result.filter((sec) => {
-          if (sec.ownerType === 'CAMPUS' && sec.ownerId === campusId) return true;
-          if (sec.applyTo === 'ALL_CAMPUSES') return true;
-          return sec.branchIds?.includes(campusId);
-        });
+      // Working Context enforcement
+      const campusIds = typeof effectiveCampusIds === 'string' ? [effectiveCampusIds] : effectiveCampusIds;
+      if (campusIds && campusIds.length > 0) {
+        result = result.filter((sec) =>
+          sec.applyTo === 'ALL_CAMPUSES' ||
+          (sec.ownerType === 'CAMPUS' && sec.ownerId && campusIds.includes(sec.ownerId)) ||
+          sec.branchIds?.some((bid) => campusIds.includes(bid))
+        );
       } else if (userRole === 'HEAD_OFFICE_ADMIN') {
         result = result.filter((sec) => sec.ownerType !== 'CAMPUS');
       }
@@ -2539,7 +2551,7 @@ export class AcademicService {
 
   async listLanguages(
     tenantId: string,
-    campusId?: string,
+    effectiveCampusIds?: string[] | string,
     search?: string,
     status?: string,
     userRole: string = 'SCHOOL_ADMIN'
@@ -2567,7 +2579,7 @@ export class AcademicService {
 
       let result: LanguageListItemDto[] = rows.map((r: any) => {
         const scope = branchMap.get(r.id);
-        const gov = this.tagEffectiveGovernance(r, userRole, campusId);
+        const gov = this.tagEffectiveGovernance(r, userRole, undefined);
         return {
           id: r.id,
           organizationId: r.organizationId,
@@ -2586,12 +2598,14 @@ export class AcademicService {
         };
       });
 
-      if (campusId && campusId !== 'ALL') {
-        result = result.filter((l) => {
-          if (l.ownerType === 'CAMPUS' && l.ownerId === campusId) return true;
-          if (l.applyTo === 'ALL_CAMPUSES') return true;
-          return l.branchIds?.includes(campusId);
-        });
+      // Working Context enforcement
+      const campusIds = typeof effectiveCampusIds === 'string' ? [effectiveCampusIds] : effectiveCampusIds;
+      if (campusIds && campusIds.length > 0) {
+        result = result.filter((l) =>
+          l.applyTo === 'ALL_CAMPUSES' ||
+          (l.ownerType === 'CAMPUS' && l.ownerId && campusIds.includes(l.ownerId)) ||
+          l.branchIds?.some((bid) => campusIds.includes(bid))
+        );
       } else if (userRole === 'HEAD_OFFICE_ADMIN') {
         result = result.filter((l) => l.ownerType !== 'CAMPUS');
       }

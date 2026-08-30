@@ -4,7 +4,10 @@ import React, { useState, useMemo } from 'react';
 import {
   FormSchemaPayload,
   FormFieldInstance,
+  SemanticDataType,
+  validateSemanticField,
 } from '@campus-os/types';
+import { useContactPlaceholders } from './DisplayFormatters';
 
 interface FormRuntimeRendererProps {
   schema: FormSchemaPayload;
@@ -13,6 +16,7 @@ interface FormRuntimeRendererProps {
   campusName?: string;
   academicYearName?: string;
   initialValues?: Record<string, any>;
+  schoolId?: string | null;
   readOnly?: boolean;
   onSubmit?: (values: Record<string, any>) => void;
   onSaveDraft?: (values: Record<string, any>) => void;
@@ -77,10 +81,12 @@ export function FormRuntimeRenderer({
   campusName = 'Main Campus Gulshan',
   academicYearName = 'Academic Session 2026-2027',
   initialValues = {},
+  schoolId,
   readOnly = false,
   onSubmit,
   onSaveDraft,
 }: FormRuntimeRendererProps) {
+  const contactPlaceholders = useContactPlaceholders({ schoolId });
   const [formData, setFormData] = useState<Record<string, any>>({
     CURRENT_COUNTRY: 'PK',
     CURRENT_STATE: 'SINDH',
@@ -206,11 +212,41 @@ export function FormRuntimeRenderer({
     });
   };
 
+  const inferRuntimeSemanticType = (field: FormFieldInstance): SemanticDataType | null => {
+    const code = (field.canonicalKey || field.fieldDefinitionId || field.instanceId || '').toLowerCase();
+    const label = (field.customLabel || '').toLowerCase();
+
+    if (code.includes('email') || label.includes('email') || field.validation?.emailFormat) return 'EMAIL';
+    if (code.includes('website') || label.includes('website') || code.includes('url') || label.includes('url')) return 'URL';
+    if (code.includes('cnic') || label.includes('cnic')) return 'CNIC';
+    if (code.includes('whatsapp') || label.includes('whatsapp')) return 'WHATSAPP';
+    if (code.includes('mobile') || label.includes('mobile') || code.includes('cell')) return 'MOBILE';
+    if (code.includes('phone') || label.includes('phone') || label.includes('landline') || label.includes('tel')) return 'PHONE';
+    return null;
+  };
+
+  const handleBlur = (fieldKey: string, val: any, isReq: boolean, field: FormFieldInstance) => {
+    const semType = inferRuntimeSemanticType(field);
+    if (semType) {
+      const res = validateSemanticField(semType, val, isReq);
+      if (!res.valid) {
+        setValidationErrors((prev) => ({ ...prev, [fieldKey]: res.error || 'Invalid format' }));
+      } else {
+        setValidationErrors((prev) => {
+          if (!prev[fieldKey]) return prev;
+          const next = { ...prev };
+          delete next[fieldKey];
+          return next;
+        });
+      }
+    }
+  };
+
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const errors: Record<string, string> = {};
 
-    // Validate required fields that are not hidden
+    // Validate required fields and semantic types for non-hidden fields
     for (const section of schema.sections || []) {
       if (evaluatedRules.hiddenSections.has(section.id)) continue;
       for (const field of section.fields || []) {
@@ -220,7 +256,13 @@ export function FormRuntimeRenderer({
         const isReq = field.isRequired || evaluatedRules.requiredOverrides.has(fieldKey) || evaluatedRules.requiredOverrides.has(field.instanceId);
         const val = formData[fieldKey] ?? formData[field.canonicalKey || ''] ?? formData[field.fieldDefinitionId];
 
-        if (isReq && (val === undefined || val === null || val === '')) {
+        const semType = inferRuntimeSemanticType(field);
+        if (semType) {
+          const res = validateSemanticField(semType, val, isReq);
+          if (!res.valid && res.error) {
+            errors[fieldKey] = res.error;
+          }
+        } else if (isReq && (val === undefined || val === null || val === '')) {
           errors[fieldKey] = `${field.customLabel || 'This field'} is required.`;
         }
       }
@@ -301,20 +343,35 @@ export function FormRuntimeRenderer({
         </div>
 
         {/* Text / Phone / Email / Number */}
-        {(!field.options && !field.masterBinding && field.fieldDefinitionId !== 'STD_DOB' && !field.fieldDefinitionId.startsWith('DOC_') && field.fieldDefinitionId !== 'STD_PHOTO' && !field.fieldDefinitionId.startsWith('DEC_') && field.fieldDefinitionId !== 'TRN_REQUIRED' && field.fieldDefinitionId !== 'HST_REQUIRED') && (
-          <input
-            type={field.validation?.emailFormat ? 'email' : 'text'}
-            placeholder={field.placeholder || ''}
-            value={value}
-            disabled={readOnly}
-            onChange={(e) => onChange(e.target.value)}
-            className={`w-full px-3.5 py-2.5 rounded-lg border text-sm transition-colors focus:outline-none focus:ring-2 ${
-              error
-                ? 'border-rose-300 bg-rose-50/30 text-rose-900 focus:ring-rose-500/20'
-                : 'border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:border-indigo-500 focus:ring-indigo-500/20'
-            }`}
-          />
-        )}
+        {(!field.options && !field.masterBinding && field.fieldDefinitionId !== 'STD_DOB' && !field.fieldDefinitionId.startsWith('DOC_') && field.fieldDefinitionId !== 'STD_PHOTO' && !field.fieldDefinitionId.startsWith('DEC_') && field.fieldDefinitionId !== 'TRN_REQUIRED' && field.fieldDefinitionId !== 'HST_REQUIRED') && (() => {
+          const code = (field.canonicalKey || field.fieldDefinitionId || field.instanceId || '').toLowerCase();
+          const label = (field.customLabel || '').toLowerCase();
+          let semType: SemanticDataType | null = null;
+          if (code.includes('email') || label.includes('email')) semType = 'EMAIL';
+          else if (code.includes('website') || label.includes('website') || code.includes('url')) semType = 'URL';
+          else if (code.includes('cnic') || label.includes('cnic')) semType = 'CNIC';
+          else if (code.includes('whatsapp') || label.includes('whatsapp')) semType = 'WHATSAPP';
+          else if (code.includes('mobile') || label.includes('mobile') || code.includes('cell')) semType = 'MOBILE';
+          else if (code.includes('phone') || label.includes('phone') || label.includes('telephone') || label.includes('landline')) semType = 'PHONE';
+
+          const dynamicPlaceholder = field.placeholder || (semType ? contactPlaceholders.getPlaceholder(semType) : '');
+
+          return (
+            <input
+              type={field.validation?.emailFormat ? 'email' : 'text'}
+              placeholder={dynamicPlaceholder}
+              value={value}
+              disabled={readOnly}
+              onChange={(e) => onChange(e.target.value)}
+              onBlur={() => handleBlur(fieldKey, value, isRequired, field)}
+              className={`w-full px-3.5 py-2.5 rounded-lg border text-sm transition-colors focus:outline-none focus:ring-2 ${
+                error
+                  ? 'border-rose-300 bg-rose-50/30 text-rose-900 focus:ring-rose-500/20'
+                  : 'border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:border-indigo-500 focus:ring-indigo-500/20'
+              }`}
+            />
+          );
+        })()}
 
         {/* Date of Birth / Date Field */}
         {(field.fieldDefinitionId === 'STD_DOB' || field.canonicalKey === 'STUDENT_DOB' || field.instanceId.includes('dob')) && (

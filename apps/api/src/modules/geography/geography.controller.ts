@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -19,8 +20,6 @@ import {
   UpdateCityDto,
   CreateAreaDto,
   UpdateAreaDto,
-  CreatePostalCodeDto,
-  UpdatePostalCodeDto,
 } from '@campus-os/types';
 
 @Controller('geography')
@@ -37,6 +36,15 @@ export class GeographyController {
   ) {
     const resolvedTenant = tenantId || '11111111-1111-1111-1111-111111111111';
     return this.geographyService.listCountries(resolvedTenant, search, status);
+  }
+
+  @Get('countries/:id/dependencies')
+  async getCountryDependencies(
+    @Headers('x-tenant-id') tenantId: string,
+    @Param('id', ParseUUIDPipe) id: string
+  ) {
+    const resolvedTenant = tenantId || '11111111-1111-1111-1111-111111111111';
+    return this.geographyService.getCountryDependencies(resolvedTenant, id);
   }
 
   @Post('countries')
@@ -71,6 +79,16 @@ export class GeographyController {
     return this.geographyService.toggleCountryStatus(resolvedTenant, id, isActive, userId);
   }
 
+  @Delete('countries/:id')
+  async deleteCountry(
+    @Headers('x-tenant-id') tenantId: string,
+    @Headers('x-user-id') userId: string,
+    @Param('id', ParseUUIDPipe) id: string
+  ) {
+    const resolvedTenant = tenantId || '11111111-1111-1111-1111-111111111111';
+    return this.geographyService.deleteCountry(resolvedTenant, id, userId);
+  }
+
   // ── 2. STATES / PROVINCES ────────────────────────────────────────────────
 
   @Get('states')
@@ -82,6 +100,15 @@ export class GeographyController {
   ) {
     const resolvedTenant = tenantId || '11111111-1111-1111-1111-111111111111';
     return this.geographyService.listStates(resolvedTenant, countryId, search, status);
+  }
+
+  @Get('states/:id/dependencies')
+  async getStateDependencies(
+    @Headers('x-tenant-id') tenantId: string,
+    @Param('id', ParseUUIDPipe) id: string
+  ) {
+    const resolvedTenant = tenantId || '11111111-1111-1111-1111-111111111111';
+    return this.geographyService.getStateDependencies(resolvedTenant, id);
   }
 
   @Post('states')
@@ -116,6 +143,16 @@ export class GeographyController {
     return this.geographyService.toggleStateStatus(resolvedTenant, id, isActive, userId);
   }
 
+  @Delete('states/:id')
+  async deleteState(
+    @Headers('x-tenant-id') tenantId: string,
+    @Headers('x-user-id') userId: string,
+    @Param('id', ParseUUIDPipe) id: string
+  ) {
+    const resolvedTenant = tenantId || '11111111-1111-1111-1111-111111111111';
+    return this.geographyService.deleteState(resolvedTenant, id, userId);
+  }
+
   // ── 3. CITIES ────────────────────────────────────────────────────────────
 
   @Get('cities')
@@ -128,6 +165,15 @@ export class GeographyController {
   ) {
     const resolvedTenant = tenantId || '11111111-1111-1111-1111-111111111111';
     return this.geographyService.listCities(resolvedTenant, countryId, stateId, search, status);
+  }
+
+  @Get('cities/:id/dependencies')
+  async getCityDependencies(
+    @Headers('x-tenant-id') tenantId: string,
+    @Param('id', ParseUUIDPipe) id: string
+  ) {
+    const resolvedTenant = tenantId || '11111111-1111-1111-1111-111111111111';
+    return this.geographyService.getCityDependencies(resolvedTenant, id);
   }
 
   @Post('cities')
@@ -162,6 +208,16 @@ export class GeographyController {
     return this.geographyService.toggleCityStatus(resolvedTenant, id, isActive, userId);
   }
 
+  @Delete('cities/:id')
+  async deleteCity(
+    @Headers('x-tenant-id') tenantId: string,
+    @Headers('x-user-id') userId: string,
+    @Param('id', ParseUUIDPipe) id: string
+  ) {
+    const resolvedTenant = tenantId || '11111111-1111-1111-1111-111111111111';
+    return this.geographyService.deleteCity(resolvedTenant, id, userId);
+  }
+
   // ── 4. AREAS / ZONES ─────────────────────────────────────────────────────
 
   @Get('areas')
@@ -175,6 +231,15 @@ export class GeographyController {
   ) {
     const resolvedTenant = tenantId || '11111111-1111-1111-1111-111111111111';
     return this.geographyService.listAreas(resolvedTenant, countryId, stateId, cityId, search, status);
+  }
+
+  @Get('areas/:id/dependencies')
+  async getAreaDependencies(
+    @Headers('x-tenant-id') tenantId: string,
+    @Param('id', ParseUUIDPipe) id: string
+  ) {
+    const resolvedTenant = tenantId || '11111111-1111-1111-1111-111111111111';
+    return this.geographyService.getAreaDependencies(resolvedTenant, id);
   }
 
   @Post('areas')
@@ -209,59 +274,14 @@ export class GeographyController {
     return this.geographyService.toggleAreaStatus(resolvedTenant, id, isActive, userId);
   }
 
-  // ── 5. POSTAL CODES ──────────────────────────────────────────────────────
-
-  @Get('postal-codes')
-  async listPostalCodes(
-    @Headers('x-tenant-id') tenantId: string,
-    @Query('countryId') countryId?: string,
-    @Query('stateId') stateId?: string,
-    @Query('cityId') cityId?: string,
-    @Query('areaId') areaId?: string,
-    @Query('search') search?: string,
-    @Query('status') status?: string
-  ) {
-    const resolvedTenant = tenantId || '11111111-1111-1111-1111-111111111111';
-    return this.geographyService.listPostalCodes(
-      resolvedTenant,
-      countryId,
-      stateId,
-      cityId,
-      areaId,
-      search,
-      status
-    );
-  }
-
-  @Post('postal-codes')
-  async createPostalCode(
+  @Delete('areas/:id')
+  async deleteArea(
     @Headers('x-tenant-id') tenantId: string,
     @Headers('x-user-id') userId: string,
-    @Body() dto: CreatePostalCodeDto
+    @Param('id', ParseUUIDPipe) id: string
   ) {
     const resolvedTenant = tenantId || '11111111-1111-1111-1111-111111111111';
-    return this.geographyService.createPostalCode(resolvedTenant, dto, userId);
-  }
-
-  @Patch('postal-codes/:id')
-  async updatePostalCode(
-    @Headers('x-tenant-id') tenantId: string,
-    @Headers('x-user-id') userId: string,
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: UpdatePostalCodeDto
-  ) {
-    const resolvedTenant = tenantId || '11111111-1111-1111-1111-111111111111';
-    return this.geographyService.updatePostalCode(resolvedTenant, id, dto, userId);
-  }
-
-  @Patch('postal-codes/:id/status')
-  async togglePostalCodeStatus(
-    @Headers('x-tenant-id') tenantId: string,
-    @Headers('x-user-id') userId: string,
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body('isActive') isActive: boolean
-  ) {
-    const resolvedTenant = tenantId || '11111111-1111-1111-1111-111111111111';
-    return this.geographyService.togglePostalCodeStatus(resolvedTenant, id, isActive, userId);
+    return this.geographyService.deleteArea(resolvedTenant, id, userId);
   }
 }
+

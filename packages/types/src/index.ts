@@ -13,11 +13,12 @@ export * from './navigation.js';
 export * from './module.js';
 export * from './school.js';
 export * from './region.js';
-export * from './school-type.js';
 export * from './head-office.js';
 export * from './branch.js';
 export * from './geography.js';
 export * from './academic.js';
 export * from './admissions.js';
 export * from './admission-process.js';
+export * from './scope-matrix.js';
+export * from './validation.js';
 

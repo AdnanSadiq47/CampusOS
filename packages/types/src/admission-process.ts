@@ -67,7 +67,12 @@ export interface ApplicationFeeStepConfig {
 }
 
 export type TestMode = 'PAPER_BASED' | 'COMPUTER_BASED' | 'ONLINE' | 'HYBRID';
-export type TestResultPublishingRule = 'IMMEDIATE' | 'AFTER_STAFF_APPROVAL' | 'ON_SCHEDULED_DATE';
+export type TestResultPublishingRule =
+  | 'AUTOMATIC_AFTER_EVALUATION'
+  | 'AFTER_STAFF_APPROVAL'
+  | 'MANUAL_PUBLISH'
+  | 'IMMEDIATE'
+  | 'ON_SCHEDULED_DATE';
 export type TestOutcome = 'PASSED' | 'FAILED' | 'NEEDS_REVIEW' | 'ABSENT' | 'CANCELLED';
 export type TestResultStatus = 'DRAFT' | 'READY' | 'PUBLISHED';
 
@@ -78,6 +83,11 @@ export interface AssessmentTestStepConfig {
   totalMarks?: number;
   cutoffPercentage?: number;
   attemptLimit?: number;
+  allowRetest?: boolean;
+  maxAttempts?: number;
+  resultVisibleToParent?: boolean;
+  sendResultNotification?: boolean;
+  instructions?: string;
   mode: TestMode;
   resultPublishingRule: TestResultPublishingRule;
   assessmentDefinitionId?: string;
@@ -220,40 +230,91 @@ export interface UpdateAdmissionProcessDto {
 }
 
 // Scheduling & Operational Models
-export interface TestScheduleDto {
+export type AdmissionTestStatus =
+  | 'DRAFT'
+  | 'SCHEDULED'
+  | 'IN_PROGRESS'
+  | 'COMPLETED'
+  | 'RESULTS_PENDING'
+  | 'RESULTS_PUBLISHED'
+  | 'CANCELLED';
+
+export type CandidateAssignmentStrategy =
+  | 'INDIVIDUAL_STUDENTS'
+  | 'SELECTED_STUDENTS'
+  | 'CLASS_GRADE'
+  | 'CAMPUS'
+  | 'MULTIPLE_CAMPUSES'
+  | 'ALL_ELIGIBLE_APPLICANTS';
+
+export interface AdmissionTestScheduleDto {
   id: string;
   organizationId: string;
-  assessmentName: string;
-  date: string; // YYYY-MM-DD
-  startTime: string; // HH:mm
-  endTime: string; // HH:mm
-  durationMinutes: number;
-  campusId: string;
-  campusName: string;
-  venueRoom: string;
+  scheduleCode: string;
+  name: string;
+  processDefinitionId: string;
+  processVersionId: string;
+  processStepId: string;
+  processStepName?: string;
+  academicYearId: string;
+  academicYearName?: string;
+  classIds: string[];
+  classNames: string[];
   mode: TestMode;
-  capacity?: number;
-  instructions?: string;
-  assignedApplicantCount: number;
+  date: string; // YYYY-MM-DD
+  reportingTime?: string; // HH:mm
+  startTime: string; // HH:mm
+  endTime?: string; // HH:mm
+  durationMinutes: number;
+  venueType: 'CAMPUS' | 'EXTERNAL';
+  venueCampusId?: string;
+  venueCampusName?: string;
+  venueBuilding?: string;
+  venueRoom?: string;
+  venueInstructions?: string;
+  totalMarks?: number;
+  passMarks?: number;
+  resultPublishingRule?: TestResultPublishingRule;
+  status: AdmissionTestStatus;
+  totalCandidatesCount: number;
+  attendedCount?: number;
+  passedCount?: number;
+  failedCount?: number;
+  resultsStatus?: string;
+  createdBy?: string;
   createdAt: Date | string;
+  updatedAt: Date | string;
 }
 
-export interface TestScheduleAssignmentDto {
+// Backward compatibility alias
+export type TestScheduleDto = AdmissionTestScheduleDto;
+
+export interface AdmissionTestCandidateDto {
   id: string;
-  scheduleId: string;
-  applicationId: string;
+  testScheduleId: string;
+  testScheduleCode?: string;
+  testName?: string;
+  preAdmissionId: string;
   applicationNumber: string;
   studentName: string;
+  className: string;
+  classId?: string;
   applicantCampusId: string;
   applicantCampusName: string;
-  scheduleCampusId: string;
-  scheduleCampusName: string;
-  venueRoom: string;
+  venueCampusId?: string;
+  venueCampusName?: string;
+  scheduleCampusId?: string;
+  scheduleCampusName?: string;
+  venueRoom?: string;
   scheduledDate: string;
+  reportingTime?: string;
   scheduledTime: string;
-  status: 'SCHEDULED' | 'ATTENDED' | 'ABSENT' | 'RESCHEDULED' | 'CANCELLED';
+  durationMinutes: number;
+  mode: TestMode;
+  status: 'SCHEDULED' | 'RESCHEDULED' | 'ATTENDED' | 'ABSENT' | 'COMPLETED' | 'CANCELLED';
   rescheduledFromScheduleId?: string;
   rescheduledReason?: string;
+  rescheduledAt?: Date | string;
   score?: number;
   totalMarks?: number;
   percentage?: number;
@@ -262,6 +323,50 @@ export interface TestScheduleAssignmentDto {
   publishedAt?: Date | string;
   remarks?: string;
   reviewedBy?: string;
+  createdAt?: Date | string;
+  updatedAt?: Date | string;
+}
+
+// Backward compatibility alias
+export type TestScheduleAssignmentDto = AdmissionTestCandidateDto;
+
+export interface CreateAdmissionTestScheduleDto {
+  name: string;
+  processDefinitionId: string;
+  processStepId: string;
+  academicYearId: string;
+  classIds: string[];
+  mode: TestMode;
+  date: string;
+  reportingTime?: string;
+  startTime: string;
+  durationMinutes: number;
+  venueType?: 'CAMPUS' | 'EXTERNAL';
+  venueCampusId?: string;
+  venueCampusName?: string;
+  venueBuilding?: string;
+  venueRoom?: string;
+  venueInstructions?: string;
+  candidateStrategy?: CandidateAssignmentStrategy;
+  candidatePreAdmissionIds: string[];
+  isDraft?: boolean;
+}
+
+export interface RescheduleCandidateDto {
+  candidateId: string;
+  newDate: string;
+  newStartTime: string;
+  newReportingTime?: string;
+  newVenueCampusId?: string;
+  newVenueRoom?: string;
+  reason: string;
+}
+
+export interface TestScheduleSummaryDto {
+  totalScheduled: number;
+  todayCount: number;
+  completedCount: number;
+  resultsPendingCount: number;
 }
 
 export interface InterviewSlotDto {
@@ -344,6 +449,7 @@ export type AdmissionProcessDomainEvent =
   | 'APPLICATION_FEE_PAID'
   | 'TEST_SCHEDULED'
   | 'TEST_RESCHEDULED'
+  | 'TEST_CANCELLED'
   | 'TEST_STARTED'
   | 'TEST_COMPLETED'
   | 'TEST_RESULT_READY'

@@ -3,6 +3,12 @@
 import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import {
+  Star,
+  Clock,
+  LayoutGrid,
+  List,
+} from 'lucide-react';
+import {
   CONFIG_CATEGORIES,
   CONFIG_REGISTRY,
   ConfigCategoryMeta,
@@ -229,26 +235,28 @@ export default function AdminConfigHomePage() {
             <button
               type="button"
               onClick={() => setViewMode('grid')}
-              className={`p-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 p-1.5 px-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 viewMode === 'grid'
                   ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400'
                   : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
               }`}
               title="Grid View"
             >
-              🔲 Grid
+              <LayoutGrid className="w-3.5 h-3.5" />
+              <span>Grid</span>
             </button>
             <button
               type="button"
               onClick={() => setViewMode('list')}
-              className={`p-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 p-1.5 px-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 viewMode === 'list'
                   ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400'
                   : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
               }`}
               title="List Directory View"
             >
-              📋 List
+              <List className="w-3.5 h-3.5" />
+              <span>List</span>
             </button>
           </div>
         </div>
@@ -261,7 +269,8 @@ export default function AdminConfigHomePage() {
           <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-2.5">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
               <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5 uppercase tracking-wider">
-                ⭐ Starred Favorites ({authorizedFavorites.length})
+                <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-400" />
+                <span>Starred Favorites ({authorizedFavorites.length})</span>
               </span>
             </div>
             {authorizedFavorites.length > 0 ? (
@@ -272,7 +281,6 @@ export default function AdminConfigHomePage() {
                     className="flex items-center justify-between p-2.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 hover:border-indigo-200 transition-colors"
                   >
                     <div className="flex items-center gap-2 overflow-hidden">
-                      <span>{item.icon}</span>
                       {item.isImplemented ? (
                         <Link
                           href={item.route}
@@ -288,10 +296,10 @@ export default function AdminConfigHomePage() {
                     <button
                       type="button"
                       onClick={(e) => handleToggleFavWithToast(item.id, e)}
-                      className="text-amber-500 hover:opacity-75 text-sm cursor-pointer ml-1"
+                      className="text-amber-500 hover:opacity-75 cursor-pointer ml-1"
                       title="Remove from favorites"
                     >
-                      ★
+                      <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-500" />
                     </button>
                   </div>
                 ))}
@@ -299,7 +307,7 @@ export default function AdminConfigHomePage() {
             ) : (
               <div className="py-4 text-center">
                 <p className="text-xs text-slate-400">
-                  You have no starred favorites yet. Click the ☆ icon on any page header or list item to pin it here.
+                  You have no starred favorites yet. Click the Favorite button on any page header to pin it here.
                 </p>
               </div>
             )}
@@ -309,7 +317,8 @@ export default function AdminConfigHomePage() {
           <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-2.5">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
               <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5 uppercase tracking-wider">
-                🕒 Recently Visited ({authorizedRecents.length})
+                <Clock className="w-3.5 h-3.5 text-indigo-500" />
+                <span>Recently Visited ({authorizedRecents.length})</span>
               </span>
               {authorizedRecents.length > 0 && (
                 <button

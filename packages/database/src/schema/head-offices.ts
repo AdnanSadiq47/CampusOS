@@ -51,12 +51,18 @@ export const headOffices = pgTable(
     city: varchar('city', { length: 128 }),
     province: varchar('province', { length: 128 }),
     postalCode: varchar('postal_code', { length: 32 }),
+    countryId: uuid('country_id'),
+    stateId: uuid('state_id'),
+    cityId: uuid('city_id'),
+    areaId: uuid('area_id'),
 
     // ── Configuration ─────────────────────────────────────────────────
     notes: text('notes'),
 
-    // ── Status ────────────────────────────────────────────────────────
+    // ── Status & Audit ──────────────────────────────────────────────
     isActive: boolean('is_active').default(true).notNull(),
+    createdBy: uuid('created_by'),
+    updatedBy: uuid('updated_by'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },

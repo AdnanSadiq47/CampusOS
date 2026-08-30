@@ -66,3 +66,27 @@ export interface AuthTokens {
   refreshToken: string;
   expiresIn: number;
 }
+
+export interface ProvisionAccountDto {
+  email: string;
+  temporaryPassword?: string;
+  roleId?: string;
+  roleCode?: string;
+  firstName?: string;
+  lastName?: string;
+  isActive?: boolean;
+}
+
+export interface LinkedAccountSummaryDto {
+  identityUserId: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  membershipId: string;
+  roleId?: string | null;
+  roleCode?: string | null;
+  roleName?: string | null;
+  isActive: boolean;
+  assignedAt?: Date | null;
+}
+

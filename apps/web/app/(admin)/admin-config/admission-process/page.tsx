@@ -20,6 +20,7 @@ import {
   AdmissionProcessStarterTemplate,
   AdmissionProcessStatus,
 } from '@campus-os/types';
+import { StatusBadge } from '../../../../design-system';
 
 const INITIAL_PROCESSES: AdmissionProcessDto[] = [
   {
@@ -283,12 +284,11 @@ export default function AdmissionProcessPage() {
     <div className="space-y-6 pb-12">
       {/* 1. Page Header */}
       <AdminConfigPageHeader
+        group="Forms & Admission Setup"
         title="Admission Process"
         description="Create and manage the admission steps used by your schools and campuses."
-        categoryNav={[
-          ...FORMS_SETUP_NAV,
-          { href: '/admin-config/admission-process', label: 'Admission Process', active: true },
-        ]}
+        configItemId="forms_admission_process"
+        categoryNav={FORMS_SETUP_NAV}
         actionButtonText="+ Create Admission Process"
         onAction={() => setShowCreateModal(true)}
       />
@@ -403,26 +403,7 @@ export default function AdmissionProcessPage() {
 
                     {/* Status */}
                     <td className="py-4 px-4">
-                      <span
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${
-                          proc.status === 'ACTIVE'
-                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
-                            : proc.status === 'DRAFT'
-                            ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border-amber-200 dark:border-amber-800'
-                            : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border-slate-200 dark:border-slate-700'
-                        }`}
-                      >
-                        <span
-                          className={`h-1.5 w-1.5 rounded-full ${
-                            proc.status === 'ACTIVE'
-                              ? 'bg-emerald-500'
-                              : proc.status === 'DRAFT'
-                              ? 'bg-amber-500'
-                              : 'bg-slate-400'
-                          }`}
-                        />
-                        <span className="capitalize">{proc.status.toLowerCase()}</span>
-                      </span>
+                      <StatusBadge status={proc.status} />
                     </td>
 
                     {/* Actions */}

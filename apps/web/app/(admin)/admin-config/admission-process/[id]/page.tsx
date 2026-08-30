@@ -129,11 +129,11 @@ const STEP_LIBRARY: StepLibraryItem[] = [
     isUnique: true,
   },
 
-  // 6. SYSTEM
+  // 6. CONFIRMATION / TERMINAL
   {
     stepType: 'STUDENT_REGISTRATION',
     defaultName: 'Student Registration',
-    category: 'SYSTEM',
+    category: 'CONFIRMATION',
     description: 'Terminal system step: creates official CampusOS Student record upon confirmed admission.',
     defaultRequired: true,
     isUnique: true,
@@ -231,6 +231,7 @@ export default function AdmissionProcessBuilderPage() {
   const [steps, setSteps] = useState<AdmissionProcessStepConfig[]>(process.steps);
   const [showAddStepModal, setShowAddStepModal] = useState(false);
   const [stepSearch, setStepSearch] = useState('');
+  const [stepCategoryFilter, setStepCategoryFilter] = useState<'ALL' | 'APPLICATION' | 'PAYMENT' | 'ASSESSMENT' | 'DECISION' | 'CONFIRMATION'>('ALL');
   const [addStepFeedback, setAddStepFeedback] = useState<string | null>(null);
 
   // Step Settings Modal
@@ -580,11 +581,18 @@ export default function AdmissionProcessBuilderPage() {
     setTimeout(() => setSaveSuccessMessage(null), 4500);
   };
 
-  const filteredStepLibrary = STEP_LIBRARY.filter(
-    (item) =>
-      item.defaultName.toLowerCase().includes(stepSearch.toLowerCase()) ||
-      item.description.toLowerCase().includes(stepSearch.toLowerCase())
-  );
+  const filteredStepLibrary = STEP_LIBRARY.filter((item) => {
+    if (stepCategoryFilter !== 'ALL' && item.category !== stepCategoryFilter) return false;
+    if (stepSearch.trim()) {
+      const q = stepSearch.toLowerCase().trim();
+      return (
+        item.defaultName.toLowerCase().includes(q) ||
+        item.description.toLowerCase().includes(q) ||
+        item.stepType.toLowerCase().includes(q)
+      );
+    }
+    return true;
+  });
 
   const preAdmForm = steps.find((s) => s.stepType === 'PRE_ADMISSION');
   const finalAdmForm = steps.find((s) => s.stepType === 'FINAL_ADMISSION_FORM');
@@ -887,8 +895,8 @@ export default function AdmissionProcessBuilderPage() {
               </div>
             )}
 
-            {/* Search */}
-            <div className="shrink-0">
+            {/* Search & Category Filter */}
+            <div className="space-y-2.5 shrink-0">
               <input
                 type="text"
                 value={stepSearch}
@@ -896,6 +904,31 @@ export default function AdmissionProcessBuilderPage() {
                 placeholder="Search step types..."
                 className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
               />
+
+              {/* Category Filter Tabs */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-[11px]">
+                {[
+                  { id: 'ALL', label: 'All' },
+                  { id: 'APPLICATION', label: 'Application' },
+                  { id: 'PAYMENT', label: 'Payment' },
+                  { id: 'ASSESSMENT', label: 'Assessment' },
+                  { id: 'DECISION', label: 'Decision' },
+                  { id: 'CONFIRMATION', label: 'Confirmation' },
+                ].map((cat) => (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setStepCategoryFilter(cat.id as any)}
+                    className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer whitespace-nowrap ${
+                      stepCategoryFilter === cat.id
+                        ? 'bg-indigo-600 text-white shadow-xs'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
+                    }`}
+                  >
+                    {cat.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Step Library List */}
@@ -905,27 +938,33 @@ export default function AdmissionProcessBuilderPage() {
                 return (
                   <div
                     key={item.stepType}
-                    onClick={() => handleAddStepFromLibrary(item)}
+                    onClick={() => {
+                      if (!isAlreadyAdded) handleAddStepFromLibrary(item);
+                    }}
                     className={`p-3.5 rounded-xl border transition-all flex items-center justify-between ${
                       isAlreadyAdded
-                        ? 'opacity-50 border-slate-200 bg-slate-50 cursor-not-allowed'
+                        ? 'opacity-60 border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 cursor-not-allowed'
                         : 'border-slate-200 dark:border-slate-700 hover:border-indigo-500 hover:bg-indigo-50/40 dark:hover:bg-indigo-950/30 cursor-pointer'
                     }`}
                   >
-                    <div className="space-y-0.5">
-                      <div className="flex items-center gap-2">
+                    <div className="space-y-0.5 min-w-0 pr-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-slate-900 dark:text-white">{item.defaultName}</span>
                         <span className="px-2 py-0.2 rounded text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-500">
                           {item.category}
                         </span>
-                        {isAlreadyAdded && (
-                          <span className="text-[10px] text-slate-400 font-semibold">Already Added</span>
-                        )}
                       </div>
                       <p className="text-[11px] text-slate-500 dark:text-slate-400">{item.description}</p>
                     </div>
-                    {!isAlreadyAdded && (
-                      <span className="text-indigo-600 font-extrabold text-sm ml-3">+ Add</span>
+
+                    {isAlreadyAdded ? (
+                      <span className="px-2.5 py-1 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 text-[10px] font-bold whitespace-nowrap shrink-0">
+                        Already Added
+                      </span>
+                    ) : (
+                      <span className="text-indigo-600 font-extrabold text-xs ml-3 whitespace-nowrap shrink-0 px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 transition-colors">
+                        + Add
+                      </span>
                     )}
                   </div>
                 );
@@ -1176,88 +1215,56 @@ export default function AdmissionProcessBuilderPage() {
 
               {/* 4B. TEST / ASSESSMENT CONFIGURATION */}
               {editingStep.stepType === 'ASSESSMENT_TEST' && (
-                <div className="p-4 rounded-2xl bg-blue-50/50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/60 space-y-3">
+                <div className="p-4 rounded-2xl bg-blue-50/50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/60 space-y-3.5">
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] font-bold uppercase tracking-wider text-blue-900 dark:text-blue-200">
                       📝 Assessment & Test Settings
                     </span>
-                    <span className="text-[10px] text-slate-400 font-mono">Assessment Engine</span>
+                    <span className="text-[10px] text-slate-400 font-mono">Stage Rules</span>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                      Assessment Mode *
+                    </label>
+                    <select
+                      value={editingStep.testConfig?.mode || 'PAPER_BASED'}
+                      onChange={(e) =>
+                        setEditingStep({
+                          ...editingStep,
+                          testConfig: {
+                            testRequired: true,
+                            assessmentName: editingStep.testConfig?.assessmentName || editingStep.displayName,
+                            mode: e.target.value as any,
+                            passMarks: editingStep.testConfig?.passMarks ?? 50,
+                            totalMarks: editingStep.testConfig?.totalMarks ?? 100,
+                            resultPublishingRule: editingStep.testConfig?.resultPublishingRule || 'AFTER_STAFF_APPROVAL',
+                            allowRetest: editingStep.testConfig?.allowRetest ?? false,
+                            maxAttempts: editingStep.testConfig?.maxAttempts ?? 1,
+                            resultVisibleToParent: editingStep.testConfig?.resultVisibleToParent ?? true,
+                            sendResultNotification: editingStep.testConfig?.sendResultNotification ?? true,
+                          },
+                        })
+                      }
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold cursor-pointer"
+                    >
+                      <option value="PAPER_BASED">📄 Paper Based</option>
+                      <option value="COMPUTER_BASED">💻 Computer Based</option>
+                      <option value="ONLINE">🌐 Online</option>
+                      <option value="HYBRID">🔀 Hybrid</option>
+                    </select>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1.5 font-medium">
+                      {editingStep.testConfig?.mode === 'COMPUTER_BASED'
+                        ? 'Student takes the assessment on CampusOS using a computer at the school/campus.'
+                        : editingStep.testConfig?.mode === 'ONLINE'
+                        ? 'Student can take the assessment remotely through an authorized online assessment.'
+                        : editingStep.testConfig?.mode === 'HYBRID'
+                        ? 'School can choose Paper, Computer Based, or Online when scheduling each assessment.'
+                        : 'Traditional paper examination conducted at a physical venue.'}
+                    </p>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                        Assessment Mode *
-                      </label>
-                      <select
-                        value={editingStep.testConfig?.mode || 'PAPER_BASED'}
-                        onChange={(e) =>
-                          setEditingStep({
-                            ...editingStep,
-                            testConfig: {
-                              testRequired: true,
-                              assessmentName: editingStep.testConfig?.assessmentName || editingStep.displayName,
-                              mode: e.target.value as any,
-                              passMarks: editingStep.testConfig?.passMarks ?? 50,
-                              totalMarks: editingStep.testConfig?.totalMarks ?? 100,
-                              resultPublishingRule: editingStep.testConfig?.resultPublishingRule || 'AFTER_STAFF_APPROVAL',
-                            },
-                          })
-                        }
-                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold cursor-pointer"
-                      >
-                        <option value="PAPER_BASED">📄 Paper Based Exam</option>
-                        <option value="COMPUTER_BASED">💻 Computer Based (Lab Session)</option>
-                        <option value="ONLINE">🌐 Online Remote Assessment</option>
-                        <option value="HYBRID">🔀 Hybrid / Configurable</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                        Result Publishing Rule *
-                      </label>
-                      <select
-                        value={editingStep.testConfig?.resultPublishingRule || 'AFTER_STAFF_APPROVAL'}
-                        onChange={(e) =>
-                          setEditingStep({
-                            ...editingStep,
-                            testConfig: {
-                              ...editingStep.testConfig!,
-                              testRequired: true,
-                              assessmentName: editingStep.testConfig?.assessmentName || editingStep.displayName,
-                              mode: editingStep.testConfig?.mode || 'PAPER_BASED',
-                              resultPublishingRule: e.target.value as any,
-                            },
-                          })
-                        }
-                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold cursor-pointer"
-                      >
-                        <option value="AFTER_STAFF_APPROVAL">Publish After Staff Approval</option>
-                        <option value="IMMEDIATE">Publish Immediately on Scoring</option>
-                        <option value="ON_SCHEDULED_DATE">Publish on Scheduled Date</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                        Pass Marks / Cutoff
-                      </label>
-                      <input
-                        type="number"
-                        min={0}
-                        value={editingStep.testConfig?.passMarks ?? 50}
-                        onChange={(e) =>
-                          setEditingStep({
-                            ...editingStep,
-                            testConfig: { ...editingStep.testConfig!, testRequired: true, assessmentName: editingStep.displayName, mode: editingStep.testConfig?.mode || 'PAPER_BASED', resultPublishingRule: editingStep.testConfig?.resultPublishingRule || 'AFTER_STAFF_APPROVAL', passMarks: Number(e.target.value) },
-                          })
-                        }
-                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold"
-                      />
-                    </div>
                     <div>
                       <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
                         Total Marks
@@ -1269,12 +1276,70 @@ export default function AdmissionProcessBuilderPage() {
                         onChange={(e) =>
                           setEditingStep({
                             ...editingStep,
-                            testConfig: { ...editingStep.testConfig!, testRequired: true, assessmentName: editingStep.displayName, mode: editingStep.testConfig?.mode || 'PAPER_BASED', resultPublishingRule: editingStep.testConfig?.resultPublishingRule || 'AFTER_STAFF_APPROVAL', totalMarks: Number(e.target.value) },
+                            testConfig: {
+                              ...editingStep.testConfig!,
+                              testRequired: true,
+                              assessmentName: editingStep.displayName,
+                              mode: editingStep.testConfig?.mode || 'PAPER_BASED',
+                              resultPublishingRule: editingStep.testConfig?.resultPublishingRule || 'AFTER_STAFF_APPROVAL',
+                              totalMarks: Number(e.target.value),
+                            },
                           })
                         }
                         className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold"
                       />
                     </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                        Pass Marks / Cutoff
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={editingStep.testConfig?.passMarks ?? 50}
+                        onChange={(e) =>
+                          setEditingStep({
+                            ...editingStep,
+                            testConfig: {
+                              ...editingStep.testConfig!,
+                              testRequired: true,
+                              assessmentName: editingStep.displayName,
+                              mode: editingStep.testConfig?.mode || 'PAPER_BASED',
+                              resultPublishingRule: editingStep.testConfig?.resultPublishingRule || 'AFTER_STAFF_APPROVAL',
+                              passMarks: Number(e.target.value),
+                            },
+                          })
+                        }
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                      Result Publishing Rule *
+                    </label>
+                    <select
+                      value={editingStep.testConfig?.resultPublishingRule || 'AFTER_STAFF_APPROVAL'}
+                      onChange={(e) =>
+                        setEditingStep({
+                          ...editingStep,
+                          testConfig: {
+                            ...editingStep.testConfig!,
+                            testRequired: true,
+                            assessmentName: editingStep.testConfig?.assessmentName || editingStep.displayName,
+                            mode: editingStep.testConfig?.mode || 'PAPER_BASED',
+                            resultPublishingRule: e.target.value as any,
+                          },
+                        })
+                      }
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold cursor-pointer"
+                    >
+                      <option value="AUTOMATIC_AFTER_EVALUATION">Automatic After Evaluation</option>
+                      <option value="AFTER_STAFF_APPROVAL">Publish After Staff Approval</option>
+                      <option value="MANUAL_PUBLISH">Manual Publish</option>
+                    </select>
                   </div>
                 </div>
               )}
@@ -1562,6 +1627,90 @@ export default function AdmissionProcessBuilderPage() {
 
                 {showMoreStepSettings && (
                   <div className="mt-3 space-y-3 p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 animate-in fade-in">
+                    {/* Assessment Specific Advanced Policies */}
+                    {editingStep.stepType === 'ASSESSMENT_TEST' && (
+                      <div className="space-y-2.5 pb-2 border-b border-slate-200 dark:border-slate-700">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
+                          Assessment Policies
+                        </span>
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-slate-700 dark:text-slate-300">Allow Retest</span>
+                          <input
+                            type="checkbox"
+                            checked={editingStep.testConfig?.allowRetest ?? false}
+                            onChange={(e) =>
+                              setEditingStep({
+                                ...editingStep,
+                                testConfig: {
+                                  ...editingStep.testConfig!,
+                                  allowRetest: e.target.checked,
+                                },
+                              })
+                            }
+                            className="h-4 w-4 text-indigo-600 rounded cursor-pointer"
+                          />
+                        </div>
+
+                        {editingStep.testConfig?.allowRetest && (
+                          <div className="flex items-center justify-between pl-2">
+                            <span className="text-slate-600 dark:text-slate-300 text-[11px]">Maximum Retest Attempts</span>
+                            <input
+                              type="number"
+                              min={1}
+                              max={5}
+                              value={editingStep.testConfig?.maxAttempts ?? 2}
+                              onChange={(e) =>
+                                setEditingStep({
+                                  ...editingStep,
+                                  testConfig: {
+                                    ...editingStep.testConfig!,
+                                    maxAttempts: Number(e.target.value),
+                                  },
+                                })
+                              }
+                              className="w-20 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold"
+                            />
+                          </div>
+                        )}
+
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-slate-700 dark:text-slate-300">Result visible to parent</span>
+                          <input
+                            type="checkbox"
+                            checked={editingStep.testConfig?.resultVisibleToParent ?? true}
+                            onChange={(e) =>
+                              setEditingStep({
+                                ...editingStep,
+                                testConfig: {
+                                  ...editingStep.testConfig!,
+                                  resultVisibleToParent: e.target.checked,
+                                },
+                              })
+                            }
+                            className="h-4 w-4 text-indigo-600 rounded cursor-pointer"
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-slate-700 dark:text-slate-300">Send result notification</span>
+                          <input
+                            type="checkbox"
+                            checked={editingStep.testConfig?.sendResultNotification ?? true}
+                            onChange={(e) =>
+                              setEditingStep({
+                                ...editingStep,
+                                testConfig: {
+                                  ...editingStep.testConfig!,
+                                  sendResultNotification: e.target.checked,
+                                },
+                              })
+                            }
+                            className="h-4 w-4 text-indigo-600 rounded cursor-pointer"
+                          />
+                        </div>
+                      </div>
+                    )}
+
                     {/* Auto Continue */}
                     <div className="flex items-center justify-between">
                       <div>

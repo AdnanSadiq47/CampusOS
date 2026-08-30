@@ -16,6 +16,8 @@ interface AssignedToDetailsModalProps {
   formName: string;
   scopeState?: SelectedHierarchyState | null;
   authorizedHierarchy?: HierarchyNodeItem[];
+  currentContextName?: string;
+  currentContextCampusIds?: string[];
 }
 
 export function AssignedToDetailsModal({
@@ -30,6 +32,8 @@ export function AssignedToDetailsModal({
     selectedCampusIds: [],
   },
   authorizedHierarchy = SAMPLE_AUTHORIZED_HIERARCHY,
+  currentContextName,
+  currentContextCampusIds,
 }: AssignedToDetailsModalProps) {
   const [search, setSearch] = useState('');
   const [coverageFilter, setCoverageFilter] = useState<'ALL' | 'DIRECT' | 'INHERITED'>('ALL');
@@ -106,6 +110,12 @@ export function AssignedToDetailsModal({
     });
   }, [effectiveCoverage, coverageFilter, search]);
 
+  const isEffectiveInCurrentContext = useMemo(() => {
+    if (isUniversal) return true;
+    if (!currentContextCampusIds || currentContextCampusIds.length === 0) return true;
+    return effectiveCoverage.some((c) => currentContextCampusIds.includes(c.campusId));
+  }, [isUniversal, currentContextCampusIds, effectiveCoverage]);
+
   if (!isOpen) return null;
 
   const visibleDirectChips = showAllDirectChips ? directAssignmentItems : directAssignmentItems.slice(0, 6);
@@ -124,7 +134,7 @@ export function AssignedToDetailsModal({
               </h3>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              <strong className="text-slate-800 dark:text-slate-200">{formName}</strong> — See where this form is assigned and available.
+              <strong className="text-slate-800 dark:text-slate-200">{formName}</strong> — See where this configuration is assigned and effective.
             </p>
           </div>
           <button
@@ -134,6 +144,29 @@ export function AssignedToDetailsModal({
             ✕
           </button>
         </div>
+
+        {/* Working Context Scope Status Banner */}
+        {currentContextName && (
+          <div className={`p-2.5 rounded-2xl border flex items-center justify-between text-xs shrink-0 ${
+            isEffectiveInCurrentContext
+              ? 'bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900/60 text-emerald-900 dark:text-emerald-200'
+              : 'bg-amber-50/70 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/60 text-amber-900 dark:text-amber-200'
+          }`}>
+            <div className="flex items-center gap-2 min-w-0">
+              <span>{isEffectiveInCurrentContext ? '✅' : '⚠️'}</span>
+              <span className="truncate">
+                Working Context: <strong className="font-semibold">{currentContextName}</strong>
+              </span>
+            </div>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase shrink-0 ${
+              isEffectiveInCurrentContext
+                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
+                : 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
+            }`}>
+              {isUniversal ? 'Universal' : isEffectiveInCurrentContext ? 'Direct / Active' : 'Not In Context'}
+            </span>
+          </div>
+        )}
 
         {/* 2. Directly Assigned To (Flattened & Compact Strip ~10-15% height) */}
         <div className="shrink-0 space-y-1.5">

@@ -6,7 +6,10 @@ import {
   states,
   cities,
   areas,
-  postalCodes,
+  schools,
+  branches,
+  headOffices,
+  regions,
 } from '@campus-os/database';
 import {
   CreateCountryDto,
@@ -21,9 +24,7 @@ import {
   CreateAreaDto,
   UpdateAreaDto,
   AreaListItemDto,
-  CreatePostalCodeDto,
-  UpdatePostalCodeDto,
-  PostalCodeListItemDto,
+  GeographyDependenciesDto,
 } from '@campus-os/types';
 import { AuditService } from '../../core/audit/audit.service.js';
 
@@ -1007,103 +1008,66 @@ export class GeographyService {
   }
 
   // ═════════════════════════════════════════════════════════════════
-  // 5. POSTAL CODES MASTER
+  // 5. DEPENDENCY CHECKING & DEPENDENCY-SAFE DELETION
   // ═════════════════════════════════════════════════════════════════
 
-  async listPostalCodes(
-    tenantId: string,
-    countryId?: string,
-    stateId?: string,
-    cityId?: string,
-    areaId?: string,
-    search?: string,
-    status?: string
-  ): Promise<PostalCodeListItemDto[]> {
-    return this.txManager.runInTenantContext(tenantId, async (tx) => {
-      const rows = await tx
-        .select({
-          id: postalCodes.id,
-          organizationId: postalCodes.organizationId,
-          countryId: postalCodes.countryId,
-          countryName: countries.name,
-          stateId: postalCodes.stateId,
-          stateName: states.name,
-          cityId: postalCodes.cityId,
-          cityName: cities.name,
-          areaId: postalCodes.areaId,
-          areaName: areas.name,
-          postalCode: postalCodes.postalCode,
-          description: postalCodes.description,
-          isActive: postalCodes.isActive,
-          createdAt: postalCodes.createdAt,
-          updatedAt: postalCodes.updatedAt,
-        })
-        .from(postalCodes)
-        .innerJoin(countries, eq(postalCodes.countryId, countries.id))
-        .leftJoin(states, eq(postalCodes.stateId, states.id))
-        .innerJoin(cities, eq(postalCodes.cityId, cities.id))
-        .leftJoin(areas, eq(postalCodes.areaId, areas.id))
-        .where(
-          and(
-            eq(postalCodes.organizationId, tenantId),
-            countryId && countryId !== 'ALL' ? eq(postalCodes.countryId, countryId) : undefined,
-            stateId && stateId !== 'ALL' ? eq(postalCodes.stateId, stateId) : undefined,
-            cityId && cityId !== 'ALL' ? eq(postalCodes.cityId, cityId) : undefined,
-            areaId && areaId !== 'ALL' ? eq(postalCodes.areaId, areaId) : undefined,
-            status && status !== 'ALL' ? eq(postalCodes.isActive, status === 'ACTIVE') : undefined,
-            search
-              ? or(
-                  ilike(postalCodes.postalCode, `%${search}%`),
-                  ilike(postalCodes.description, `%${search}%`),
-                  ilike(cities.name, `%${search}%`)
-                )
-              : undefined
-          )
-        )
-        .orderBy(asc(countries.name), asc(cities.name), asc(postalCodes.postalCode));
+  private async getCountryDependenciesWithTx(tx: any, tenantId: string, id: string): Promise<GeographyDependenciesDto> {
+    const [c] = await tx.select().from(countries).where(and(eq(countries.organizationId, tenantId), eq(countries.id, id)));
+    if (!c) throw new NotFoundException(`Country with ID '${id}' not found.`);
 
-      return rows;
+    const [statesRes] = await tx.select({ count: sql<number>`COUNT(*)` }).from(states).where(eq(states.countryId, id));
+    const [schoolsRes] = await tx.select({ count: sql<number>`COUNT(*)` }).from(schools).where(eq(schools.countryId, id));
+    const [branchesRes] = await tx.select({ count: sql<number>`COUNT(*)` }).from(branches).where(eq(branches.countryId, id));
+    const [headOfficesRes] = await tx.select({ count: sql<number>`COUNT(*)` }).from(headOffices).where(eq(headOffices.countryId, id));
+    const [regionsRes] = await tx.select({ count: sql<number>`COUNT(*)` }).from(regions).where(eq(regions.countryId, id));
+
+    const statesCount = Number(statesRes?.count || 0);
+    const schoolsCount = Number(schoolsRes?.count || 0);
+    const branchesCount = Number(branchesRes?.count || 0);
+    const headOfficesCount = Number(headOfficesRes?.count || 0);
+    const regionsCount = Number(regionsRes?.count || 0);
+
+    const totalDependencies = statesCount + schoolsCount + branchesCount + headOfficesCount + regionsCount;
+    const reasons: string[] = [];
+    if (statesCount > 0) reasons.push(`${statesCount} State(s)/Province(s) are linked to this country.`);
+    if (schoolsCount > 0) reasons.push(`${schoolsCount} School(s) reference this country.`);
+    if (branchesCount > 0) reasons.push(`${branchesCount} Branch(es) reference this country.`);
+    if (headOfficesCount > 0) reasons.push(`${headOfficesCount} Head Office(s) reference this country.`);
+    if (regionsCount > 0) reasons.push(`${regionsCount} Region(s) reference this country.`);
+
+    return {
+      canDelete: totalDependencies === 0,
+      entityName: c.name,
+      entityType: 'COUNTRY',
+      totalDependencies,
+      reasons,
+      breakdown: {
+        states: statesCount,
+        schools: schoolsCount,
+        branches: branchesCount,
+        headOffices: headOfficesCount,
+        regions: regionsCount,
+      },
+    };
+  }
+
+  async getCountryDependencies(tenantId: string, id: string): Promise<GeographyDependenciesDto> {
+    return this.txManager.runInTenantContext(tenantId, async (tx) => {
+      return this.getCountryDependenciesWithTx(tx, tenantId, id);
     });
   }
 
-  async createPostalCode(
-    tenantId: string,
-    dto: CreatePostalCodeDto,
-    actorUserId?: string
-  ): Promise<PostalCodeListItemDto> {
+  async deleteCountry(tenantId: string, id: string, actorUserId?: string): Promise<{ success: boolean; message: string }> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
-      const [country] = await tx.select().from(countries).where(and(eq(countries.organizationId, tenantId), eq(countries.id, dto.countryId)));
-      const [city] = await tx.select().from(cities).where(and(eq(cities.organizationId, tenantId), eq(cities.id, dto.cityId)));
-
-      if (!country || !city) {
-        throw new NotFoundException('Invalid country or city reference.');
+      const deps = await this.getCountryDependenciesWithTx(tx, tenantId, id);
+      if (!deps.canDelete) {
+        throw new BadRequestException(`Cannot delete country '${deps.entityName}'. Active dependencies exist:\n${deps.reasons.join('\n')}`);
       }
 
-      let stateName: string | undefined;
-      if (dto.stateId) {
-        const [state] = await tx.select().from(states).where(and(eq(states.organizationId, tenantId), eq(states.id, dto.stateId)));
-        stateName = state?.name;
-      }
+      const [existing] = await tx.select().from(countries).where(and(eq(countries.organizationId, tenantId), eq(countries.id, id)));
+      if (!existing) throw new NotFoundException(`Country with ID '${id}' not found.`);
 
-      let areaName: string | undefined;
-      if (dto.areaId) {
-        const [area] = await tx.select().from(areas).where(and(eq(areas.organizationId, tenantId), eq(areas.id, dto.areaId)));
-        areaName = area?.name;
-      }
-
-      const [created] = await tx
-        .insert(postalCodes)
-        .values({
-          organizationId: tenantId,
-          countryId: dto.countryId,
-          stateId: dto.stateId ?? null,
-          cityId: dto.cityId,
-          areaId: dto.areaId ?? null,
-          postalCode: dto.postalCode.trim(),
-          description: dto.description?.trim() ?? null,
-          isActive: dto.isActive ?? true,
-        })
-        .returning();
+      await tx.delete(countries).where(and(eq(countries.organizationId, tenantId), eq(countries.id, id)));
 
       await this.auditService.logEvent(
         {
@@ -1111,117 +1075,67 @@ export class GeographyService {
           actorId: actorUserId ?? null,
           actorEmail: actorUserId ? 'admin@campus-os.local' : 'system@campus-os.local',
           module: 'ORGANIZATION',
-          action: 'CREATE',
-          entityType: 'postal_code',
-          entityId: created!.id,
-          afterState: created,
-        },
-        tx
-      );
-
-      return {
-        ...created!,
-        countryName: country.name,
-        stateName,
-        cityName: city.name,
-        areaName,
-      };
-    });
-  }
-
-  async updatePostalCode(
-    tenantId: string,
-    id: string,
-    dto: UpdatePostalCodeDto,
-    actorUserId?: string
-  ): Promise<PostalCodeListItemDto> {
-    return this.txManager.runInTenantContext(tenantId, async (tx) => {
-      const [existing] = await tx
-        .select()
-        .from(postalCodes)
-        .where(and(eq(postalCodes.organizationId, tenantId), eq(postalCodes.id, id)));
-
-      if (!existing) throw new NotFoundException(`Postal Code with ID '${id}' not found.`);
-
-      const targetCountryId = dto.countryId || existing.countryId;
-      const targetCityId = dto.cityId || existing.cityId;
-      const targetStateId = dto.stateId !== undefined ? (dto.stateId || null) : existing.stateId;
-      const targetAreaId = dto.areaId !== undefined ? (dto.areaId || null) : existing.areaId;
-
-      const [country] = await tx.select().from(countries).where(and(eq(countries.organizationId, tenantId), eq(countries.id, targetCountryId)));
-      const [city] = await tx.select().from(cities).where(and(eq(cities.organizationId, tenantId), eq(cities.id, targetCityId)));
-
-      const [updated] = await tx
-        .update(postalCodes)
-        .set({
-          countryId: targetCountryId,
-          stateId: targetStateId,
-          cityId: targetCityId,
-          areaId: targetAreaId,
-          postalCode: dto.postalCode ? dto.postalCode.trim() : existing.postalCode,
-          description: dto.description !== undefined ? (dto.description ? dto.description.trim() : null) : existing.description,
-          isActive: dto.isActive !== undefined ? dto.isActive : existing.isActive,
-          updatedAt: new Date(),
-        })
-        .where(and(eq(postalCodes.organizationId, tenantId), eq(postalCodes.id, id)))
-        .returning();
-
-      await this.auditService.logEvent(
-        {
-          organizationId: tenantId,
-          actorId: actorUserId ?? null,
-          actorEmail: actorUserId ? 'admin@campus-os.local' : 'system@campus-os.local',
-          module: 'ORGANIZATION',
-          action: 'UPDATE',
-          entityType: 'postal_code',
+          action: 'DELETE',
+          entityType: 'country',
           entityId: id,
           beforeState: existing,
-          afterState: updated,
         },
         tx
       );
 
-      let stateName: string | undefined;
-      if (targetStateId) {
-        const [state] = await tx.select().from(states).where(and(eq(states.organizationId, tenantId), eq(states.id, targetStateId)));
-        stateName = state?.name;
-      }
-
-      let areaName: string | undefined;
-      if (targetAreaId) {
-        const [area] = await tx.select().from(areas).where(and(eq(areas.organizationId, tenantId), eq(areas.id, targetAreaId)));
-        areaName = area?.name;
-      }
-
-      return {
-        ...updated!,
-        countryName: country?.name,
-        stateName,
-        cityName: city?.name,
-        areaName,
-      };
+      return { success: true, message: `Country '${existing.name}' deleted successfully.` };
     });
   }
 
-  async togglePostalCodeStatus(
-    tenantId: string,
-    id: string,
-    isActive: boolean,
-    actorUserId?: string
-  ): Promise<PostalCodeListItemDto> {
+  private async getStateDependenciesWithTx(tx: any, tenantId: string, id: string): Promise<GeographyDependenciesDto> {
+    const [s] = await tx.select().from(states).where(and(eq(states.organizationId, tenantId), eq(states.id, id)));
+    if (!s) throw new NotFoundException(`State with ID '${id}' not found.`);
+
+    const [citiesRes] = await tx.select({ count: sql<number>`COUNT(*)` }).from(cities).where(eq(cities.stateId, id));
+    const [schoolsRes] = await tx.select({ count: sql<number>`COUNT(*)` }).from(schools).where(eq(schools.stateId, id));
+    const [branchesRes] = await tx.select({ count: sql<number>`COUNT(*)` }).from(branches).where(eq(branches.stateId, id));
+
+    const citiesCount = Number(citiesRes?.count || 0);
+    const schoolsCount = Number(schoolsRes?.count || 0);
+    const branchesCount = Number(branchesRes?.count || 0);
+
+    const totalDependencies = citiesCount + schoolsCount + branchesCount;
+    const reasons: string[] = [];
+    if (citiesCount > 0) reasons.push(`${citiesCount} City/Cities belong to this state/province.`);
+    if (schoolsCount > 0) reasons.push(`${schoolsCount} School(s) reference this state/province.`);
+    if (branchesCount > 0) reasons.push(`${branchesCount} Branch(es) reference this state/province.`);
+
+    return {
+      canDelete: totalDependencies === 0,
+      entityName: s.name,
+      entityType: 'STATE',
+      totalDependencies,
+      reasons,
+      breakdown: {
+        cities: citiesCount,
+        schools: schoolsCount,
+        branches: branchesCount,
+      },
+    };
+  }
+
+  async getStateDependencies(tenantId: string, id: string): Promise<GeographyDependenciesDto> {
     return this.txManager.runInTenantContext(tenantId, async (tx) => {
-      const [existing] = await tx
-        .select()
-        .from(postalCodes)
-        .where(and(eq(postalCodes.organizationId, tenantId), eq(postalCodes.id, id)));
+      return this.getStateDependenciesWithTx(tx, tenantId, id);
+    });
+  }
 
-      if (!existing) throw new NotFoundException(`Postal Code with ID '${id}' not found.`);
+  async deleteState(tenantId: string, id: string, actorUserId?: string): Promise<{ success: boolean; message: string }> {
+    return this.txManager.runInTenantContext(tenantId, async (tx) => {
+      const deps = await this.getStateDependenciesWithTx(tx, tenantId, id);
+      if (!deps.canDelete) {
+        throw new BadRequestException(`Cannot delete state/province '${deps.entityName}'. Active dependencies exist:\n${deps.reasons.join('\n')}`);
+      }
 
-      const [updated] = await tx
-        .update(postalCodes)
-        .set({ isActive, updatedAt: new Date() })
-        .where(and(eq(postalCodes.organizationId, tenantId), eq(postalCodes.id, id)))
-        .returning();
+      const [existing] = await tx.select().from(states).where(and(eq(states.organizationId, tenantId), eq(states.id, id)));
+      if (!existing) throw new NotFoundException(`State with ID '${id}' not found.`);
+
+      await tx.delete(states).where(and(eq(states.organizationId, tenantId), eq(states.id, id)));
 
       await this.auditService.logEvent(
         {
@@ -1229,23 +1143,147 @@ export class GeographyService {
           actorId: actorUserId ?? null,
           actorEmail: actorUserId ? 'admin@campus-os.local' : 'system@campus-os.local',
           module: 'ORGANIZATION',
-          action: isActive ? 'ACTIVATE' : 'DEACTIVATE',
-          entityType: 'postal_code',
+          action: 'DELETE',
+          entityType: 'state',
           entityId: id,
           beforeState: existing,
-          afterState: updated,
         },
         tx
       );
 
-      const [country] = await tx.select().from(countries).where(and(eq(countries.organizationId, tenantId), eq(countries.id, existing.countryId)));
-      const [city] = await tx.select().from(cities).where(and(eq(cities.organizationId, tenantId), eq(cities.id, existing.cityId)));
+      return { success: true, message: `State/Province '${existing.name}' deleted successfully.` };
+    });
+  }
 
-      return {
-        ...updated!,
-        countryName: country?.name,
-        cityName: city?.name,
-      };
+  private async getCityDependenciesWithTx(tx: any, tenantId: string, id: string): Promise<GeographyDependenciesDto> {
+    const [c] = await tx.select().from(cities).where(and(eq(cities.organizationId, tenantId), eq(cities.id, id)));
+    if (!c) throw new NotFoundException(`City with ID '${id}' not found.`);
+
+    const [areasRes] = await tx.select({ count: sql<number>`COUNT(*)` }).from(areas).where(eq(areas.cityId, id));
+    const [schoolsRes] = await tx.select({ count: sql<number>`COUNT(*)` }).from(schools).where(eq(schools.cityId, id));
+    const [branchesRes] = await tx.select({ count: sql<number>`COUNT(*)` }).from(branches).where(eq(branches.cityId, id));
+
+    const areasCount = Number(areasRes?.count || 0);
+    const schoolsCount = Number(schoolsRes?.count || 0);
+    const branchesCount = Number(branchesRes?.count || 0);
+
+    const totalDependencies = areasCount + schoolsCount + branchesCount;
+    const reasons: string[] = [];
+    if (areasCount > 0) reasons.push(`${areasCount} Area(s)/Zone(s) belong to this city.`);
+    if (schoolsCount > 0) reasons.push(`${schoolsCount} School(s) reference this city.`);
+    if (branchesCount > 0) reasons.push(`${branchesCount} Branch(es) reference this city.`);
+
+    return {
+      canDelete: totalDependencies === 0,
+      entityName: c.name,
+      entityType: 'CITY',
+      totalDependencies,
+      reasons,
+      breakdown: {
+        areas: areasCount,
+        schools: schoolsCount,
+        branches: branchesCount,
+      },
+    };
+  }
+
+  async getCityDependencies(tenantId: string, id: string): Promise<GeographyDependenciesDto> {
+    return this.txManager.runInTenantContext(tenantId, async (tx) => {
+      return this.getCityDependenciesWithTx(tx, tenantId, id);
+    });
+  }
+
+  async deleteCity(tenantId: string, id: string, actorUserId?: string): Promise<{ success: boolean; message: string }> {
+    return this.txManager.runInTenantContext(tenantId, async (tx) => {
+      const deps = await this.getCityDependenciesWithTx(tx, tenantId, id);
+      if (!deps.canDelete) {
+        throw new BadRequestException(`Cannot delete city '${deps.entityName}'. Active dependencies exist:\n${deps.reasons.join('\n')}`);
+      }
+
+      const [existing] = await tx.select().from(cities).where(and(eq(cities.organizationId, tenantId), eq(cities.id, id)));
+      if (!existing) throw new NotFoundException(`City with ID '${id}' not found.`);
+
+      await tx.delete(cities).where(and(eq(cities.organizationId, tenantId), eq(cities.id, id)));
+
+      await this.auditService.logEvent(
+        {
+          organizationId: tenantId,
+          actorId: actorUserId ?? null,
+          actorEmail: actorUserId ? 'admin@campus-os.local' : 'system@campus-os.local',
+          module: 'ORGANIZATION',
+          action: 'DELETE',
+          entityType: 'city',
+          entityId: id,
+          beforeState: existing,
+        },
+        tx
+      );
+
+      return { success: true, message: `City '${existing.name}' deleted successfully.` };
+    });
+  }
+
+  private async getAreaDependenciesWithTx(tx: any, tenantId: string, id: string): Promise<GeographyDependenciesDto> {
+    const [a] = await tx.select().from(areas).where(and(eq(areas.organizationId, tenantId), eq(areas.id, id)));
+    if (!a) throw new NotFoundException(`Area with ID '${id}' not found.`);
+
+    const [schoolsRes] = await tx.select({ count: sql<number>`COUNT(*)` }).from(schools).where(eq(schools.areaId, id));
+    const [branchesRes] = await tx.select({ count: sql<number>`COUNT(*)` }).from(branches).where(eq(branches.areaId, id));
+
+    const schoolsCount = Number(schoolsRes?.count || 0);
+    const branchesCount = Number(branchesRes?.count || 0);
+
+    const totalDependencies = schoolsCount + branchesCount;
+    const reasons: string[] = [];
+    if (schoolsCount > 0) reasons.push(`${schoolsCount} School(s) reference this area.`);
+    if (branchesCount > 0) reasons.push(`${branchesCount} Branch(es) reference this area.`);
+
+    return {
+      canDelete: totalDependencies === 0,
+      entityName: a.name,
+      entityType: 'AREA',
+      totalDependencies,
+      reasons,
+      breakdown: {
+        schools: schoolsCount,
+        branches: branchesCount,
+      },
+    };
+  }
+
+  async getAreaDependencies(tenantId: string, id: string): Promise<GeographyDependenciesDto> {
+    return this.txManager.runInTenantContext(tenantId, async (tx) => {
+      return this.getAreaDependenciesWithTx(tx, tenantId, id);
+    });
+  }
+
+  async deleteArea(tenantId: string, id: string, actorUserId?: string): Promise<{ success: boolean; message: string }> {
+    return this.txManager.runInTenantContext(tenantId, async (tx) => {
+      const deps = await this.getAreaDependenciesWithTx(tx, tenantId, id);
+      if (!deps.canDelete) {
+        throw new BadRequestException(`Cannot delete area '${deps.entityName}'. Active dependencies exist:\n${deps.reasons.join('\n')}`);
+      }
+
+      const [existing] = await tx.select().from(areas).where(and(eq(areas.organizationId, tenantId), eq(areas.id, id)));
+      if (!existing) throw new NotFoundException(`Area with ID '${id}' not found.`);
+
+      await tx.delete(areas).where(and(eq(areas.organizationId, tenantId), eq(areas.id, id)));
+
+      await this.auditService.logEvent(
+        {
+          organizationId: tenantId,
+          actorId: actorUserId ?? null,
+          actorEmail: actorUserId ? 'admin@campus-os.local' : 'system@campus-os.local',
+          module: 'ORGANIZATION',
+          action: 'DELETE',
+          entityType: 'area',
+          entityId: id,
+          beforeState: existing,
+        },
+        tx
+      );
+
+      return { success: true, message: `Area '${existing.name}' deleted successfully.` };
     });
   }
 }

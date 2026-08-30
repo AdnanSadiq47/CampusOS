@@ -1,13 +1,17 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException, ForbiddenException, OnModuleInit } from '@nestjs/common';
 import {
   TenantTransactionManager,
   headOffices,
   regions,
   schools,
+  branches,
+  membershipNodeAssignments,
   hierarchyNodes,
   hierarchyNodeTypes,
+  identityUsers,
   eq,
   and,
+  inArray,
   sql,
 } from '@campus-os/database';
 import {
@@ -15,15 +19,65 @@ import {
   UpdateHeadOfficeDto,
   HeadOfficeListItemDto,
   HeadOfficeDetailDto,
+  HeadOfficeDependenciesDto,
+  HeadOfficePermissions,
+  UserSummaryDto,
+  validateAndNormalizeContactFields,
 } from '@campus-os/types';
 import { AuditService } from '../../core/audit/audit.service.js';
+import { provisionOrLinkAccountTx, resolveLinkedAccountTx } from '../../core/iam/iam-provisioning.util.js';
+import { validateAndResolveGeographyHierarchy } from '../geography/geography-validation.util.js';
 
 @Injectable()
-export class HeadOfficesService {
+export class HeadOfficesService implements OnModuleInit {
   constructor(
     private readonly txManager: TenantTransactionManager,
     private readonly auditService: AuditService
   ) {}
+
+  async onModuleInit() {
+    const orgId = '11111111-1111-1111-1111-111111111111';
+    await this.txManager.runInTenantContext(orgId, async (tx) => {
+      const [existing] = await tx
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(headOffices)
+        .where(eq(headOffices.organizationId, orgId));
+
+      if (Number(existing?.count || 0) > 0) return;
+
+      const hoNodeType = await this.ensureHeadOfficeNodeType(tx, orgId);
+
+      const [rootNode] = await tx
+        .insert(hierarchyNodes)
+        .values({
+          organizationId: orgId,
+          nodeTypeId: hoNodeType.id,
+          code: 'HO-MAIN',
+          name: 'Main Executive Head Office',
+          path: 'root.ho_main',
+          isActive: true,
+        })
+        .returning();
+
+      await tx.insert(headOffices).values({
+        organizationId: orgId,
+        hierarchyNodeId: rootNode!.id,
+        code: 'HO-MAIN',
+        name: 'Main Executive Head Office',
+        shortName: 'Central HQ',
+        description: 'Central Administrative and Governance Headquarters',
+        directorName: 'Dr. Tariq Mehmood',
+        email: 'headoffice@beaconhorizon.edu.pk',
+        phone: '+92 21 34567890',
+        city: 'Karachi',
+        province: 'Sindh',
+        country: 'Pakistan',
+        isActive: true,
+        createdBy: '00000000-0000-0000-0000-000000000000',
+        updatedBy: '00000000-0000-0000-0000-000000000000',
+      });
+    });
+  }
 
   // ─────────────────────────────────────────────────────────────────
   //  CREATE
@@ -108,7 +162,36 @@ export class HeadOfficesService {
         })
         .returning();
 
-      // 5. Create head_offices record
+      // 5. Validate & Resolve Geography Hierarchy
+      const geo = await validateAndResolveGeographyHierarchy(tx, {
+        countryId: dto.countryId,
+        stateId: dto.stateId,
+        cityId: dto.cityId,
+        areaId: dto.areaId,
+        country: dto.country,
+        province: dto.province,
+        city: dto.city,
+        area: dto.area,
+        postalCode: dto.postalCode,
+      });
+
+      // 5.5 Validate & normalize contact fields
+      const contactVal = validateAndNormalizeContactFields({
+        email: dto.email,
+        phone: dto.phone,
+        alternatePhone: dto.alternatePhone,
+        website: dto.website,
+      });
+      if (!contactVal.valid) {
+        throw new BadRequestException({
+          statusCode: 400,
+          error: 'Bad Request',
+          message: 'Validation failed for structured contact fields',
+          errors: contactVal.errors,
+        });
+      }
+
+      // 6. Create head_offices record
       const [newHeadOffice] = await tx
         .insert(headOffices)
         .values({
@@ -120,22 +203,28 @@ export class HeadOfficesService {
           shortName: dto.shortName?.trim() || null,
           description: dto.description?.trim() || null,
           directorName: dto.directorName?.trim() || null,
-          email: dto.email?.trim() || null,
-          phone: dto.phone?.trim() || null,
-          alternatePhone: dto.alternatePhone?.trim() || null,
-          website: dto.website?.trim() || null,
-          country: dto.country?.trim() || 'Pakistan',
-          province: dto.province?.trim() || null,
-          city: dto.city?.trim() || null,
-          area: dto.area?.trim() || null,
+          email: contactVal.normalized.email,
+          phone: contactVal.normalized.phone,
+          alternatePhone: contactVal.normalized.alternatePhone,
+          website: contactVal.normalized.website,
+          country: geo.country || 'Pakistan',
+          province: geo.province,
+          city: geo.city,
+          area: geo.area,
           address: dto.address?.trim() || null,
-          postalCode: dto.postalCode?.trim() || null,
+          postalCode: geo.postalCode,
+          countryId: geo.countryId,
+          stateId: geo.stateId,
+          cityId: geo.cityId,
+          areaId: geo.areaId,
           notes: dto.notes?.trim() || null,
           isActive: dto.status !== undefined ? dto.status : true,
+          createdBy: userId || null,
+          updatedBy: userId || null,
         })
         .returning();
 
-      // 6. Audit trail
+      // 7. Audit trail
       await this.auditService.logEvent(
         {
           organizationId: tenantId,
@@ -152,8 +241,91 @@ export class HeadOfficesService {
         tx
       );
 
-      return newHeadOffice!;
+      const userMap = await this.resolveUserSummaries(tx, [newHeadOffice!.createdBy, newHeadOffice!.updatedBy]);
+
+      let linkedAccount = null;
+      if (dto.account) {
+        linkedAccount = await provisionOrLinkAccountTx(
+          tx,
+          tenantId,
+          node!.id,
+          dto.account,
+          userId,
+          'HEAD_OFFICE',
+          this.auditService
+        );
+      } else {
+        linkedAccount = await resolveLinkedAccountTx(tx, tenantId, node!.id);
+      }
+
+      return {
+        ...newHeadOffice!,
+        linkedAccount,
+        createdByUser: newHeadOffice!.createdBy ? userMap.get(newHeadOffice!.createdBy) || null : null,
+        updatedByUser: newHeadOffice!.updatedBy ? userMap.get(newHeadOffice!.updatedBy) || null : null,
+      };
     });
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  //  USER RESOLUTION HELPER
+  // ─────────────────────────────────────────────────────────────────
+
+  private async resolveUserSummaries(
+    tx: any,
+    userIds: (string | null | undefined)[]
+  ): Promise<Map<string, UserSummaryDto>> {
+    const userMap = new Map<string, UserSummaryDto>();
+
+    userMap.set('00000000-0000-0000-0000-000000000000', {
+      id: '00000000-0000-0000-0000-000000000000',
+      name: 'System User',
+      email: 'system@campus-os.local',
+      firstName: 'System',
+      lastName: 'User',
+    });
+
+    const uniqueIds = Array.from(
+      new Set(userIds.filter((id): id is string => !!id && id !== '00000000-0000-0000-0000-000000000000'))
+    );
+
+    if (uniqueIds.length === 0) return userMap;
+
+    try {
+      const users = await tx
+        .select({
+          id: identityUsers.id,
+          email: identityUsers.email,
+          firstName: identityUsers.firstName,
+          lastName: identityUsers.lastName,
+        })
+        .from(identityUsers)
+        .where(inArray(identityUsers.id, uniqueIds));
+
+      for (const u of users) {
+        userMap.set(u.id, {
+          id: u.id,
+          name: `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email,
+          email: u.email,
+          firstName: u.firstName,
+          lastName: u.lastName,
+        });
+      }
+    } catch {
+      // Table may not exist or query fails gracefully
+    }
+
+    for (const uid of uniqueIds) {
+      if (!userMap.has(uid)) {
+        userMap.set(uid, {
+          id: uid,
+          name: 'System User',
+          email: 'system@campus-os.local',
+        });
+      }
+    }
+
+    return userMap;
   }
 
   // ─────────────────────────────────────────────────────────────────
@@ -186,13 +358,25 @@ export class HeadOfficesService {
           city: headOffices.city,
           province: headOffices.province,
           country: headOffices.country,
+          address: headOffices.address,
+          area: headOffices.area,
+          postalCode: headOffices.postalCode,
+          countryId: headOffices.countryId,
+          stateId: headOffices.stateId,
+          cityId: headOffices.cityId,
+          areaId: headOffices.areaId,
           isActive: headOffices.isActive,
+          createdBy: headOffices.createdBy,
+          updatedBy: headOffices.updatedBy,
           createdAt: headOffices.createdAt,
           updatedAt: headOffices.updatedAt,
         })
         .from(headOffices)
         .where(and(...conditions))
         .orderBy(headOffices.name);
+
+      const allUserIds = rows.flatMap((r) => [r.createdBy, r.updatedBy]);
+      const userMap = await this.resolveUserSummaries(tx, allUserIds);
 
       // Aggregate child regions and direct child schools per head office
       const results: HeadOfficeListItemDto[] = [];
@@ -222,12 +406,16 @@ export class HeadOfficesService {
 
         const rCount = Number(regionCountRes?.count || 0);
         const sCount = Number(schoolCountRes?.count || 0);
+        const linkedAccount = await resolveLinkedAccountTx(tx, tenantId, row.hierarchyNodeId);
 
         results.push({
           ...row,
           regionCount: rCount,
           schoolCount: sCount,
           connectedUnitsCount: rCount + sCount,
+          linkedAccount,
+          createdByUser: row.createdBy ? userMap.get(row.createdBy) || null : null,
+          updatedByUser: row.updatedBy ? userMap.get(row.updatedBy) || null : null,
         });
       }
 
@@ -278,12 +466,17 @@ export class HeadOfficesService {
 
       const rCount = Number(regionCountRes?.count || 0);
       const sCount = Number(schoolCountRes?.count || 0);
+      const userMap = await this.resolveUserSummaries(tx, [ho.createdBy, ho.updatedBy]);
+      const linkedAccount = await resolveLinkedAccountTx(tx, tenantId, ho.hierarchyNodeId);
 
       return {
         ...ho,
         regionCount: rCount,
         schoolCount: sCount,
         connectedUnitsCount: rCount + sCount,
+        linkedAccount,
+        createdByUser: ho.createdBy ? userMap.get(ho.createdBy) || null : null,
+        updatedByUser: ho.updatedBy ? userMap.get(ho.updatedBy) || null : null,
       };
     });
   }
@@ -337,23 +530,68 @@ export class HeadOfficesService {
 
       const patch: Partial<typeof headOffices.$inferInsert> = {
         updatedAt: new Date(),
+        ...(userId ? { updatedBy: userId } : {}),
       };
+
+      // Validate & normalize contact fields if any are provided
+      const contactVal = validateAndNormalizeContactFields({
+        email: dto.email,
+        phone: dto.phone,
+        alternatePhone: dto.alternatePhone,
+        website: dto.website,
+      });
+      if (!contactVal.valid) {
+        throw new BadRequestException({
+          statusCode: 400,
+          error: 'Bad Request',
+          message: 'Validation failed for structured contact fields',
+          errors: contactVal.errors,
+        });
+      }
 
       if (dto.name !== undefined) patch.name = dto.name.trim();
       if (dto.code !== undefined) patch.code = dto.code.trim().toUpperCase();
       if (dto.shortName !== undefined) patch.shortName = dto.shortName?.trim() || null;
       if (dto.description !== undefined) patch.description = dto.description?.trim() || null;
       if (dto.directorName !== undefined) patch.directorName = dto.directorName?.trim() || null;
-      if (dto.email !== undefined) patch.email = dto.email?.trim() || null;
-      if (dto.phone !== undefined) patch.phone = dto.phone?.trim() || null;
-      if (dto.alternatePhone !== undefined) patch.alternatePhone = dto.alternatePhone?.trim() || null;
-      if (dto.website !== undefined) patch.website = dto.website?.trim() || null;
-      if (dto.country !== undefined) patch.country = dto.country?.trim() || 'Pakistan';
-      if (dto.province !== undefined) patch.province = dto.province?.trim() || null;
-      if (dto.city !== undefined) patch.city = dto.city?.trim() || null;
-      if (dto.area !== undefined) patch.area = dto.area?.trim() || null;
+      if (dto.email !== undefined) patch.email = contactVal.normalized.email;
+      if (dto.phone !== undefined) patch.phone = contactVal.normalized.phone;
+      if (dto.alternatePhone !== undefined) patch.alternatePhone = contactVal.normalized.alternatePhone;
+      if (dto.website !== undefined) patch.website = contactVal.normalized.website;
+      if (
+        dto.countryId !== undefined ||
+        dto.stateId !== undefined ||
+        dto.cityId !== undefined ||
+        dto.areaId !== undefined ||
+        dto.country !== undefined ||
+        dto.province !== undefined ||
+        dto.city !== undefined ||
+        dto.area !== undefined ||
+        dto.postalCode !== undefined
+      ) {
+        const geo = await validateAndResolveGeographyHierarchy(tx, {
+          countryId: dto.countryId !== undefined ? dto.countryId : existing.countryId,
+          stateId: dto.stateId !== undefined ? dto.stateId : existing.stateId,
+          cityId: dto.cityId !== undefined ? dto.cityId : existing.cityId,
+          areaId: dto.areaId !== undefined ? dto.areaId : existing.areaId,
+          country: dto.country !== undefined ? dto.country : existing.country,
+          province: dto.province !== undefined ? dto.province : existing.province,
+          city: dto.city !== undefined ? dto.city : existing.city,
+          area: dto.area !== undefined ? dto.area : existing.area,
+          postalCode: dto.postalCode !== undefined ? dto.postalCode : existing.postalCode,
+        });
+
+        patch.countryId = geo.countryId;
+        patch.stateId = geo.stateId;
+        patch.cityId = geo.cityId;
+        patch.areaId = geo.areaId;
+        patch.country = geo.country || 'Pakistan';
+        patch.province = geo.province;
+        patch.city = geo.city;
+        patch.area = geo.area;
+        patch.postalCode = geo.postalCode;
+      }
       if (dto.address !== undefined) patch.address = dto.address?.trim() || null;
-      if (dto.postalCode !== undefined) patch.postalCode = dto.postalCode?.trim() || null;
       if (dto.notes !== undefined) patch.notes = dto.notes?.trim() || null;
       if (dto.isActive !== undefined) patch.isActive = dto.isActive;
 
@@ -407,7 +645,29 @@ export class HeadOfficesService {
         tx
       );
 
-      return updated!;
+      const userMap = await this.resolveUserSummaries(tx, [updated!.createdBy, updated!.updatedBy]);
+
+      let linkedAccount = null;
+      if (dto.account) {
+        linkedAccount = await provisionOrLinkAccountTx(
+          tx,
+          tenantId,
+          existing.hierarchyNodeId,
+          dto.account,
+          userId,
+          'HEAD_OFFICE',
+          this.auditService
+        );
+      } else {
+        linkedAccount = await resolveLinkedAccountTx(tx, tenantId, existing.hierarchyNodeId);
+      }
+
+      return {
+        ...updated!,
+        linkedAccount,
+        createdByUser: updated!.createdBy ? userMap.get(updated!.createdBy) || null : null,
+        updatedByUser: updated!.updatedBy ? userMap.get(updated!.updatedBy) || null : null,
+      };
     });
   }
 
@@ -460,6 +720,214 @@ export class HeadOfficesService {
     });
   }
 
+  // ─────────────────────────────────────────────────────────────────
+  //  PERMISSIONS & DEPENDENCY SAFETY
+  // ─────────────────────────────────────────────────────────────────
+
+  assertPermission(permissionsHeader?: string | string[], requiredPerm?: string) {
+    if (!requiredPerm) return;
+
+    if (!permissionsHeader || (typeof permissionsHeader === 'string' && !permissionsHeader.trim())) {
+      throw new ForbiddenException(
+        `Access Denied: Missing permissions header. Action requires '${requiredPerm}'. System is fail-closed.`
+      );
+    }
+
+    const perms = (
+      Array.isArray(permissionsHeader)
+        ? permissionsHeader.map((p) => p.trim().toUpperCase())
+        : permissionsHeader.split(',').map((p) => p.trim().toUpperCase())
+    ).filter(Boolean);
+
+    // Fail closed: require explicit permission key, no '*' or 'ALL' wildcard bypass
+    const hasPerm = perms.includes(requiredPerm.toUpperCase());
+
+    if (!hasPerm) {
+      throw new ForbiddenException(
+        `Access Denied: You do not have permission '${requiredPerm}' to perform this action.`
+      );
+    }
+  }
+
+  async getHeadOfficeDependenciesTx(tx: any, tenantId: string, id: string): Promise<HeadOfficeDependenciesDto> {
+    const [ho] = await tx
+      .select()
+      .from(headOffices)
+      .where(and(eq(headOffices.organizationId, tenantId), eq(headOffices.id, id)))
+      .limit(1);
+
+    if (!ho) {
+      throw new NotFoundException(`Head Office '${id}' not found in this organization.`);
+    }
+
+    // 1. Direct Child Regions
+    const [regionCountRes] = await tx
+      .select({ count: sql<number>`cast(count(${regions.id}) as int)` })
+      .from(regions)
+      .where(and(eq(regions.organizationId, tenantId), eq(regions.parentId, ho.hierarchyNodeId)));
+
+    // 2. Direct Schools + Schools under Child Regions
+    const [schoolCountRes] = await tx
+      .select({ count: sql<number>`cast(count(${schools.id}) as int)` })
+      .from(schools)
+      .where(
+        and(
+          eq(schools.organizationId, tenantId),
+          sql`(${schools.parentId} = ${ho.hierarchyNodeId} OR ${schools.parentId} IN (
+            SELECT ${regions.hierarchyNodeId} FROM ${regions} 
+            WHERE ${regions.organizationId} = ${tenantId} AND ${regions.parentId} = ${ho.hierarchyNodeId}
+          ))`
+        )
+      );
+
+    // 3. Campuses belonging to schools connected to this Head Office
+    const [branchCountRes] = await tx
+      .select({ count: sql<number>`cast(count(${branches.id}) as int)` })
+      .from(branches)
+      .where(
+        and(
+          eq(branches.organizationId, tenantId),
+          sql`${branches.schoolId} IN (
+            SELECT ${schools.id} FROM ${schools} 
+            WHERE ${schools.organizationId} = ${tenantId} AND (
+              ${schools.parentId} = ${ho.hierarchyNodeId} OR ${schools.parentId} IN (
+                SELECT ${regions.hierarchyNodeId} FROM ${regions} 
+                WHERE ${regions.organizationId} = ${tenantId} AND ${regions.parentId} = ${ho.hierarchyNodeId}
+              )
+            )
+          )`
+        )
+      );
+
+    // 4. User / Role assignments on this Head Office node
+    const [assignmentCountRes] = await tx
+      .select({ count: sql<number>`cast(count(${membershipNodeAssignments.id}) as int)` })
+      .from(membershipNodeAssignments)
+      .where(
+        and(
+          eq(membershipNodeAssignments.organizationId, tenantId),
+          eq(membershipNodeAssignments.hierarchyNodeId, ho.hierarchyNodeId)
+        )
+      );
+
+    // 5. Child Hierarchy Nodes
+    const [childNodeCountRes] = await tx
+      .select({ count: sql<number>`cast(count(${hierarchyNodes.id}) as int)` })
+      .from(hierarchyNodes)
+      .where(
+        and(
+          eq(hierarchyNodes.organizationId, tenantId),
+          eq(hierarchyNodes.parentId, ho.hierarchyNodeId)
+        )
+      );
+
+    const rCount = Number(regionCountRes?.count || 0);
+    const sCount = Number(schoolCountRes?.count || 0);
+    const bCount = Number(branchCountRes?.count || 0);
+    const aCount = Number(assignmentCountRes?.count || 0);
+    const cCount = Number(childNodeCountRes?.count || 0);
+    const total = rCount + sCount + bCount + aCount;
+
+    const canDelete = total === 0;
+
+    const breakdown: string[] = [];
+    if (rCount > 0) breakdown.push(`${rCount} Regional Office${rCount > 1 ? 's' : ''}`);
+    if (sCount > 0) breakdown.push(`${sCount} School${sCount > 1 ? 's' : ''}`);
+    if (bCount > 0) breakdown.push(`${bCount} Campus${bCount > 1 ? 'es' : ''}`);
+    if (aCount > 0) breakdown.push(`${aCount} User Assignment${aCount > 1 ? 's' : ''}`);
+
+    let message: string | undefined;
+    if (!canDelete) {
+      message = `This Head Office is currently used by:\n${breakdown.map((b) => `• ${b}`).join('\n')}\n\nReassign these records or deactivate the Head Office first.`;
+    }
+
+    return {
+      headOfficeId: ho.id,
+      headOfficeName: ho.name,
+      headOfficeCode: ho.code,
+      canDelete,
+      message,
+      dependencies: {
+        regions: rCount,
+        schools: sCount,
+        campuses: bCount,
+        userAssignments: aCount,
+        childHierarchyNodes: cCount,
+        total,
+      },
+    };
+  }
+
+  async getHeadOfficeDependencies(tenantId: string, id: string): Promise<HeadOfficeDependenciesDto> {
+    return this.txManager.runInTenantContext(tenantId, async (tx) => {
+      return this.getHeadOfficeDependenciesTx(tx, tenantId, id);
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  //  DELETE (with foreign key and full hierarchy dependency protection)
+  // ─────────────────────────────────────────────────────────────────
+
+  async deleteHeadOffice(
+    tenantId: string,
+    id: string,
+    userId?: string,
+    permissions?: string | string[]
+  ) {
+    this.assertPermission(permissions, HeadOfficePermissions.DELETE);
+
+    return this.txManager.runInTenantContext(tenantId, async (tx) => {
+      const depCheck = await this.getHeadOfficeDependenciesTx(tx, tenantId, id);
+
+      if (!depCheck.canDelete) {
+        throw new BadRequestException(
+          `Cannot Delete Head Office. ${depCheck.message}`
+        );
+      }
+
+      const [ho] = await tx
+        .select()
+        .from(headOffices)
+        .where(and(eq(headOffices.organizationId, tenantId), eq(headOffices.id, id)))
+        .limit(1);
+
+      if (!ho) {
+        throw new NotFoundException(`Head Office '${id}' not found in this organization.`);
+      }
+
+      // Safe standalone delete
+      await tx
+        .delete(headOffices)
+        .where(and(eq(headOffices.organizationId, tenantId), eq(headOffices.id, id)));
+
+      await tx
+        .delete(hierarchyNodes)
+        .where(and(eq(hierarchyNodes.organizationId, tenantId), eq(hierarchyNodes.id, ho.hierarchyNodeId)));
+
+      await this.auditService.logEvent(
+        {
+          organizationId: tenantId,
+          hierarchyNodeId: ho.hierarchyNodeId,
+          actorId: userId ?? null,
+          actorEmail: userId ? 'admin@campus-os.local' : 'system@campus-os.local',
+          module: 'ORGANIZATION',
+          action: 'HEAD_OFFICE_DELETED',
+          entityType: 'head_office',
+          entityId: id,
+          beforeState: ho,
+          afterState: null,
+        },
+        tx
+      );
+
+      return {
+        success: true,
+        message: `Head Office '${ho.name}' (${ho.code}) deleted successfully.`,
+        deletedId: id,
+      };
+    });
+  }
+
   // ── PRIVATE HELPERS ──────────────────────────────────────────────
 
   private async ensureHeadOfficeNodeType(tx: any, tenantId: string) {
@@ -497,5 +965,26 @@ export class HeadOfficesService {
       .toLowerCase()
       .replace(/[^a-z0-9_]/g, '_')
       .replace(/^_+|_+$/g, '');
+  }
+
+  assertScope(
+    userScope?: { authorizedHeadOffices?: string[]; authorizedRegions?: string[]; authorizedSchools?: string[] },
+    targetHeadOfficeIdOrCode?: string
+  ) {
+    if (!userScope) return;
+    if (userScope.authorizedRegions?.length && !userScope.authorizedHeadOffices?.length) {
+      throw new ForbiddenException('Access denied: Region-scoped account cannot access Head Office management.');
+    }
+    if (userScope.authorizedSchools?.length && !userScope.authorizedHeadOffices?.length) {
+      throw new ForbiddenException('Access denied: School-scoped account cannot access Head Office management.');
+    }
+    if (userScope.authorizedHeadOffices?.length && targetHeadOfficeIdOrCode) {
+      const match = userScope.authorizedHeadOffices.some(
+        (id) => id === targetHeadOfficeIdOrCode || id.toLowerCase() === targetHeadOfficeIdOrCode.toLowerCase()
+      );
+      if (!match) {
+        throw new ForbiddenException('Access denied: Target Head Office is outside your authorized hierarchy scope.');
+      }
+    }
   }
 }

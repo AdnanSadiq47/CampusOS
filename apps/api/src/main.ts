@@ -42,10 +42,28 @@ async function bootstrap() {
 
   const app = await NestFactory.create(AppModule, {
     cors: {
-      origin: process.env['CORS_ORIGINS'] ? process.env['CORS_ORIGINS'].split(',') : ['http://localhost:3000'],
+      origin: true,
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Organization-ID', 'X-Tenant-Code'],
+      allowedHeaders: [
+        'Content-Type',
+        'Authorization',
+        'Accept',
+        'X-Organization-ID',
+        'X-Tenant-Code',
+        'x-tenant-id',
+        'x-user-id',
+        'x-user-permissions',
+        'X-User-ID',
+        'X-User-Permissions',
+        'x-user-role',
+        'x-authorized-campuses',
+        'x-authorized-schools',
+        'x-authorized-regions',
+        'x-working-context-id',
+        'x-working-context-type',
+        'x-working-context-name',
+      ],
     },
   });
 
@@ -72,9 +90,30 @@ async function bootstrap() {
   // Global sanitized error handler
   app.useGlobalFilters(new AllExceptionsFilter());
 
+  // Enable graceful shutdown hooks
+  app.enableShutdownHooks();
+
+  const shutdown = async (signal: string) => {
+    logger.info(`Received ${signal}. Starting graceful application shutdown...`);
+    try {
+      await app.close();
+      logger.info(`Graceful application shutdown completed for ${signal}`);
+      process.exit(0);
+    } catch (err) {
+      logger.error(`Error during graceful shutdown for ${signal}`, {
+        error: err instanceof Error ? err.message : String(err),
+      });
+      process.exit(1);
+    }
+  };
+
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+
   const port = process.env['PORT'] || 4000;
   await app.listen(port);
   logger.info(`CampusOS Core API initialized on port ${port}`);
 }
 
 bootstrap();
+

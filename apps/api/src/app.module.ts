@@ -16,7 +16,6 @@ import { ReportEngineModule } from './core/report-engine/report-engine.module.js
 import { NotificationModule } from './core/notification/notification.module.js';
 import { SchoolsModule } from './modules/schools/schools.module.js';
 import { RegionsModule } from './modules/regions/regions.module.js';
-import { SchoolTypesModule } from './modules/school-types/school-types.module.js';
 import { HeadOfficesModule } from './modules/head-offices/head-offices.module.js';
 import { BranchesModule } from './modules/branches/branches.module.js';
 import { GeographyModule } from './modules/geography/geography.module.js';
@@ -24,6 +23,7 @@ import { AcademicModule } from './modules/academic/academic.module.js';
 import { FormsSetupModule } from './modules/forms/forms.module.js';
 import { AdmissionsModule } from './modules/admissions/admissions.module.js';
 import { AdmissionProcessModule } from './modules/admission-process/admission-process.module.js';
+import { DisplayPreferencesModule } from './modules/display-preferences/display-preferences.module.js';
 
 @Module({
   imports: [
@@ -46,7 +46,6 @@ import { AdmissionProcessModule } from './modules/admission-process/admission-pr
     NotificationModule,
     SchoolsModule,
     RegionsModule,
-    SchoolTypesModule,
     HeadOfficesModule,
     BranchesModule,
     GeographyModule,
@@ -54,6 +53,7 @@ import { AdmissionProcessModule } from './modules/admission-process/admission-pr
     FormsSetupModule,
     AdmissionsModule,
     AdmissionProcessModule,
+    DisplayPreferencesModule,
   ],
 })
 export class AppModule implements NestModule {

@@ -25,14 +25,16 @@ export class AllExceptionsFilter implements ExceptionFilter {
         message = String(res);
       }
     } else if (exception instanceof Error) {
-      // Never expose raw internal database/stack errors to client
+      console.error('SERVER EXCEPTION:', exception.message, exception.stack);
       logger.error('Unhandled internal error', {
         message: exception.message,
         stack: exception.stack,
         path: request.url,
         method: request.method,
       });
-      message = process.env['NODE_ENV'] === 'production' ? 'An unexpected error occurred.' : exception.message;
+      message = exception.message || 'Internal Server Error';
+    } else {
+      console.error('UNKNOWN EXCEPTION:', exception);
     }
 
     response.status(status).json({

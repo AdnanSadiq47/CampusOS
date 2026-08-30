@@ -13,9 +13,10 @@ export * from './navigation.js';
 export * from './modules.js';
 export * from './schools.js';
 export * from './regions.js';
-export * from './school-types.js';
 export * from './head-offices.js';
 export * from './branches.js';
 export * from './geography.js';
 export * from './academic.js';
-
+export * from './base-tables.js';
+export * from './pre-admissions.js';
+export * from './display-preferences.js';

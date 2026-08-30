@@ -47,6 +47,7 @@ export function useAdminPreferences(currentUserPermissions: string[] = ['*']) {
       } else {
         // Default initial quick actions if first time
         setQuickActions([
+          'sys_design_system',
           'org_schools',
           'org_branches',
           'loc_countries',

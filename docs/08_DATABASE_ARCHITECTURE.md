@@ -113,3 +113,35 @@ Audit logging is implemented with high-performance time-series partitioning read
   4. `(organization_id, actor_id)`: For user activity auditing.
   5. `(organization_id, module, action)`: For administrative event aggregation.
 
+---
+
+## 7. Permanent Scale Target & High-Growth Querying Rules
+
+### A. Non-Negotiable Target Baseline
+CampusOS architecture is permanently designed for:
+* **1,000+ Schools / Campuses**
+* **1,000,000+ Students / Active Users**
+* **Thousands of concurrent active users**
+* **Tens of millions of operational records**
+* **Hundreds of millions of historical / transactional records** over product lifetime
+
+### B. Core Scaling & Querying Rules
+1. **Smallest Authorized Scope Execution**:
+   * Normal user operations query: `Tenant → Working Context (Campus/School) → Filters → Indexed Query → Bounded Pagination`.
+   * Never load whole organization datasets into application memory.
+2. **Server-Side Bounded Pagination**:
+   * All lists enforce database-level `LIMIT` and `OFFSET` (max 100 per page).
+   * Summary card counts and aggregates are computed via single-pass SQL aggregate filters (`COUNT(*) FILTER (WHERE ...)`), never via in-memory array filtering.
+3. **Intentional Composite Indexing**:
+   * Composite indexes match real query access patterns:
+     - `pre_admissions (organization_id, campus_id, submitted_at DESC)`
+     - `pre_admissions (organization_id, campus_id, status)`
+     - `pre_admissions (organization_id, primary_mobile)`
+     - `pre_admissions (organization_id, father_cnic)`
+     - `audit_logs (organization_id, created_at DESC)`
+4. **Partition-Ready High-Growth Tables**:
+   * High-growth tables (`attendance_records`, `fee_transactions`, `accounting_ledgers`, `audit_logs`, `exam_results`) are structured with time-range partitioning keys (`created_at` / `date`) without prematurely creating 1,000 per-campus partitions.
+5. **No Premature Distributed Complexity**:
+   * Scale Next.js + NestJS + PostgreSQL + Drizzle properly first. Microservices, Kafka, Redis clusters, and Elasticsearch are not introduced prematurely without benchmarked operational justification.
+
+

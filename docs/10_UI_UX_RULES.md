@@ -19,6 +19,18 @@ CampusOS must feel like a modern, world-class enterprise SaaS platform (comparab
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
+## 1.1 DATABASE PRESERVATION — LOCKED ENGINEERING RULE (PERMANENT)
+
+> [!CAUTION]
+> **PERMANENT SYSTEM-WIDE DATABASE INVARIANT (Applies to All Current and Future Modules)**:
+> - **Existing Database Records Must NEVER be Reset**: Existing database data must NEVER be reset, reseeded, deleted, replaced, truncated, recreated, overwritten, or modified merely to implement or test a new page or feature.
+> - **Approved Business Records Preserved**: Existing approved business records (Head Offices, Regions, Schools, Branches, Users, Roles, Memberships, Hierarchy Nodes) must remain exactly preserved with their existing UUIDs, relationships, and historical data.
+> - **Non-Destructive Schema Evolution**: Schema changes must use only safe, additive, backward-compatible migrations (`ADD COLUMN IF NOT EXISTS`, nullable/defaulted columns). No destructive column/table drops or type alter cascades.
+> - **No Auto-Reset on Restart**: Automatic seeding, resetting, or reinitializing on app/API restart is strictly prohibited. The system must reconnect to the existing persistent database.
+> - **Isolated Disposable Test Records**: All testing must use isolated, disposable test records that do not mutate existing approved business data.
+> - **Reporting Policy**: Any discovery of orphan/inconsistent data must be reported first rather than automatically altered or wiped.
+> - **Stop and Report**: Before any potentially destructive DB operation, STOP and report instead of executing it.
+
 ---
 
 ## 2. Standard Application Shell Architecture
@@ -318,4 +330,41 @@ Administration Configuration forms must consume master data from their authorita
 * **Zero Unstyled HTML Standard**: The development UI must never be left in a broken or raw unstyled HTML state.
 * **No Dev/Build Cache Collision**: Never run `next build` while `next dev` is actively running on the same directory.
 * **Mandatory Static Asset Verification (`pnpm web:dev:check`)**: Verify that both the HTML document and all referenced CSS stylesheet bundles and JavaScript chunks return HTTP 200 before claiming the UI is ready for review.
+
+---
+
+## 17. Locked Standard: CampusOS Design System First Policy
+
+* **Canonical UI Source of Truth**: The CampusOS Design System (`apps/web/design-system` and `/admin-config/ui-system`) is the locked canonical UI standard.
+* **No Local CSS Duplication**: Every CampusOS page, module, form, table, modal, button, card, status, navigation element, input, selector, feedback state, relationship UI, and hierarchy UI must use the canonical Design System components and tokens.
+* **Architecture Flow**:
+  $$\text{Design Tokens} \longrightarrow \text{Canonical Shared Components} \longrightarrow \text{Controlled Variants} \longrightarrow \text{Page Config} \longrightarrow \text{Business Pages}$$
+* **Canonical Primitives**:
+  - Summary / KPI Cards: `StatCard`
+  - Status Indicators: `StatusBadge`
+  - Row Actions: `RowActions`, `ViewAction`, `EditAction`, `DeleteAction`, `StatusAction`, `MoreActionsMenu`
+  - Relationship Pills: `ConnectedCountPill`, `ConnectedUnitsModal`
+  - Multiselect Controls: `MultiSelect`, `HierarchyMultiSelect`
+
+### 18. Stat Card Default Contract
+* **Canonical Component**: `StatCard` (`apps/web/design-system/components/cards/StatCard.tsx`)
+* **Default Visual Structure**:
+  - **Top Row**: Left: Label / Title (`text-xs font-semibold text-slate-500 uppercase tracking-wider`). Right: Professional Icon container with rounded tint (`p-2 rounded-xl bg-... border border-...`).
+  - **Bottom Row**: Left: Large metric value (`text-2xl font-black text-slate-900 dark:text-white tracking-tight`). Right: Optional trend / context (`text-xs font-semibold text-slate-400`).
+* **Variants Supported**: `default`, `primary`, `success`, `warning`, `info`.
+* **Icon Standard**: Professional Lucide icons with dimensions (e.g. `<Building2 className="w-5 h-5" />`, `<School className="w-5 h-5" />`, `<GraduationCap className="w-5 h-5" />`, `<Globe className="w-5 h-5" />`, `<Calendar className="w-5 h-5" />`) instead of raw emoji characters.
+* **Context Integrity**: If no real context or subtitle exists, do not invent one and do not show placeholder text.
+
+### 19. Row Actions Default Contract
+* **Canonical Component**: `RowActions` with composable sub-actions (`apps/web/design-system/components/actions/RowActions.tsx`)
+* **Action Sub-components & Standards**:
+  - `ViewAction`: Blue (`#2563eb` / `Eye` icon)
+  - `EditAction`: Emerald (`#059669` / `Edit2` icon)
+  - `DeleteAction`: Rose (`#e11d48` / `Trash2` icon)
+  - `StatusAction`: Status toggle action button (`Activate` / `Suspend`)
+  - `MoreActionsMenu`: Neutral (`#475569` / `MoreHorizontal` icon)
+* **Canonical Action Order**: `View -> Edit -> Status/Contextual Action -> Delete -> More Actions`
+* **Business Capability Invariant**: Only render actions supported by the specific page and authorized by the current user's permissions. Do not force unsupported actions.
+
+
 

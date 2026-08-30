@@ -5,6 +5,15 @@ import { AcademicYearListItemDto, ConfigScopeType } from '@campus-os/types';
 import { AdminConfigPageHeader, ACADEMIC_SETUP_NAV } from '../../../../components/AdminConfigPageHeader';
 import { ConfigScopeSelector } from '../../../../components/ConfigScopeSelector';
 import { AssignedToDetailsModal } from '../../../../components/AssignedToDetailsModal';
+import { useWorkingContext } from '../../../../lib/working-context';
+import {
+  StatCard,
+  StatusBadge,
+  RowActions,
+  ViewAction,
+  EditAction,
+} from '../../../../design-system';
+import { Sparkles, Calendar, Globe, MapPin } from 'lucide-react';
 
 const DEFAULT_ACADEMIC_YEARS: AcademicYearListItemDto[] = [
   {
@@ -78,10 +87,11 @@ const DEFAULT_ACADEMIC_YEARS: AcademicYearListItemDto[] = [
 ];
 
 export default function AcademicYearsPage() {
+  const { currentContext, isConfigEffectiveForContext, getConfigSourceLabel } = useWorkingContext();
   const [items, setItems] = useState<AcademicYearListItemDto[]>(DEFAULT_ACADEMIC_YEARS);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
-  const [campusFilter, setCampusFilter] = useState<string>('ALL');
+  const [viewMode, setViewMode] = useState<'CURRENT_CONTEXT' | 'ALL_CONFIGURATIONS'>('CURRENT_CONTEXT');
 
   // Modals
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -126,13 +136,19 @@ export default function AcademicYearsPage() {
     setTimeout(() => setToastMessage(null), 2500);
   };
 
+  // Scoped dataset based on viewMode
+  const scopedItems = useMemo(() => {
+    if (viewMode === 'ALL_CONFIGURATIONS') return items;
+    return items.filter((item) => isConfigEffectiveForContext(item.applyTo, item.branchIds || []));
+  }, [items, viewMode, isConfigEffectiveForContext]);
+
   // KPIs
-  const currentSession = useMemo(() => items.find((i) => i.isCurrent && i.isActive), [items]);
-  const activeCount = useMemo(() => items.filter((i) => i.isActive).length, [items]);
+  const currentSession = useMemo(() => scopedItems.find((i) => i.isCurrent && i.isActive), [scopedItems]);
+  const activeCount = useMemo(() => scopedItems.filter((i) => i.isActive).length, [scopedItems]);
 
   // Filtered List
   const filteredItems = useMemo(() => {
-    return items.filter((item) => {
+    return scopedItems.filter((item) => {
       const matchesSearch =
         searchQuery === '' ||
         item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -144,14 +160,9 @@ export default function AcademicYearsPage() {
         (statusFilter === 'ACTIVE' && item.isActive) ||
         (statusFilter === 'INACTIVE' && !item.isActive);
 
-      const matchesCampus =
-        campusFilter === 'ALL' ||
-        item.applyTo === 'ALL_CAMPUSES' ||
-        (item.branchIds && item.branchIds.includes(campusFilter));
-
-      return matchesSearch && matchesStatus && matchesCampus;
+      return matchesSearch && matchesStatus;
     });
-  }, [items, searchQuery, statusFilter, campusFilter]);
+  }, [scopedItems, searchQuery, statusFilter]);
 
   const handleOpenAdd = () => {
     const nextOrder = items.length > 0 ? Math.max(...items.map((i) => i.sortOrder)) + 1 : 1;
@@ -320,50 +331,37 @@ export default function AcademicYearsPage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500">Current Session</span>
-            <span className="p-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/60 text-amber-600 text-xs">🌟 Active</span>
-          </div>
-          <p className="text-lg font-bold text-slate-900 dark:text-white mt-1">
-            {currentSession ? currentSession.code : 'None Configured'}
-          </p>
-          <p className="text-[11px] text-slate-400 mt-0.5 truncate">{currentSession?.name || 'Set a current year'}</p>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500">Total Academic Years</span>
-            <span className="p-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 text-xs">📅</span>
-          </div>
-          <p className="text-xl font-bold text-slate-900 dark:text-white mt-1">{items.length}</p>
-          <p className="text-[11px] text-slate-400 mt-0.5">{activeCount} active operational</p>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500">All-Campus Masters</span>
-            <span className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 text-xs">🌐</span>
-          </div>
-          <p className="text-xl font-bold text-slate-900 dark:text-white mt-1">
-            {items.filter((i) => i.applyTo === 'ALL_CAMPUSES').length}
-          </p>
-          <p className="text-[11px] text-slate-400 mt-0.5">Dynamic inheritance enabled</p>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500">Selected Campuses</span>
-            <span className="p-1.5 rounded-lg bg-purple-50 dark:bg-purple-950/60 text-purple-600 text-xs">📍</span>
-          </div>
-          <p className="text-xl font-bold text-slate-900 dark:text-white mt-1">
-            {items.filter((i) => i.applyTo === 'SELECTED_CAMPUSES').length}
-          </p>
-          <p className="text-[11px] text-slate-400 mt-0.5">Custom campus mappings</p>
-        </div>
+        <StatCard
+          title="Current Session"
+          value={currentSession ? currentSession.code : 'None'}
+          icon={<Sparkles className="w-5 h-5 text-amber-600 dark:text-amber-400" />}
+          subtitle={currentSession?.name || 'Set a current year'}
+          variant="warning"
+        />
+        <StatCard
+          title="Effective Years"
+          value={scopedItems.length}
+          icon={<Calendar className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />}
+          subtitle={`${activeCount} active in ${viewMode === 'CURRENT_CONTEXT' ? currentContext.name : 'All Scopes'}`}
+          variant="default"
+        />
+        <StatCard
+          title="Universal Masters"
+          value={scopedItems.filter((i) => i.applyTo === 'ALL_CAMPUSES').length}
+          icon={<Globe className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />}
+          subtitle="Dynamic inheritance enabled"
+          variant="success"
+        />
+        <StatCard
+          title="Campus-Specific"
+          value={scopedItems.filter((i) => i.applyTo === 'SELECTED_CAMPUSES').length}
+          icon={<MapPin className="w-5 h-5 text-blue-600 dark:text-blue-400" />}
+          subtitle={`Assigned to ${viewMode === 'CURRENT_CONTEXT' ? currentContext.name : 'designated campuses'}`}
+          variant="info"
+        />
       </div>
 
-      {/* Filter & Search Bar */}
+      {/* Filter & View Mode Control Bar */}
       <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
         <div className="relative flex-1">
           <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm">🔍</span>
@@ -377,17 +375,35 @@ export default function AcademicYearsPage() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Campus Filter */}
-          <select
-            value={campusFilter}
-            onChange={(e) => setCampusFilter(e.target.value)}
-            className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-          >
-            <option value="ALL">All Campus Scopes</option>
-            <option value="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa">Main Campus (Gulshan)</option>
-            <option value="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb">Clifton Campus</option>
-            <option value="cccccccc-cccc-cccc-cccc-cccccccccccc">DHA Phase 8 Campus</option>
-          </select>
+          {/* View Mode Toggle */}
+          <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-lg border border-slate-200 dark:border-slate-700 text-xs">
+            <button
+              type="button"
+              onClick={() => setViewMode('CURRENT_CONTEXT')}
+              className={`px-3 py-1 rounded-md font-semibold transition-all flex items-center gap-1.5 ${
+                viewMode === 'CURRENT_CONTEXT'
+                  ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+              title={`Show configurations effective for ${currentContext.name}`}
+            >
+              <span>📍</span>
+              <span className="truncate max-w-[140px] sm:max-w-[180px]">{currentContext.name}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('ALL_CONFIGURATIONS')}
+              className={`px-3 py-1 rounded-md font-semibold transition-all flex items-center gap-1.5 ${
+                viewMode === 'ALL_CONFIGURATIONS'
+                  ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+              title="Show all configurations across the entire organization"
+            >
+              <span>🌐</span>
+              <span>All Configurations ({items.length})</span>
+            </button>
+          </div>
 
           {/* Status Filter */}
           <select
@@ -421,85 +437,80 @@ export default function AcademicYearsPage() {
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
               {filteredItems.length > 0 ? (
-                filteredItems.map((item) => (
-                  <tr key={item.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                    <td className="py-3 px-4 font-semibold text-slate-900 dark:text-white">
-                      <div className="flex items-center gap-2">
-                        <span>📅</span>
-                        <span>{item.name}</span>
-                        {item.isCurrent && (
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-                            Current
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 font-mono text-slate-600 dark:text-slate-400">{item.code}</td>
-                    <td className="py-3 px-4 text-slate-600 dark:text-slate-400 font-mono">{item.startDate}</td>
-                    <td className="py-3 px-4 text-slate-600 dark:text-slate-400 font-mono">{item.endDate}</td>
-                    <td className="py-3 px-4">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setSelectedItemForAssignedModal({
-                            name: item.name,
-                            isEntireOrg: item.applyTo === 'ALL_CAMPUSES',
-                            branchIds: item.branchIds || [],
-                          })
-                        }
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 hover:border-indigo-300 cursor-pointer transition-all shadow-xs"
-                        title="See where this academic year is assigned"
-                      >
-                        <span>{item.applyTo === 'ALL_CAMPUSES' ? '🌐 All Campuses' : `📍 ${item.branchIds?.length || 0} Campuses`}</span>
-                        <span className="text-[9px] text-indigo-400">›</span>
-                      </button>
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      {item.isCurrent ? (
-                        <span className="text-amber-500 font-bold">★ Active</span>
-                      ) : (
+                filteredItems.map((item) => {
+                  const scopeLabel = getConfigSourceLabel(item.applyTo, item.branchIds || []);
+                  return (
+                    <tr key={item.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
+                      <td className="py-3 px-4 font-semibold text-slate-900 dark:text-white">
+                        <div className="flex items-center gap-2">
+                          <span>📅</span>
+                          <span>{item.name}</span>
+                          {item.isCurrent && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                              Current
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 font-mono text-slate-600 dark:text-slate-400">{item.code}</td>
+                      <td className="py-3 px-4 text-slate-600 dark:text-slate-400 font-mono">{item.startDate}</td>
+                      <td className="py-3 px-4 text-slate-600 dark:text-slate-400 font-mono">{item.endDate}</td>
+                      <td className="py-3 px-4">
                         <button
                           type="button"
-                          onClick={() => handleSetCurrent(item)}
-                          className="text-[11px] text-slate-400 hover:text-indigo-600 hover:underline cursor-pointer"
+                          onClick={() =>
+                            setSelectedItemForAssignedModal({
+                              name: item.name,
+                              isEntireOrg: item.applyTo === 'ALL_CAMPUSES',
+                              branchIds: item.branchIds || [],
+                            })
+                          }
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold border cursor-pointer transition-all shadow-xs ${
+                            scopeLabel === 'Universal'
+                              ? 'bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border-purple-200 dark:border-purple-800 hover:bg-purple-100'
+                              : scopeLabel === 'Direct'
+                              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100'
+                              : 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100'
+                          }`}
+                          title="See where this academic year is assigned"
                         >
-                          Set Current
+                          <span>{scopeLabel === 'Universal' ? '🌐 Universal' : `📍 ${item.branchIds?.length || 0} Campuses`}</span>
+                          <span className="text-[9px] opacity-70">›</span>
                         </button>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 text-center font-mono text-slate-500">{item.sortOrder}</td>
-                    <td className="py-3 px-4 text-center">
-                      <button
-                        type="button"
-                        onClick={(e) => handleToggleStatus(item.id, e)}
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold cursor-pointer transition-all ${
-                          item.isActive
-                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
-                            : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
-                        }`}
-                        title="Click to toggle status"
-                      >
-                        {item.isActive ? 'Active' : 'Inactive'}
-                      </button>
-                    </td>
-                    <td className="py-3 px-4 text-right space-x-1">
-                      <button
-                        type="button"
-                        onClick={() => setViewingItem(item)}
-                        className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-medium cursor-pointer"
-                      >
-                        View
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleOpenEdit(item)}
-                        className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 text-xs font-semibold cursor-pointer"
-                      >
-                        Edit
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        {item.isCurrent ? (
+                          <span className="text-amber-500 font-bold">★ Active</span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleSetCurrent(item)}
+                            className="text-[11px] text-slate-400 hover:text-indigo-600 hover:underline cursor-pointer"
+                          >
+                            Set Current
+                          </button>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-center font-mono text-slate-500">{item.sortOrder}</td>
+                      <td className="py-3 px-4 text-center">
+                        <button
+                          type="button"
+                          onClick={(e) => handleToggleStatus(item.id, e)}
+                          title="Click to toggle status"
+                          className="cursor-pointer"
+                        >
+                          <StatusBadge status={item.isActive ? 'ACTIVE' : 'INACTIVE'} />
+                        </button>
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <RowActions>
+                          <ViewAction onClick={() => setViewingItem(item)} />
+                          <EditAction onClick={() => handleOpenEdit(item)} />
+                        </RowActions>
+                      </td>
+                    </tr>
+                  );
+                })
               ) : (
                 <tr>
                   <td colSpan={9} className="py-8 text-center text-xs text-slate-400">
@@ -779,6 +790,8 @@ export default function AcademicYearsPage() {
         isOpen={!!selectedItemForAssignedModal}
         onClose={() => setSelectedItemForAssignedModal(null)}
         formName={selectedItemForAssignedModal?.name || ''}
+        currentContextName={currentContext.name}
+        currentContextCampusIds={currentContext.effectiveCampusIds}
         scopeState={{
           isEntireOrg: selectedItemForAssignedModal?.isEntireOrg ?? false,
           selectedHeadOfficeIds: [],

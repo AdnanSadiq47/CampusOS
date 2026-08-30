@@ -10,6 +10,7 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { AcademicService } from './academic.service.js';
+import { WorkingContextService } from '../../core/hierarchy/working-context.service.js';
 import {
   CreateAcademicYearDto,
   UpdateAcademicYearDto,
@@ -29,21 +30,55 @@ import {
 
 @Controller('academic')
 export class AcademicController {
-  constructor(private readonly academicService: AcademicService) {}
+  constructor(
+    private readonly academicService: AcademicService,
+    private readonly workingContextService: WorkingContextService
+  ) {}
+
+  /**
+   * Resolves the effective campus IDs from working context headers.
+   * Returns undefined when no context is active (admin full-view mode).
+   */
+  private resolveEffectiveCampusIds(
+    tenantId: string,
+    contextNodeId?: string,
+    contextNodeType?: string,
+    userRole?: string
+  ): string[] | undefined {
+    if (!contextNodeId || contextNodeId === 'ALL' || contextNodeId === 'DEFAULT') {
+      return undefined;
+    }
+    try {
+      const scope = this.workingContextService.resolveEffectiveScope(
+        {
+          organizationId: tenantId,
+          userRole: userRole || 'SCHOOL_ADMIN',
+        },
+        contextNodeId,
+        contextNodeType as any
+      );
+      return scope.effectiveCampusIds.length > 0 ? scope.effectiveCampusIds : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
 
   // ── 1. ACADEMIC YEARS ───────────────────────────────────────────────────
   @Get('academic-years')
   async listAcademicYears(
     @Headers('x-tenant-id') tenantId: string,
     @Headers('x-user-role') userRole: string,
-    @Query('campusId') campusId?: string,
+    @Headers('x-working-context-id') contextNodeId?: string,
+    @Headers('x-working-context-type') contextNodeType?: string,
     @Query('search') search?: string,
     @Query('status') status?: string
   ) {
     const resolvedTenant = tenantId || '11111111-1111-1111-1111-111111111111';
+    const effectiveCampusIds = this.resolveEffectiveCampusIds(resolvedTenant, contextNodeId, contextNodeType, userRole);
     return this.academicService.listAcademicYears(
       resolvedTenant,
-      campusId,
+      effectiveCampusIds,
       search,
       status,
       userRole || 'SCHOOL_ADMIN'
@@ -109,14 +144,16 @@ export class AcademicController {
   async listBoards(
     @Headers('x-tenant-id') tenantId: string,
     @Headers('x-user-role') userRole: string,
-    @Query('campusId') campusId?: string,
+    @Headers('x-working-context-id') contextNodeId?: string,
+    @Headers('x-working-context-type') contextNodeType?: string,
     @Query('search') search?: string,
     @Query('status') status?: string
   ) {
     const resolvedTenant = tenantId || '11111111-1111-1111-1111-111111111111';
+    const effectiveCampusIds = this.resolveEffectiveCampusIds(resolvedTenant, contextNodeId, contextNodeType, userRole);
     return this.academicService.listBoards(
       resolvedTenant,
-      campusId,
+      effectiveCampusIds,
       search,
       status,
       userRole || 'SCHOOL_ADMIN'
@@ -182,14 +219,16 @@ export class AcademicController {
   async listAcademicLevels(
     @Headers('x-tenant-id') tenantId: string,
     @Headers('x-user-role') userRole: string,
-    @Query('campusId') campusId?: string,
+    @Headers('x-working-context-id') contextNodeId?: string,
+    @Headers('x-working-context-type') contextNodeType?: string,
     @Query('search') search?: string,
     @Query('status') status?: string
   ) {
     const resolvedTenant = tenantId || '11111111-1111-1111-1111-111111111111';
+    const effectiveCampusIds = this.resolveEffectiveCampusIds(resolvedTenant, contextNodeId, contextNodeType, userRole);
     return this.academicService.listAcademicLevels(
       resolvedTenant,
-      campusId,
+      effectiveCampusIds,
       search,
       status,
       userRole || 'SCHOOL_ADMIN'
@@ -255,16 +294,18 @@ export class AcademicController {
   async listSubjects(
     @Headers('x-tenant-id') tenantId: string,
     @Headers('x-user-role') userRole: string,
-    @Query('campusId') campusId?: string,
+    @Headers('x-working-context-id') contextNodeId?: string,
+    @Headers('x-working-context-type') contextNodeType?: string,
     @Query('type') type?: string,
     @Query('category') category?: string,
     @Query('search') search?: string,
     @Query('status') status?: string
   ) {
     const resolvedTenant = tenantId || '11111111-1111-1111-1111-111111111111';
+    const effectiveCampusIds = this.resolveEffectiveCampusIds(resolvedTenant, contextNodeId, contextNodeType, userRole);
     return this.academicService.listSubjects(
       resolvedTenant,
-      campusId,
+      effectiveCampusIds,
       search,
       status,
       type,
@@ -332,15 +373,17 @@ export class AcademicController {
   async listClasses(
     @Headers('x-tenant-id') tenantId: string,
     @Headers('x-user-role') userRole: string,
+    @Headers('x-working-context-id') contextNodeId?: string,
+    @Headers('x-working-context-type') contextNodeType?: string,
     @Query('levelId') levelId?: string,
-    @Query('campusId') campusId?: string,
     @Query('search') search?: string,
     @Query('status') status?: string
   ) {
     const resolvedTenant = tenantId || '11111111-1111-1111-1111-111111111111';
+    const effectiveCampusIds = this.resolveEffectiveCampusIds(resolvedTenant, contextNodeId, contextNodeType, userRole);
     return this.academicService.listClasses(
       resolvedTenant,
-      campusId,
+      effectiveCampusIds,
       search,
       status,
       levelId,
@@ -407,14 +450,16 @@ export class AcademicController {
   async listSections(
     @Headers('x-tenant-id') tenantId: string,
     @Headers('x-user-role') userRole: string,
-    @Query('campusId') campusId?: string,
+    @Headers('x-working-context-id') contextNodeId?: string,
+    @Headers('x-working-context-type') contextNodeType?: string,
     @Query('search') search?: string,
     @Query('status') status?: string
   ) {
     const resolvedTenant = tenantId || '11111111-1111-1111-1111-111111111111';
+    const effectiveCampusIds = this.resolveEffectiveCampusIds(resolvedTenant, contextNodeId, contextNodeType, userRole);
     return this.academicService.listSections(
       resolvedTenant,
-      campusId,
+      effectiveCampusIds,
       search,
       status,
       userRole || 'SCHOOL_ADMIN'
@@ -480,14 +525,16 @@ export class AcademicController {
   async listLanguages(
     @Headers('x-tenant-id') tenantId: string,
     @Headers('x-user-role') userRole: string,
-    @Query('campusId') campusId?: string,
+    @Headers('x-working-context-id') contextNodeId?: string,
+    @Headers('x-working-context-type') contextNodeType?: string,
     @Query('search') search?: string,
     @Query('status') status?: string
   ) {
     const resolvedTenant = tenantId || '11111111-1111-1111-1111-111111111111';
+    const effectiveCampusIds = this.resolveEffectiveCampusIds(resolvedTenant, contextNodeId, contextNodeType, userRole);
     return this.academicService.listLanguages(
       resolvedTenant,
-      campusId,
+      effectiveCampusIds,
       search,
       status,
       userRole || 'SCHOOL_ADMIN'

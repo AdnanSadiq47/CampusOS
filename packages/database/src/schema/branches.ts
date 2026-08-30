@@ -2,6 +2,7 @@ import { pgTable, uuid, varchar, text, boolean, integer, timestamp, uniqueIndex,
 import { organizations } from './organizations.js';
 import { hierarchyNodes } from './hierarchy.js';
 import { schools } from './schools.js';
+import { identityUsers } from './identity.js';
 
 /**
  * Branches / Campuses Schema
@@ -57,13 +58,19 @@ export const branches = pgTable(
     area: varchar('area', { length: 128 }),
     address: text('address'),
     postalCode: varchar('postal_code', { length: 32 }),
+    countryId: uuid('country_id'),
+    stateId: uuid('state_id'),
+    cityId: uuid('city_id'),
+    areaId: uuid('area_id'),
 
     // ── Configuration & Display Sequence ─────────────────────────────
     sortOrder: integer('sort_order').default(1).notNull(),
     notes: text('notes'),
 
-    // ── Status ────────────────────────────────────────────────────────
+    // ── Status & Audit ───────────────────────────────────────────────
     isActive: boolean('is_active').default(true).notNull(),
+    createdBy: uuid('created_by').references(() => identityUsers.id),
+    updatedBy: uuid('updated_by').references(() => identityUsers.id),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },

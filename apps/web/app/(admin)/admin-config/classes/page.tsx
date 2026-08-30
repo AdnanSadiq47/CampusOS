@@ -5,6 +5,15 @@ import { ClassListItemDto, ConfigScopeType } from '@campus-os/types';
 import { AdminConfigPageHeader, ACADEMIC_SETUP_NAV } from '../../../../components/AdminConfigPageHeader';
 import { ConfigScopeSelector } from '../../../../components/ConfigScopeSelector';
 import { AssignedToDetailsModal } from '../../../../components/AssignedToDetailsModal';
+import { useWorkingContext } from '../../../../lib/working-context';
+import {
+  StatCard,
+  StatusBadge,
+  RowActions,
+  ViewAction,
+  EditAction,
+} from '../../../../design-system';
+import { GraduationCap, Globe, MapPin } from 'lucide-react';
 
 const DEFAULT_SUBJECTS_CATALOG = [
   { id: 's1', name: 'Mathematics' },
@@ -152,11 +161,12 @@ const DEFAULT_CLASSES: ClassListItemDto[] = [
 ];
 
 export default function ClassesPage() {
+  const { currentContext, isConfigEffectiveForContext, getConfigSourceLabel } = useWorkingContext();
   const [items, setItems] = useState<ClassListItemDto[]>(DEFAULT_CLASSES);
   const [searchQuery, setSearchQuery] = useState('');
   const [levelFilter, setLevelFilter] = useState<string>('ALL');
-  const [campusFilter, setCampusFilter] = useState<string>('ALL');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
+  const [viewMode, setViewMode] = useState<'CURRENT_CONTEXT' | 'ALL_CONFIGURATIONS'>('CURRENT_CONTEXT');
 
   // Modals
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -205,10 +215,16 @@ export default function ClassesPage() {
     setTimeout(() => setToastMessage(null), 2500);
   };
 
-  const activeCount = useMemo(() => items.filter((i) => i.isActive).length, [items]);
+  // Scoped dataset based on viewMode
+  const scopedItems = useMemo(() => {
+    if (viewMode === 'ALL_CONFIGURATIONS') return items;
+    return items.filter((item) => isConfigEffectiveForContext(item.applyTo, item.branchIds || []));
+  }, [items, viewMode, isConfigEffectiveForContext]);
+
+  const activeCount = useMemo(() => scopedItems.filter((i) => i.isActive).length, [scopedItems]);
 
   const filteredItems = useMemo(() => {
-    return items.filter((item) => {
+    return scopedItems.filter((item) => {
       const matchesSearch =
         searchQuery === '' ||
         item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -222,14 +238,9 @@ export default function ClassesPage() {
         (statusFilter === 'ACTIVE' && item.isActive) ||
         (statusFilter === 'INACTIVE' && !item.isActive);
 
-      const matchesCampus =
-        campusFilter === 'ALL' ||
-        item.applyTo === 'ALL_CAMPUSES' ||
-        (item.branchIds && item.branchIds.includes(campusFilter));
-
-      return matchesSearch && matchesLevel && matchesStatus && matchesCampus;
+      return matchesSearch && matchesLevel && matchesStatus;
     });
-  }, [items, searchQuery, levelFilter, statusFilter, campusFilter]);
+  }, [scopedItems, searchQuery, levelFilter, statusFilter]);
 
   const handleOpenAdd = () => {
     const nextOrder = items.length > 0 ? Math.max(...items.map((i) => i.sortOrder)) + 1 : 1;
@@ -430,39 +441,30 @@ export default function ClassesPage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500">Total Classes / Grades</span>
-            <span className="p-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 text-xs">🏫</span>
-          </div>
-          <p className="text-xl font-bold text-slate-900 dark:text-white mt-1">{items.length}</p>
-          <p className="text-[11px] text-slate-400 mt-0.5">{activeCount} active operational</p>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500">All-Campus Classes</span>
-            <span className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 text-xs">🌐</span>
-          </div>
-          <p className="text-xl font-bold text-slate-900 dark:text-white mt-1">
-            {items.filter((i) => i.applyTo === 'ALL_CAMPUSES').length}
-          </p>
-          <p className="text-[11px] text-slate-400 mt-0.5">Dynamic inheritance enabled</p>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500">Selected Campuses</span>
-            <span className="p-1.5 rounded-lg bg-purple-50 dark:bg-purple-950/60 text-purple-600 text-xs">📍</span>
-          </div>
-          <p className="text-xl font-bold text-slate-900 dark:text-white mt-1">
-            {items.filter((i) => i.applyTo === 'SELECTED_CAMPUSES').length}
-          </p>
-          <p className="text-[11px] text-slate-400 mt-0.5">Custom campus grades</p>
-        </div>
+        <StatCard
+          title="Effective Classes"
+          value={scopedItems.length}
+          icon={<GraduationCap className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />}
+          subtitle={`${activeCount} active in ${viewMode === 'CURRENT_CONTEXT' ? currentContext.name : 'All Scopes'}`}
+          variant="default"
+        />
+        <StatCard
+          title="Universal Classes"
+          value={scopedItems.filter((i) => i.applyTo === 'ALL_CAMPUSES').length}
+          icon={<Globe className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />}
+          subtitle="Dynamic inheritance enabled"
+          variant="success"
+        />
+        <StatCard
+          title="Campus-Specific"
+          value={scopedItems.filter((i) => i.applyTo === 'SELECTED_CAMPUSES').length}
+          icon={<MapPin className="w-5 h-5 text-blue-600 dark:text-blue-400" />}
+          subtitle={`Assigned to ${viewMode === 'CURRENT_CONTEXT' ? currentContext.name : 'designated campuses'}`}
+          variant="info"
+        />
       </div>
 
-      {/* Filter & Search Bar */}
+      {/* Filter & View Mode Control Bar */}
       <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
         <div className="relative flex-1">
           <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm">🔍</span>
@@ -476,6 +478,36 @@ export default function ClassesPage() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {/* View Mode Toggle */}
+          <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-lg border border-slate-200 dark:border-slate-700 text-xs">
+            <button
+              type="button"
+              onClick={() => setViewMode('CURRENT_CONTEXT')}
+              className={`px-3 py-1 rounded-md font-semibold transition-all flex items-center gap-1.5 ${
+                viewMode === 'CURRENT_CONTEXT'
+                  ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+              title={`Show configurations effective for ${currentContext.name}`}
+            >
+              <span>📍</span>
+              <span className="truncate max-w-[140px] sm:max-w-[180px]">{currentContext.name}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('ALL_CONFIGURATIONS')}
+              className={`px-3 py-1 rounded-md font-semibold transition-all flex items-center gap-1.5 ${
+                viewMode === 'ALL_CONFIGURATIONS'
+                  ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+              title="Show all configurations across the entire organization"
+            >
+              <span>🌐</span>
+              <span>All Configurations ({items.length})</span>
+            </button>
+          </div>
+
           {/* Level Filter */}
           <select
             value={levelFilter}
@@ -488,18 +520,6 @@ export default function ClassesPage() {
                 {l.name}
               </option>
             ))}
-          </select>
-
-          {/* Campus Filter */}
-          <select
-            value={campusFilter}
-            onChange={(e) => setCampusFilter(e.target.value)}
-            className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-          >
-            <option value="ALL">All Campus Scopes</option>
-            <option value="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa">Main Campus (Gulshan)</option>
-            <option value="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb">Clifton Campus</option>
-            <option value="cccccccc-cccc-cccc-cccc-cccccccccccc">DHA Phase 8 Campus</option>
           </select>
 
           {/* Status Filter */}
@@ -534,81 +554,76 @@ export default function ClassesPage() {
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
               {filteredItems.length > 0 ? (
-                filteredItems.map((item) => (
-                  <tr key={item.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                    <td className="py-3 px-4 font-semibold text-slate-900 dark:text-white">
-                      <div className="flex items-center gap-2">
-                        <span>🏫</span>
-                        <span>{item.name}</span>
-                        {item.shortName && <span className="text-slate-400 font-normal">({item.shortName})</span>}
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 text-slate-700 dark:text-slate-300 font-medium">{item.levelName}</td>
-                    <td className="py-3 px-4 font-mono text-slate-600 dark:text-slate-400">{item.code || '—'}</td>
-                    <td className="py-3 px-4 font-mono text-slate-600 dark:text-slate-400">
-                      {item.fromAge || item.toAge ? (
-                        <span>
-                          {item.fromAge ?? '0'} – {item.toAge ?? '∞'} yrs
+                filteredItems.map((item) => {
+                  const scopeLabel = getConfigSourceLabel(item.applyTo, item.branchIds || []);
+                  return (
+                    <tr key={item.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
+                      <td className="py-3 px-4 font-semibold text-slate-900 dark:text-white">
+                        <div className="flex items-center gap-2">
+                          <span>🏫</span>
+                          <span>{item.name}</span>
+                          {item.shortName && <span className="text-slate-400 font-normal">({item.shortName})</span>}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-slate-700 dark:text-slate-300 font-medium">{item.levelName}</td>
+                      <td className="py-3 px-4 font-mono text-slate-600 dark:text-slate-400">{item.code || '—'}</td>
+                      <td className="py-3 px-4 font-mono text-slate-600 dark:text-slate-400">
+                        {item.fromAge || item.toAge ? (
+                          <span>
+                            {item.fromAge ?? '0'} – {item.toAge ?? '∞'} yrs
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">Any Age</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                          📚 {item.totalSubjectsCount || 0} Subjects
                         </span>
-                      ) : (
-                        <span className="text-slate-400">Any Age</span>
-                      )}
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                        📚 {item.totalSubjectsCount || 0} Subjects
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setSelectedItemForAssignedModal({
-                            name: item.name,
-                            isEntireOrg: item.applyTo === 'ALL_CAMPUSES',
-                            branchIds: item.branchIds || [],
-                          })
-                        }
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 hover:border-indigo-300 cursor-pointer transition-all shadow-xs"
-                        title="See where this class is assigned"
-                      >
-                        <span>{item.applyTo === 'ALL_CAMPUSES' ? '🌐 All Campuses' : `📍 ${item.branchIds?.length || 0} Campuses`}</span>
-                        <span className="text-[9px] text-indigo-400">›</span>
-                      </button>
-                    </td>
+                      </td>
+                      <td className="py-3 px-4">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSelectedItemForAssignedModal({
+                              name: item.name,
+                              isEntireOrg: item.applyTo === 'ALL_CAMPUSES',
+                              branchIds: item.branchIds || [],
+                            })
+                          }
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold border cursor-pointer transition-all shadow-xs ${
+                            scopeLabel === 'Universal'
+                              ? 'bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border-purple-200 dark:border-purple-800 hover:bg-purple-100'
+                              : scopeLabel === 'Direct'
+                              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100'
+                              : 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100'
+                          }`}
+                          title="See where this class is assigned"
+                        >
+                          <span>{scopeLabel === 'Universal' ? '🌐 Universal' : `📍 ${item.branchIds?.length || 0} Campuses`}</span>
+                          <span className="text-[9px] opacity-70">›</span>
+                        </button>
+                      </td>
                     <td className="py-3 px-4 text-center font-mono text-slate-500">{item.sortOrder}</td>
                     <td className="py-3 px-4 text-center">
                       <button
                         type="button"
                         onClick={(e) => handleToggleStatus(item.id, e)}
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold cursor-pointer transition-all ${
-                          item.isActive
-                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
-                            : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
-                        }`}
                         title="Click to toggle status"
+                        className="cursor-pointer"
                       >
-                        {item.isActive ? 'Active' : 'Inactive'}
+                        <StatusBadge status={item.isActive ? 'ACTIVE' : 'INACTIVE'} />
                       </button>
                     </td>
-                    <td className="py-3 px-4 text-right space-x-1">
-                      <button
-                        type="button"
-                        onClick={() => setViewingItem(item)}
-                        className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 text-xs font-medium cursor-pointer"
-                      >
-                        View
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleOpenEdit(item)}
-                        className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 text-xs font-semibold cursor-pointer"
-                      >
-                        Edit
-                      </button>
+                    <td className="py-3 px-4 text-right">
+                      <RowActions>
+                        <ViewAction onClick={() => setViewingItem(item)} />
+                        <EditAction onClick={() => handleOpenEdit(item)} />
+                      </RowActions>
                     </td>
-                  </tr>
-                ))
+                    </tr>
+                  );
+                })
               ) : (
                 <tr>
                   <td colSpan={9} className="py-8 text-center text-xs text-slate-400">
@@ -959,6 +974,8 @@ export default function ClassesPage() {
         isOpen={!!selectedItemForAssignedModal}
         onClose={() => setSelectedItemForAssignedModal(null)}
         formName={selectedItemForAssignedModal?.name || ''}
+        currentContextName={currentContext.name}
+        currentContextCampusIds={currentContext.effectiveCampusIds}
         scopeState={{
           isEntireOrg: selectedItemForAssignedModal?.isEntireOrg ?? false,
           selectedHeadOfficeIds: [],

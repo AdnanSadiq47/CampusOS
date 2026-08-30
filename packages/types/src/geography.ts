@@ -166,42 +166,13 @@ export interface AreaListItemDto {
   updatedAt: Date;
 }
 
-// ── 5. POSTAL CODES ──────────────────────────────────────────────────────────
+// ── 5. DEPENDENCIES DTO ──────────────────────────────────────────────────────
 
-export interface CreatePostalCodeDto {
-  countryId: string;
-  stateId?: string;
-  cityId: string;
-  areaId?: string;
-  postalCode: string;
-  description?: string;
-  isActive?: boolean;
-}
-
-export interface UpdatePostalCodeDto {
-  countryId?: string;
-  stateId?: string;
-  cityId?: string;
-  areaId?: string;
-  postalCode?: string;
-  description?: string;
-  isActive?: boolean;
-}
-
-export interface PostalCodeListItemDto {
-  id: string;
-  organizationId: string;
-  countryId: string;
-  countryName?: string;
-  stateId?: string | null;
-  stateName?: string | null;
-  cityId: string;
-  cityName?: string;
-  areaId?: string | null;
-  areaName?: string | null;
-  postalCode: string;
-  description?: string | null;
-  isActive: boolean;
-  createdAt: Date;
-  updatedAt: Date;
+export interface GeographyDependenciesDto {
+  canDelete: boolean;
+  entityName: string;
+  entityType: 'COUNTRY' | 'STATE' | 'CITY' | 'AREA';
+  totalDependencies: number;
+  reasons: string[];
+  breakdown: Record<string, number>;
 }

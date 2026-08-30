@@ -1,126 +1,55 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
-import { CityListItemDto, CreateCityDto } from '@campus-os/types';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import {
+  CityListItemDto,
+  CreateCityDto,
+  CountryListItemDto,
+  StateListItemDto,
+  GeographyDependenciesDto,
+} from '@campus-os/types';
 import { AdminConfigPageHeader, LOCATION_GEOGRAPHY_NAV } from '../../../../components/AdminConfigPageHeader';
+import {
+  StatCard,
+  StatusBadge,
+  RowActions,
+  ViewAction,
+  EditAction,
+  StatusAction,
+  DeleteAction,
+} from '../../../../design-system';
+import { AdminModal } from '../../../../components/ui/AdminModal';
+import { Building, CheckCircle2, AlertCircle, Search, RefreshCw } from 'lucide-react';
 
-/* ─── Mock datasets ─── */
-const MOCK_COUNTRIES = [
-  { id: 'c1111111-1111-1111-1111-111111111111', name: 'Pakistan', iso2: 'PK' },
-  { id: 'c2222222-2222-2222-2222-222222222222', name: 'United States', iso2: 'US' },
-  { id: 'c4444444-4444-4444-4444-444444444444', name: 'United Arab Emirates', iso2: 'AE' },
-];
-
-const MOCK_STATES = [
-  { id: 's1111111-1111-1111-1111-111111111111', countryId: 'c1111111-1111-1111-1111-111111111111', name: 'Sindh' },
-  { id: 's2222222-2222-2222-2222-222222222222', countryId: 'c1111111-1111-1111-1111-111111111111', name: 'Punjab' },
-  { id: 's3333333-3333-3333-3333-333333333333', countryId: 'c1111111-1111-1111-1111-111111111111', name: 'Khyber Pakhtunkhwa' },
-  { id: 's4444444-4444-4444-4444-444444444444', countryId: 'c1111111-1111-1111-1111-111111111111', name: 'Islamabad Capital Territory' },
-  { id: 's5555555-5555-5555-5555-555555555555', countryId: 'c2222222-2222-2222-2222-222222222222', name: 'California' },
-  { id: 's6666666-6666-6666-6666-666666666666', countryId: 'c4444444-4444-4444-4444-444444444444', name: 'Dubai' },
-];
-
-const DEFAULT_CITIES: CityListItemDto[] = [
-  {
-    id: 'ct111111-1111-1111-1111-111111111111',
-    organizationId: '11111111-1111-1111-1111-111111111111',
-    countryId: 'c1111111-1111-1111-1111-111111111111',
-    countryName: 'Pakistan',
-    stateId: 's1111111-1111-1111-1111-111111111111',
-    stateName: 'Sindh',
-    name: 'Karachi',
-    code: 'KHI',
-    sortOrder: 1,
-    isActive: true,
-    areaCount: 18,
-    postalCodeCount: 45,
-    createdAt: new Date('2026-01-01'),
-    updatedAt: new Date('2026-01-01'),
-  },
-  {
-    id: 'ct222222-2222-2222-2222-222222222222',
-    organizationId: '11111111-1111-1111-1111-111111111111',
-    countryId: 'c1111111-1111-1111-1111-111111111111',
-    countryName: 'Pakistan',
-    stateId: 's1111111-1111-1111-1111-111111111111',
-    stateName: 'Sindh',
-    name: 'Hyderabad',
-    code: 'HYD',
-    sortOrder: 2,
-    isActive: true,
-    areaCount: 8,
-    postalCodeCount: 12,
-    createdAt: new Date('2026-01-01'),
-    updatedAt: new Date('2026-01-01'),
-  },
-  {
-    id: 'ct333333-3333-3333-3333-333333333333',
-    organizationId: '11111111-1111-1111-1111-111111111111',
-    countryId: 'c1111111-1111-1111-1111-111111111111',
-    countryName: 'Pakistan',
-    stateId: 's2222222-2222-2222-2222-222222222222',
-    stateName: 'Punjab',
-    name: 'Lahore',
-    code: 'LHE',
-    sortOrder: 1,
-    isActive: true,
-    areaCount: 22,
-    postalCodeCount: 50,
-    createdAt: new Date('2026-01-01'),
-    updatedAt: new Date('2026-01-01'),
-  },
-  {
-    id: 'ct444444-4444-4444-4444-444444444444',
-    organizationId: '11111111-1111-1111-1111-111111111111',
-    countryId: 'c1111111-1111-1111-1111-111111111111',
-    countryName: 'Pakistan',
-    stateId: 's4444444-4444-4444-4444-444444444444',
-    stateName: 'Islamabad Capital Territory',
-    name: 'Islamabad',
-    code: 'ISB',
-    sortOrder: 1,
-    isActive: true,
-    areaCount: 12,
-    postalCodeCount: 20,
-    createdAt: new Date('2026-01-01'),
-    updatedAt: new Date('2026-01-01'),
-  },
-  {
-    id: 'ct555555-5555-5555-5555-555555555555',
-    organizationId: '11111111-1111-1111-1111-111111111111',
-    countryId: 'c2222222-2222-2222-2222-222222222222',
-    countryName: 'United States',
-    stateId: 's5555555-5555-5555-5555-555555555555',
-    stateName: 'California',
-    name: 'Los Angeles',
-    code: 'LAX',
-    sortOrder: 1,
-    isActive: true,
-    areaCount: 30,
-    postalCodeCount: 80,
-    createdAt: new Date('2026-01-01'),
-    updatedAt: new Date('2026-01-01'),
-  },
-];
+const TENANT_ID = '11111111-1111-1111-1111-111111111111';
+const USER_ID = '99999999-9999-9999-9999-999999999999';
 
 export default function CitiesPage() {
-  const [citiesList, setCitiesList] = useState<CityListItemDto[]>(DEFAULT_CITIES);
-  const [countriesList] = useState(MOCK_COUNTRIES);
-  const [statesList] = useState(MOCK_STATES);
+  const [cities, setCities] = useState<CityListItemDto[]>([]);
+  const [countries, setCountries] = useState<CountryListItemDto[]>([]);
+  const [states, setStates] = useState<StateListItemDto[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const [searchQuery, setSearchQuery] = useState<string>('');
+  // Search & Filters
+  const [searchQuery, setSearchQuery] = useState('');
   const [countryFilter, setCountryFilter] = useState<string>('ALL');
   const [stateFilter, setStateFilter] = useState<string>('ALL');
-  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
 
-  // Modal State
-  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
-  const [isViewModalOpen, setIsViewModalOpen] = useState<boolean>(false);
+  // Modals state
+  const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [editingCity, setEditingCity] = useState<CityListItemDto | null>(null);
   const [viewingCity, setViewingCity] = useState<CityListItemDto | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
-  const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Form Cascading states
+  const [formStates, setFormStates] = useState<StateListItemDto[]>([]);
+
+  // Delete modal state
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [cityToDelete, setCityToDelete] = useState<CityListItemDto | null>(null);
+  const [deleteDeps, setDeleteDeps] = useState<GeographyDependenciesDto | null>(null);
+  const [loadingDeps, setLoadingDeps] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Form State
   const [formData, setFormData] = useState<CreateCityDto>({
@@ -131,125 +60,213 @@ export default function CitiesPage() {
     sortOrder: 1,
     isActive: true,
   });
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const showNotification = (type: 'success' | 'error', message: string) => {
-    setNotification({ type, message });
-    setTimeout(() => setNotification(null), 3000);
-  };
+  // 1. Fetch Countries on Mount
+  useEffect(() => {
+    async function loadCountries() {
+      try {
+        const res = await fetch('/api/geography/countries?status=ACTIVE', {
+          headers: { 'x-tenant-id': TENANT_ID, 'x-user-id': USER_ID },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data)) setCountries(data);
+        }
+      } catch (err) {
+        console.error('Failed to load countries:', err);
+      }
+    }
+    loadCountries();
+  }, []);
 
-  const totalCount = citiesList.length;
-  const activeCount = useMemo(() => citiesList.filter((c) => c.isActive).length, [citiesList]);
+  // 2. Fetch States for Filter
+  useEffect(() => {
+    async function loadStatesForFilter() {
+      if (countryFilter === 'ALL') {
+        setStates([]);
+        return;
+      }
+      try {
+        const res = await fetch(`/api/geography/states?countryId=${countryFilter}&status=ACTIVE`, {
+          headers: { 'x-tenant-id': TENANT_ID, 'x-user-id': USER_ID },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data)) setStates(data);
+        }
+      } catch (err) {
+        console.error('Failed to load states for filter:', err);
+      }
+    }
+    loadStatesForFilter();
+  }, [countryFilter]);
+
+  // 3. Fetch States for Form Modal
+  const loadStatesForCountry = useCallback(async (cId: string) => {
+    if (!cId) {
+      setFormStates([]);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/geography/states?countryId=${cId}&status=ACTIVE`, {
+        headers: { 'x-tenant-id': TENANT_ID, 'x-user-id': USER_ID },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) setFormStates(data);
+      }
+    } catch (err) {
+      console.error('Failed to load form states:', err);
+    }
+  }, []);
+
+  // 4. Fetch Cities from real DB
+  const loadCities = useCallback(async () => {
+    setLoading(true);
+    try {
+      const queryParams = new URLSearchParams();
+      if (countryFilter !== 'ALL') queryParams.append('countryId', countryFilter);
+      if (stateFilter !== 'ALL') queryParams.append('stateId', stateFilter);
+      if (searchQuery) queryParams.append('search', searchQuery);
+      if (statusFilter !== 'ALL') queryParams.append('status', statusFilter);
+
+      const res = await fetch(`/api/geography/cities?${queryParams.toString()}`, {
+        headers: { 'x-tenant-id': TENANT_ID, 'x-user-id': USER_ID },
+      });
+
+      if (!res.ok) throw new Error(`Failed to fetch cities: ${res.statusText}`);
+      const data = await res.json();
+      setCities(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Error fetching cities:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [countryFilter, stateFilter, searchQuery, statusFilter]);
+
+  useEffect(() => {
+    loadCities();
+  }, [loadCities]);
+
+  // Stats
+  const totalCount = cities.length;
+  const activeCount = useMemo(() => cities.filter((c) => c.isActive).length, [cities]);
   const inactiveCount = totalCount - activeCount;
 
-  // Filter available states for the filter bar
-  const filterStatesOptions = useMemo(() => {
-    if (countryFilter === 'ALL') return statesList;
-    return statesList.filter((s) => s.countryId === countryFilter);
-  }, [countryFilter, statesList]);
-
-  // Filter available states for modal form
-  const formStatesOptions = useMemo(() => {
-    if (!formData.countryId) return [];
-    return statesList.filter((s) => s.countryId === formData.countryId);
-  }, [formData.countryId, statesList]);
-
-  const filteredCities = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    return citiesList.filter((c) => {
-      if (countryFilter !== 'ALL' && c.countryId !== countryFilter) return false;
-      if (stateFilter !== 'ALL' && c.stateId !== stateFilter) return false;
-      if (statusFilter !== 'ALL') {
-        const wantActive = statusFilter === 'ACTIVE';
-        if (c.isActive !== wantActive) return false;
-      }
-      if (!query) return true;
-      return (
-        c.name.toLowerCase().includes(query) ||
-        (c.code && c.code.toLowerCase().includes(query)) ||
-        (c.stateName && c.stateName.toLowerCase().includes(query)) ||
-        (c.countryName && c.countryName.toLowerCase().includes(query))
-      );
-    });
-  }, [citiesList, searchQuery, countryFilter, stateFilter, statusFilter]);
-
-  const openCreateModal = () => {
+  // Open Form Add
+  const handleOpenAddModal = async () => {
     setEditingCity(null);
-    const defaultCountry = countryFilter !== 'ALL' ? countryFilter : countriesList[0]?.id || '';
-    const availableStates = statesList.filter((s) => s.countryId === defaultCountry);
-    const defaultState = stateFilter !== 'ALL' ? stateFilter : availableStates[0]?.id || '';
-
-    const maxSort = citiesList
-      .filter((c) => c.stateId === defaultState)
-      .reduce((max, c) => Math.max(max, c.sortOrder || 0), 0);
-
+    const defaultCountryId = countries.length > 0 ? countries[0]?.id || '' : '';
     setFormData({
-      countryId: defaultCountry,
-      stateId: defaultState,
+      countryId: countryFilter !== 'ALL' ? countryFilter : defaultCountryId,
+      stateId: stateFilter !== 'ALL' ? stateFilter : '',
       name: '',
       code: '',
-      sortOrder: maxSort + 1,
+      sortOrder: (totalCount + 1) * 10,
       isActive: true,
     });
     setFormErrors({});
-    setIsModalOpen(true);
+    if (defaultCountryId || countryFilter !== 'ALL') {
+      await loadStatesForCountry(countryFilter !== 'ALL' ? countryFilter : defaultCountryId);
+    }
+    setIsFormModalOpen(true);
   };
 
-  const openEditModal = (city: CityListItemDto) => {
-    setEditingCity(city);
+  // Open Form Edit
+  const handleOpenEditModal = async (c: CityListItemDto) => {
+    setEditingCity(c);
     setFormData({
-      countryId: city.countryId,
-      stateId: city.stateId,
-      name: city.name,
-      code: city.code || '',
-      sortOrder: city.sortOrder,
-      isActive: city.isActive,
+      countryId: c.countryId,
+      stateId: c.stateId,
+      name: c.name,
+      code: c.code || '',
+      sortOrder: c.sortOrder,
+      isActive: c.isActive,
     });
     setFormErrors({});
-    setIsModalOpen(true);
+    await loadStatesForCountry(c.countryId);
+    setIsFormModalOpen(true);
   };
 
-  const openViewModal = (city: CityListItemDto) => {
-    setViewingCity(city);
-    setIsViewModalOpen(true);
+  // View Details
+  const handleOpenViewModal = (c: CityListItemDto) => {
+    setViewingCity(c);
   };
 
-  const handleToggleStatus = (city: CityListItemDto) => {
-    const updated = citiesList.map((c) =>
-      c.id === city.id ? { ...c, isActive: !c.isActive, updatedAt: new Date() } : c
-    );
-    setCitiesList(updated);
-    showNotification(
-      'success',
-      `City '${city.name}' ${city.isActive ? 'deactivated' : 'activated'} successfully.`
-    );
+  // Toggle Status
+  const handleToggleStatus = async (c: CityListItemDto) => {
+    try {
+      const res = await fetch(`/api/geography/cities/${c.id}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-id': TENANT_ID,
+          'x-user-id': USER_ID,
+        },
+        body: JSON.stringify({ isActive: !c.isActive }),
+      });
+      if (res.ok) loadCities();
+    } catch (err) {
+      console.error('Failed to toggle status:', err);
+    }
   };
 
-  const handleCountryChangeInForm = (newCountryId: string) => {
-    const availableStates = statesList.filter((s) => s.countryId === newCountryId);
-    const firstStateId = availableStates[0]?.id || '';
-    setFormData((prev) => ({
-      ...prev,
-      countryId: newCountryId,
-      stateId: firstStateId,
-    }));
+  // Open Delete Modal
+  const handleOpenDeleteModal = async (c: CityListItemDto) => {
+    setCityToDelete(c);
+    setIsDeleteModalOpen(true);
+    setLoadingDeps(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/geography/cities/${c.id}/dependencies`, {
+        headers: { 'x-tenant-id': TENANT_ID, 'x-user-id': USER_ID },
+      });
+      if (res.ok) {
+        const deps = await res.json();
+        setDeleteDeps(deps);
+      } else {
+        throw new Error('Failed to inspect city dependencies');
+      }
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Error checking dependencies');
+    } finally {
+      setLoadingDeps(false);
+    }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Execute Safe Delete
+  const handleConfirmDelete = async () => {
+    if (!cityToDelete) return;
+    setIsSubmitting(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/geography/cities/${cityToDelete.id}`, {
+        method: 'DELETE',
+        headers: { 'x-tenant-id': TENANT_ID, 'x-user-id': USER_ID },
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.message || 'Failed to delete city');
+      }
+      setIsDeleteModalOpen(false);
+      setCityToDelete(null);
+      loadCities();
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Error deleting city');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Submit Form
+  const handleSubmitForm = async (e: React.FormEvent) => {
     e.preventDefault();
     const errors: Record<string, string> = {};
-
-    if (!formData.countryId) errors.countryId = 'Country is required.';
-    if (!formData.stateId) errors.stateId = 'State/Province is required.';
-    if (!formData.name.trim()) errors.name = 'City name is required.';
-
-    // Duplicate check within State
-    const duplicate = citiesList.find(
-      (c) =>
-        c.stateId === formData.stateId &&
-        c.name.toLowerCase() === formData.name.trim().toLowerCase() &&
-        (!editingCity || c.id !== editingCity.id)
-    );
-    if (duplicate) errors.name = `City '${formData.name}' already exists in the selected State/Province.`;
+    if (!formData.countryId) errors.countryId = 'Parent country is required.';
+    if (!formData.stateId) errors.stateId = 'Parent state/province is required.';
+    if (!formData.name?.trim()) errors.name = 'City name is required.';
 
     if (Object.keys(errors).length > 0) {
       setFormErrors(errors);
@@ -257,253 +274,193 @@ export default function CitiesPage() {
     }
 
     setIsSubmitting(true);
-    setTimeout(() => {
-      const parentCountry = countriesList.find((c) => c.id === formData.countryId);
-      const parentState = statesList.find((s) => s.id === formData.stateId);
+    try {
+      const url = editingCity
+        ? `/api/geography/cities/${editingCity.id}`
+        : '/api/geography/cities';
+      const method = editingCity ? 'PATCH' : 'POST';
 
-      if (editingCity) {
-        setCitiesList((prev) =>
-          prev.map((c) =>
-            c.id === editingCity.id
-              ? {
-                  ...c,
-                  countryId: formData.countryId,
-                  countryName: parentCountry?.name || c.countryName,
-                  stateId: formData.stateId,
-                  stateName: parentState?.name || c.stateName,
-                  name: formData.name.trim(),
-                  code: formData.code?.trim().toUpperCase() || null,
-                  sortOrder: Number(formData.sortOrder) || 1,
-                  isActive: formData.isActive ?? true,
-                  updatedAt: new Date(),
-                }
-              : c
-          )
-        );
-        showNotification('success', `City '${formData.name}' updated successfully.`);
-      } else {
-        const newCity: CityListItemDto = {
-          id: `ct_${Date.now()}`,
-          organizationId: '11111111-1111-1111-1111-111111111111',
-          countryId: formData.countryId,
-          countryName: parentCountry?.name,
-          stateId: formData.stateId,
-          stateName: parentState?.name,
-          name: formData.name.trim(),
-          code: formData.code?.trim().toUpperCase() || null,
-          sortOrder: Number(formData.sortOrder) || 1,
-          isActive: formData.isActive ?? true,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
-        setCitiesList((prev) => [...prev, newCity].sort((a, b) => a.sortOrder - b.sortOrder));
-        showNotification('success', `City '${formData.name}' created successfully.`);
+      const res = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-id': TENANT_ID,
+          'x-user-id': USER_ID,
+        },
+        body: JSON.stringify(formData),
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.message || 'Failed to save city');
       }
+
+      setIsFormModalOpen(false);
+      loadCities();
+    } catch (err) {
+      setFormErrors({ submit: err instanceof Error ? err.message : 'Failed to save city' });
+    } finally {
       setIsSubmitting(false);
-      setIsModalOpen(false);
-    }, 200);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50/50 dark:bg-slate-950 p-6 space-y-6 max-w-7xl mx-auto">
-      {notification && (
-        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white dark:bg-white dark:text-slate-900 px-4 py-2.5 rounded-xl shadow-xl text-xs font-semibold flex items-center gap-2 animate-in fade-in">
-          <span>{notification.type === 'success' ? '✅' : '❌'}</span>
-          <span>{notification.message}</span>
-        </div>
-      )}
-
-      {/* ── 1. Header ─────────────────────────────────────────────── */}
+    <div className="p-4 sm:p-6 space-y-6 max-w-7xl mx-auto">
+      {/* 1. Header */}
       <AdminConfigPageHeader
-        section="Administration Configuration"
-        group="Location & Geography"
-        title="Cities"
-        description="Manage municipal metropolitan cities and local educational operating territories."
+        title="Location & Geography — Cities Master"
+        description="Manage 2nd-level administrative divisions linked hierarchically to Country and State."
         categoryNav={LOCATION_GEOGRAPHY_NAV}
         actionButtonText="+ Add City"
-        onAction={openCreateModal}
+        onAction={handleOpenAddModal}
       />
 
-      {/* ── 2. KPI Cards ───────────────────────────────────────────── */}
+      {/* 2. Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm flex items-center gap-4">
-          <div className="h-11 w-11 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-100 dark:border-indigo-900 flex items-center justify-center text-xl">
-            🏙️
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Cities</p>
-            <p className="text-2xl font-bold text-slate-900 dark:text-white mt-0.5">{totalCount}</p>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm flex items-center gap-4">
-          <div className="h-11 w-11 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-100 dark:border-emerald-900 flex items-center justify-center text-xl">
-            ✅
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Active</p>
-            <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">{activeCount}</p>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm flex items-center gap-4">
-          <div className="h-11 w-11 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-xl">
-            ⏸️
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Inactive</p>
-            <p className="text-2xl font-bold text-slate-600 dark:text-slate-400 mt-0.5">{inactiveCount}</p>
-          </div>
-        </div>
+        <StatCard
+          label="Total Municipal Cities"
+          value={totalCount}
+          icon={<Building className="w-5 h-5 text-indigo-500" />}
+          variant="primary"
+        />
+        <StatCard
+          label="Active Cities"
+          value={activeCount}
+          icon={<CheckCircle2 className="w-5 h-5 text-emerald-500" />}
+          variant="success"
+        />
+        <StatCard
+          label="Inactive / Archived"
+          value={inactiveCount}
+          icon={<AlertCircle className="w-5 h-5 text-slate-400" />}
+          variant="default"
+        />
       </div>
 
-      {/* ── 3. Search & Filters ────────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-        <div className="relative flex-1">
-          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span>
+      {/* 3. Search and Filters */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white dark:bg-slate-900 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+        <div className="relative w-full sm:w-80">
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
+            placeholder="Search by city name or code..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by city name, code, state, country..."
-            className="w-full pl-9 pr-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+            className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none"
           />
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-          {/* Country Filter */}
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           <select
             value={countryFilter}
             onChange={(e) => {
               setCountryFilter(e.target.value);
               setStateFilter('ALL');
             }}
-            className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 text-xs font-medium focus:ring-2 focus:ring-indigo-500/20"
+            className="px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-700 dark:text-slate-300 focus:outline-none"
           >
             <option value="ALL">All Countries</option>
-            {countriesList.map((c) => (
+            {countries.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.name}
+                {c.name} ({c.iso2})
               </option>
             ))}
           </select>
 
-          {/* State Filter */}
-          <select
-            value={stateFilter}
-            onChange={(e) => setStateFilter(e.target.value)}
-            className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 text-xs font-medium focus:ring-2 focus:ring-indigo-500/20"
-          >
-            <option value="ALL">All States / Provinces</option>
-            {filterStatesOptions.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
+          {states.length > 0 && (
+            <select
+              value={stateFilter}
+              onChange={(e) => setStateFilter(e.target.value)}
+              className="px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-700 dark:text-slate-300 focus:outline-none"
+            >
+              <option value="ALL">All States / Provinces</option>
+              {states.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          )}
 
-          {/* Status Filter */}
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 text-xs font-medium focus:ring-2 focus:ring-indigo-500/20"
+            onChange={(e) => setStatusFilter(e.target.value as any)}
+            className="px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-700 dark:text-slate-300 focus:outline-none"
           >
-            <option value="ALL">All Statuses ({totalCount})</option>
-            <option value="ACTIVE">Active ({activeCount})</option>
-            <option value="INACTIVE">Inactive ({inactiveCount})</option>
+            <option value="ALL">All Statuses</option>
+            <option value="ACTIVE">Active Only</option>
+            <option value="INACTIVE">Inactive Only</option>
           </select>
         </div>
       </div>
 
-      {/* ── 4. Main Table ──────────────────────────────────────────── */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+      {/* 4. Table */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/75 dark:bg-slate-950/75 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                <th className="py-3 px-4 w-16 text-center">Sort</th>
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-50 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 font-semibold text-slate-600 dark:text-slate-400">
+              <tr>
+                <th className="py-3 px-4">Sort</th>
+                <th className="py-3 px-4">Parent Country</th>
+                <th className="py-3 px-4">Parent State/Province</th>
                 <th className="py-3 px-4">City Name</th>
                 <th className="py-3 px-4">Code</th>
-                <th className="py-3 px-4">State / Province</th>
-                <th className="py-3 px-4">Country</th>
                 <th className="py-3 px-4 text-center">Status</th>
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
-              {filteredCities.length > 0 ? (
-                filteredCities.map((city) => (
-                  <tr key={city.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                    <td className="py-3 px-4 text-center">
-                      <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
-                        #{city.sortOrder}
-                      </span>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-800 dark:text-slate-200">
+              {loading ? (
+                <tr>
+                  <td colSpan={7} className="py-12 text-center text-slate-400">
+                    <div className="flex items-center justify-center gap-2">
+                      <RefreshCw className="w-4 h-4 animate-spin text-indigo-500" />
+                      <span>Loading cities...</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : cities.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-12 text-center text-slate-400">
+                    No cities found matching your criteria.
+                  </td>
+                </tr>
+              ) : (
+                cities.map((c) => (
+                  <tr key={c.id} className="hover:bg-slate-50/75 dark:hover:bg-slate-800/50 transition-colors">
+                    <td className="py-3 px-4 text-slate-400 font-mono">{c.sortOrder}</td>
+                    <td className="py-3 px-4 font-medium text-slate-700 dark:text-slate-300">{c.countryName || '—'}</td>
+                    <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{c.stateName || '—'}</td>
+                    <td className="py-3 px-4 font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                      <Building className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                      {c.name}
                     </td>
-                    <td className="py-3 px-4 font-bold text-slate-900 dark:text-white">
-                      {city.name}
-                    </td>
-                    <td className="py-3 px-4 font-mono font-bold text-indigo-600 dark:text-indigo-400">
-                      {city.code || '—'}
-                    </td>
-                    <td className="py-3 px-4 text-slate-700 dark:text-slate-300">
-                      {city.stateName}
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs">
-                        <span>🌍</span> {city.countryName}
-                      </span>
+                    <td className="py-3 px-4 font-mono font-medium text-indigo-600 dark:text-indigo-400">
+                      {c.code || '—'}
                     </td>
                     <td className="py-3 px-4 text-center">
                       <button
                         type="button"
-                        onClick={() => handleToggleStatus(city)}
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer ${
-                          city.isActive
-                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100'
-                            : 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800 hover:bg-rose-100'
-                        }`}
+                        onClick={() => handleToggleStatus(c)}
+                        title="Click to toggle status"
+                        className="cursor-pointer"
                       >
-                        <span className={`h-1.5 w-1.5 rounded-full ${city.isActive ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                        <span>{city.isActive ? 'Active' : 'Inactive'}</span>
+                        <StatusBadge status={c.isActive ? 'ACTIVE' : 'INACTIVE'} />
                       </button>
                     </td>
                     <td className="py-3 px-4 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => openViewModal(city)}
-                          className="px-2.5 py-1 text-xs font-medium rounded-md border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
-                        >
-                          View
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => openEditModal(city)}
-                          className="px-2.5 py-1 text-xs font-medium rounded-md bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 border border-indigo-200 dark:border-indigo-800 transition-colors cursor-pointer"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleToggleStatus(city)}
-                          className={`px-2.5 py-1 text-xs font-medium rounded-md border transition-colors cursor-pointer ${
-                            city.isActive
-                              ? 'border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50'
-                              : 'border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50'
-                          }`}
-                        >
-                          {city.isActive ? 'Deactivate' : 'Activate'}
-                        </button>
-                      </div>
+                      <RowActions>
+                        <ViewAction onClick={() => handleOpenViewModal(c)} />
+                        <EditAction onClick={() => handleOpenEditModal(c)} />
+                        <StatusAction
+                          status={c.isActive ? 'ACTIVE' : 'INACTIVE'}
+                          onClick={() => handleToggleStatus(c)}
+                        />
+                        <DeleteAction onClick={() => handleOpenDeleteModal(c)} />
+                      </RowActions>
                     </td>
                   </tr>
                 ))
-              ) : (
-                <tr>
-                  <td colSpan={7} className="py-8 text-center text-slate-400 text-xs">
-                    No cities found matching your search.
-                  </td>
-                </tr>
               )}
             </tbody>
           </table>
@@ -511,227 +468,241 @@ export default function CitiesPage() {
       </div>
 
       {/* ── 5. Add / Edit Modal ────────────────────────────────────── */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="relative z-10 w-full max-w-lg bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="flex items-center justify-between p-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50">
-              <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                  {editingCity ? `Edit City: ${editingCity.name}` : 'Add New City'}
-                </h3>
-                <p className="text-xs text-slate-500">Configure city under country and regional province.</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsModalOpen(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-              >
-                ✕
-              </button>
+      <AdminModal
+        isOpen={isFormModalOpen}
+        onClose={() => setIsFormModalOpen(false)}
+        title={editingCity ? `Edit City: ${editingCity.name}` : 'Add Municipal City'}
+        subtitle="Link municipal city authority to country and state/province."
+        maxWidth="lg"
+      >
+        <form onSubmit={handleSubmitForm} className="p-5 space-y-4 text-xs">
+          {formErrors.submit && (
+            <div className="p-3 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 rounded-xl text-rose-600 dark:text-rose-400">
+              {formErrors.submit}
             </div>
+          )}
 
-            <form onSubmit={handleSubmit} className="p-5 space-y-4 overflow-y-auto max-h-[65vh] text-xs">
-              <div className="space-y-3">
-                <div className="space-y-1">
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300">
-                    Country <span className="text-rose-500">*</span>
-                  </label>
-                  <select
-                    value={formData.countryId}
-                    onChange={(e) => handleCountryChangeInForm(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs focus:ring-2 focus:ring-indigo-500/20"
-                  >
-                    <option value="">Select Country</option>
-                    {countriesList.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name} ({c.iso2})
-                      </option>
-                    ))}
-                  </select>
-                  {formErrors.countryId && <p className="text-rose-500 text-[10px]">{formErrors.countryId}</p>}
-                </div>
-
-                <div className="space-y-1">
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300">
-                    State / Province <span className="text-rose-500">*</span>
-                  </label>
-                  <select
-                    value={formData.stateId}
-                    onChange={(e) => setFormData({ ...formData, stateId: e.target.value })}
-                    disabled={!formData.countryId}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-60"
-                  >
-                    <option value="">Select State / Province</option>
-                    {formStatesOptions.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
-                  {formErrors.stateId && <p className="text-rose-500 text-[10px]">{formErrors.stateId}</p>}
-                </div>
-
-                <div className="space-y-1">
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300">
-                    City Name <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="e.g. Karachi, Lahore, Los Angeles, Dubai"
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                  />
-                  {formErrors.name && <p className="text-rose-500 text-[10px]">{formErrors.name}</p>}
-                </div>
-
-                <div className="space-y-1">
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300">
-                    City Code / Abbreviation
-                  </label>
-                  <input
-                    type="text"
-                    maxLength={10}
-                    value={formData.code || ''}
-                    onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
-                    placeholder="e.g. KHI, LHE, ISB, LAX"
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono uppercase text-xs focus:ring-2 focus:ring-indigo-500/20"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="block font-semibold text-slate-700 dark:text-slate-300">
-                      Sort Order
-                    </label>
-                    <input
-                      type="number"
-                      min={1}
-                      value={formData.sortOrder}
-                      onChange={(e) => setFormData({ ...formData, sortOrder: Number(e.target.value) })}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono text-xs focus:ring-2 focus:ring-indigo-500/20"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="block font-semibold text-slate-700 dark:text-slate-300">
-                      Status
-                    </label>
-                    <select
-                      value={formData.isActive ? 'ACTIVE' : 'INACTIVE'}
-                      onChange={(e) => setFormData({ ...formData, isActive: e.target.value === 'ACTIVE' })}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs focus:ring-2 focus:ring-indigo-500/20"
-                    >
-                      <option value="ACTIVE">Active</option>
-                      <option value="INACTIVE">Inactive</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-100 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-sm transition-colors cursor-pointer disabled:opacity-60"
-                >
-                  {isSubmitting ? 'Saving...' : editingCity ? 'Save Changes' : 'Create City'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ── 6. View Modal ─────────────────────────────────────────── */}
-      {isViewModalOpen && viewingCity && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="relative z-10 w-full max-w-lg bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[85vh]">
-            <div className="flex items-start justify-between p-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  {viewingCity.code && (
-                    <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">
-                      {viewingCity.code}
-                    </span>
-                  )}
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                    viewingCity.isActive ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'
-                  }`}>
-                    {viewingCity.isActive ? 'Active' : 'Inactive'}
-                  </span>
-                </div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">{viewingCity.name}</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsViewModalOpen(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="p-5 space-y-3 overflow-y-auto max-h-[60vh] text-xs">
-              <div className="grid grid-cols-2 gap-2.5">
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950/40 border border-slate-100 dark:border-slate-800">
-                  <p className="text-[10px] font-semibold text-slate-400 uppercase">Country</p>
-                  <p className="text-sm font-bold text-slate-800 dark:text-slate-200 mt-0.5">
-                    {viewingCity.countryName}
-                  </p>
-                </div>
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950/40 border border-slate-100 dark:border-slate-800">
-                  <p className="text-[10px] font-semibold text-slate-400 uppercase">State / Province</p>
-                  <p className="text-sm font-bold text-slate-800 dark:text-slate-200 mt-0.5">
-                    {viewingCity.stateName}
-                  </p>
-                </div>
-              </div>
-
-              <div className="p-3 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/40 flex items-center justify-between">
-                <div>
-                  <p className="text-[10px] font-semibold text-indigo-600 uppercase">Sort Sequence</p>
-                  <p className="text-base font-bold text-indigo-700 dark:text-indigo-300 font-mono">
-                    #{viewingCity.sortOrder}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="text-[10px] font-semibold text-slate-400 uppercase">Last Updated</p>
-                  <p className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                    {new Date(viewingCity.updatedAt).toLocaleDateString()}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsViewModalOpen(false);
-                  openEditModal(viewingCity);
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                Parent Country <span className="text-rose-500">*</span>
+              </label>
+              <select
+                value={formData.countryId}
+                onChange={async (e) => {
+                  const newCountryId = e.target.value;
+                  setFormData({ ...formData, countryId: newCountryId, stateId: '' });
+                  await loadStatesForCountry(newCountryId);
                 }}
-                className="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-sm transition-colors cursor-pointer"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
               >
-                Edit City
-              </button>
+                <option value="">Select Sovereign Country</option>
+                {countries.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({c.iso2})
+                  </option>
+                ))}
+              </select>
+              {formErrors.countryId && <p className="text-rose-500 text-[10px]">{formErrors.countryId}</p>}
+            </div>
+
+            <div className="space-y-1">
+              <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                Parent State / Province <span className="text-rose-500">*</span>
+              </label>
+              <select
+                value={formData.stateId}
+                onChange={(e) => setFormData({ ...formData, stateId: e.target.value })}
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+              >
+                <option value="">Select State / Province</option>
+                {formStates.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+              {formErrors.stateId && <p className="text-rose-500 text-[10px]">{formErrors.stateId}</p>}
+            </div>
+
+            <div className="sm:col-span-2 space-y-1">
+              <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                City Name <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="e.g. Karachi, Lahore, Islamabad"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+              />
+              {formErrors.name && <p className="text-rose-500 text-[10px]">{formErrors.name}</p>}
+            </div>
+
+            <div className="space-y-1">
+              <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                City Code
+              </label>
+              <input
+                type="text"
+                value={formData.code || ''}
+                onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
+                placeholder="e.g. KHI, LHE, ISB"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-mono uppercase"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                Sort Order
+              </label>
+              <input
+                type="number"
+                value={formData.sortOrder || 1}
+                onChange={(e) => setFormData({ ...formData, sortOrder: parseInt(e.target.value) || 1 })}
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-mono"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-100 dark:border-slate-800">
+            <button
+              type="button"
+              onClick={() => setIsFormModalOpen(false)}
+              className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl disabled:opacity-50"
+            >
+              {isSubmitting ? 'Saving...' : editingCity ? 'Update City' : 'Create City'}
+            </button>
+          </div>
+        </form>
+      </AdminModal>
+
+      {/* ── 6. View Details Modal ──────────────────────────────────── */}
+      {viewingCity && (
+        <AdminModal
+          isOpen={!!viewingCity}
+          onClose={() => setViewingCity(null)}
+          title={`City Details: ${viewingCity.name}`}
+          subtitle="Authoritative canonical city master record."
+          maxWidth="lg"
+        >
+          <div className="p-6 space-y-6 text-xs">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 p-4 bg-slate-50 dark:bg-slate-950 rounded-2xl border border-slate-200/60 dark:border-slate-800/60">
+              <div>
+                <span className="text-[10px] text-slate-400 uppercase tracking-wider block">Parent Country</span>
+                <span className="font-semibold text-sm text-indigo-600 dark:text-indigo-400">{viewingCity.countryName}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 uppercase tracking-wider block">State / Province</span>
+                <span className="font-semibold text-sm">{viewingCity.stateName}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 uppercase tracking-wider block">City Code</span>
+                <span className="font-mono font-bold text-sm">{viewingCity.code || '—'}</span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <h4 className="font-bold text-slate-900 dark:text-white">Master Configuration</h4>
+              <div className="grid grid-cols-2 gap-3 p-3.5 bg-slate-50/50 dark:bg-slate-950/50 rounded-xl border border-slate-100 dark:border-slate-800">
+                <div>
+                  <span className="text-slate-500 block">Record UUID:</span>
+                  <span className="font-mono text-[11px] text-slate-700 dark:text-slate-300 select-all">{viewingCity.id}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block">Sort Order:</span>
+                  <span className="font-semibold">{viewingCity.sortOrder}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block">Operational Status:</span>
+                  <StatusBadge status={viewingCity.isActive ? 'ACTIVE' : 'INACTIVE'} />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-3 border-t border-slate-100 dark:border-slate-800">
               <button
                 type="button"
-                onClick={() => setIsViewModalOpen(false)}
-                className="px-4 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                onClick={() => setViewingCity(null)}
+                className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-xl font-medium"
               >
                 Close
               </button>
             </div>
           </div>
-        </div>
+        </AdminModal>
+      )}
+
+      {/* ── 7. Safe Delete Modal ────────────────────────────────────── */}
+      {isDeleteModalOpen && cityToDelete && (
+        <AdminModal
+          isOpen={isDeleteModalOpen}
+          onClose={() => setIsDeleteModalOpen(false)}
+          title={`Delete City: ${cityToDelete.name}`}
+          subtitle="Dependency breakdown check before deletion."
+          maxWidth="md"
+        >
+          <div className="p-6 space-y-4 text-xs">
+            {loadingDeps ? (
+              <div className="py-8 text-center text-slate-400">
+                <RefreshCw className="w-5 h-5 animate-spin mx-auto text-indigo-500 mb-2" />
+                <span>Checking linked records and dependencies...</span>
+              </div>
+            ) : deleteDeps ? (
+              <>
+                {deleteDeps.canDelete ? (
+                  <div className="p-4 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 rounded-xl text-emerald-800 dark:text-emerald-200">
+                    <p className="font-semibold">Safe to Delete</p>
+                    <p className="text-[11px] mt-1">This city master has 0 active dependencies and can be safely deleted.</p>
+                  </div>
+                ) : (
+                  <div className="p-4 bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 rounded-xl text-amber-900 dark:text-amber-200 space-y-2">
+                    <div className="flex items-center gap-2 font-bold text-amber-800 dark:text-amber-300">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                      <span>Deletion Blocked — Active Dependencies Exist</span>
+                    </div>
+                    <ul className="list-disc pl-5 space-y-1 text-[11px]">
+                      {deleteDeps.reasons.map((r, i) => (
+                        <li key={i}>{r}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {deleteError && (
+                  <div className="p-3 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 rounded-xl text-rose-600 dark:text-rose-400">
+                    {deleteError}
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-100 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setIsDeleteModalOpen(false)}
+                    className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmDelete}
+                    disabled={!deleteDeps.canDelete || isSubmitting}
+                    className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-medium rounded-xl disabled:opacity-40"
+                  >
+                    {isSubmitting ? 'Deleting...' : 'Confirm Delete'}
+                  </button>
+                </div>
+              </>
+            ) : null}
+          </div>
+        </AdminModal>
       )}
     </div>
   );

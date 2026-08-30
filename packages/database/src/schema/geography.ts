@@ -131,33 +131,3 @@ export const areas = pgTable(
     idxAreaPostalCode: index('idx_area_postal_code').on(t.organizationId, t.postalCode),
   })
 );
-
-// ── 5. POSTAL CODES MASTER ───────────────────────────────────────────────────
-export const postalCodes = pgTable(
-  'postal_codes',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-    organizationId: uuid('organization_id')
-      .notNull()
-      .references(() => organizations.id, { onDelete: 'cascade' }),
-    countryId: uuid('country_id')
-      .notNull()
-      .references(() => countries.id, { onDelete: 'restrict' }),
-    stateId: uuid('state_id')
-      .references(() => states.id, { onDelete: 'restrict' }),
-    cityId: uuid('city_id')
-      .notNull()
-      .references(() => cities.id, { onDelete: 'restrict' }),
-    areaId: uuid('area_id')
-      .references(() => areas.id, { onDelete: 'set null' }),
-    postalCode: varchar('postal_code', { length: 32 }).notNull(),
-    description: varchar('description', { length: 255 }),
-    isActive: boolean('is_active').default(true).notNull(),
-    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-  },
-  (t) => ({
-    uqPostalCodeOrgId: uniqueIndex('uq_postal_code_org_id').on(t.organizationId, t.id),
-    idxPostalCodeSearch: index('idx_postal_code_search').on(t.organizationId, t.postalCode, t.cityId),
-  })
-);
